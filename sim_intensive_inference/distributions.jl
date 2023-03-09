@@ -128,14 +128,13 @@ function density(
 end
 
 
-function density(
-    e::GaussianError,
-    θ::AbstractVector
-)::Real
+function density(K::GaussianAcceptanceKernel, θ::Vector)::Real 
 
-
+    d = Distributions.MvNormal(K.Σ)
+    return Distributions.pdf(d, θ)
 
 end
+
 
 
 function sample(π::GaussianPrior; n::Int = -1)::Union{AbstractVector, Real}

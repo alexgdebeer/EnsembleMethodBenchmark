@@ -1,10 +1,6 @@
 export run_abc, run_abc_smc, run_abc_mcmc, run_mcmc
 
 
-"""
-Note: N is the number of simulations to run. α is the proportion of models that 
-will be accepted.
-"""
 function run_abc(
     π::AbstractPrior, 
     f::Function,
@@ -51,6 +47,46 @@ function run_abc(
 
     return θs, ys, ds, is
         
+end
+
+
+"""Carries out the probabilistic ABC algorithm as described in Wilkinson 
+(2013)."""
+function run_probabilistic_abc(
+    π::AbstractPrior,
+    f::Function,
+    y_obs::Vector,
+    G::Matrix,
+    N::Int,
+    K::AbstractAcceptanceKernel,
+    verbose::Bool = true
+)
+
+    θs = sample(π, n = N)
+
+    ys = []
+    is = []
+
+    for (i, θ) ∈ enumerate(θs)
+
+        y = f(θ)
+        y_m = G * y 
+        push!(ys, y)
+
+        #println(θ)
+        #println(density(K, y_m - y_obs))
+
+        if density(K, y_m - y_obs) / K.c > rand()
+            push!(is, i)
+        end
+
+        if verbose && i % 1000 == 0
+            @info("Finished running model with $(i) sets of parameters.")
+            @info("Acceptance rate: $(length(is) / i).")
+        end
+
+    end
+
 end
 
 

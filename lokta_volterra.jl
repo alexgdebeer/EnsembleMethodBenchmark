@@ -298,8 +298,9 @@ function plot_abc_smc_posterior_predictions(ts_obs, ys_obs, ts, ys, is, ys_true)
 end
 
 
-true_posterior = true
+true_posterior = false
 abc = false
+probabilistic_abc = true
 abc_smc = false
 
 
@@ -399,6 +400,19 @@ if abc
 
 end
 
+
+if probabilistic_abc
+
+    N = 10_000_000
+
+    # Define an acceptance kernel 
+    K = SimIntensiveInference.GaussianAcceptanceKernel(16.0 .* Σₑ)
+
+    SimIntensiveInference.run_probabilistic_abc(π, f, xs_obs, G, N, K)
+
+end
+
+
 if abc_smc
 
     σκ = 0.5
@@ -420,56 +434,3 @@ if abc_smc
     # 16.16298990060011
 
 end
-
-
-# # Specify a uniform prior
-# π = SimIntensiveInference.UniformPrior([-5.0, -5.0], [5.0, 5.0])
-
-# # Specify a noise model
-# μₑ = zeros(2 * n_data)
-# Σₑ = σₑ^2 .* Matrix(1.0 * LinearAlgebra.I, 2 * n_data, 2 * n_data)
-# e = SimIntensiveInference.GaussianError(μₑ, Σₑ)
-
-# N = 100
-# α = 0.001
-
-# K = SimIntensiveInference.UniformKernel([-2.0, -2.0], [2.0, 2.0])
-
-# n = 100
-# T = 5
-# α₁ = 0.1
-# αs = [0.6, 0.4, 0.3, 0.2]
-
-# # θs, ys, ds, is = SimIntensiveInference.run_abc(
-# #     π, f, e, xs_obs, G, d, N, α
-# # )
-
-# # θs, ys, ds, is, ws = SimIntensiveInference.run_abc_smc(
-# #     π, f, e, xs_obs, G, d, K, T, n, α₁, αs
-# # )
-
-# # SimIntensiveInference.run_abc_mcmc(π, f, e, xs_obs, G, d, K, N, ε)
-
-# N = 100_000
-# ε = 20.0
-
-# # plot_abc_posterior(θs, is)
-# # plot_abc_posterior_predictions(ts, ys, is)
-
-# # Define the prior
-# μπ = [0.0, 0.0]
-# σπ = 2.0
-# Σπ = σπ .* Matrix(1.0LinearAlgebra.I, 2, 2)
-# π = SimIntensiveInference.GaussianPrior(μπ, Σπ)
-
-# # Define the likelihood
-# L = SimIntensiveInference.GaussianLikelihood(xs_obs, Σₑ)
-
-# # Define the transition kernel
-# σκ = 0.01
-# Σκ = σκ .* Matrix(1.0LinearAlgebra.I, 2, 2)
-# κ = SimIntensiveInference.GaussianKernel(Σκ)
-
-# N = 10_000
-
-# SimIntensiveInference.run_mcmc(π, f, L, G, κ, N)
