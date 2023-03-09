@@ -80,7 +80,6 @@ struct UniformAcceptanceKernel <: AbstractAcceptanceKernel
 end
 
 
-"""Evaluates the prior density of a Gaussian prior at particle θ."""
 function density(π::GaussianPrior, θ::AbstractVector)::Real
 
     d = Distributions.MvNormal(π.μ, π.Σ)
@@ -89,7 +88,6 @@ function density(π::GaussianPrior, θ::AbstractVector)::Real
 end
 
 
-"""Evaluates the prior density of a uniform prior at particle θ."""
 function density(π::UniformPrior, θ::AbstractVector)::Real
 
     d = prod(1 / (ub - lb) for (lb, ub) ∈ zip(π.lbs, π.ubs))
@@ -98,7 +96,6 @@ function density(π::UniformPrior, θ::AbstractVector)::Real
 end
 
 
-"""Evaluates the likelihood at particle θ."""
 function density(L::GaussianLikelihood, θ::AbstractVector)::Real 
 
     d = Distributions.MvNormal(L.μ, L.Σ)
@@ -107,8 +104,6 @@ function density(L::GaussianLikelihood, θ::AbstractVector)::Real
 end
 
 
-"""Evaluates the density of kernel κ centred at particle θ⁺, at particle θ.
-TODO: this is probably wrong if there are bounds on the prior."""
 function density(
     κ::GaussianPerturbationKernel, 
     θ⁺::AbstractVector, 
@@ -121,8 +116,6 @@ function density(
 end
 
 
-"""Evaluates the density of kernel κ, centred at θ⁺, at θ.
-TODO: this is probably wrong if there are bounds on the prior."""
 function density(
     κ::UniformPerturbationKernel, 
     θ⁺::AbstractVector, 
@@ -135,7 +128,6 @@ function density(
 end
 
 
-"""Evaluates the density of the error function."""
 function density(
     e::GaussianError,
     θ::AbstractVector
@@ -146,7 +138,6 @@ function density(
 end
 
 
-"""Generates samples from a Gaussian prior."""
 function sample(π::GaussianPrior; n::Int = -1)::Union{AbstractVector, Real}
 
     d = Distributions.MvNormal(π.μ, π.Σ)
@@ -155,7 +146,6 @@ function sample(π::GaussianPrior; n::Int = -1)::Union{AbstractVector, Real}
 end
 
 
-"""Generates samples from a uniform prior."""
 function sample(π::UniformPrior; n::Int = -1)::Union{AbstractVector, Real}
 
     n_params = length(π.lbs)
@@ -166,7 +156,6 @@ function sample(π::UniformPrior; n::Int = -1)::Union{AbstractVector, Real}
 end
 
 
-"""Adds Gaussian noise to a set of model outputs y."""
 function add_noise!(y::AbstractVector, n::GaussianError)::Nothing
 
     e = Distributions.MvNormal(n.μ, n.Σ)
@@ -177,8 +166,6 @@ function add_noise!(y::AbstractVector, n::GaussianError)::Nothing
 end
 
 
-"""Perturbs a particle, ensuring that the perturbed particle has a positive 
-prior probability."""
 function perturb(
     κ::UniformPerturbationKernel, 
     θ::AbstractVector, 
@@ -197,8 +184,7 @@ function perturb(
 
 end
 
-"""Perturbs a particle, ensuring that the perturbed particle has a positive 
-prior probability."""
+
 function perturb(
     κ::GaussianPerturbationKernel, 
     θ::AbstractVector, 
@@ -218,7 +204,6 @@ function perturb(
 end
 
 
-"""Samples from a given population θ with normalised weights w."""
 function sample_from_population(
     θs::AbstractVector, 
     weights::AbstractVector
