@@ -61,7 +61,7 @@ function run_abc_smc(
     y_obs::Vector,
     G::Matrix,
     d::Function,
-    κ::AbstractKernel,
+    κ::AbstractPerturbationKernel,
     T::Int,
     n::Int,
     α₁::Float64,
@@ -152,7 +152,7 @@ function run_abc_mcmc(
     y_obs::Vector,
     G::Matrix,
     d::Function,
-    K::AbstractKernel,
+    K::AbstractPerturbationKernel,
     N::Int,
     ε::Real
 )
@@ -225,7 +225,7 @@ function run_mcmc(
     f::Function,
     L::AbstractLikelihood,
     G::Matrix,
-    κ::AbstractKernel,
+    κ::AbstractPerturbationKernel,
     N::Int
 )
 

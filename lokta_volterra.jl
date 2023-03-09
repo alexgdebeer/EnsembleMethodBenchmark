@@ -8,7 +8,7 @@ import Random
 import PyPlot
 import Seaborn
 
-include("sim_intensive_inference.jl")
+include("sim_intensive_inference/sim_intensive_inference.jl")
 
 
 Random.seed!(16)
@@ -403,7 +403,7 @@ if abc_smc
 
     σκ = 0.5
     Σκ = σκ .* Matrix(1.0LinearAlgebra.I, 2, 2)
-    κ = SimIntensiveInference.GaussianKernel(Σκ)
+    κ = SimIntensiveInference.GaussianPerturbationKernel(Σκ)
 
     T = 5
     n = 500

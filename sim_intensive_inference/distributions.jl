@@ -110,7 +110,7 @@ end
 """Evaluates the density of kernel κ centred at particle θ⁺, at particle θ.
 TODO: this is probably wrong if there are bounds on the prior."""
 function density(
-    κ::GaussianKernel, 
+    κ::GaussianPerturbationKernel, 
     θ⁺::AbstractVector, 
     θ::AbstractVector
 )::Real
@@ -124,7 +124,7 @@ end
 """Evaluates the density of kernel κ, centred at θ⁺, at θ.
 TODO: this is probably wrong if there are bounds on the prior."""
 function density(
-    κ::UniformKernel, 
+    κ::UniformPerturbationKernel, 
     θ⁺::AbstractVector, 
     θ::AbstractVector
 )::Real
@@ -180,7 +180,7 @@ end
 """Perturbs a particle, ensuring that the perturbed particle has a positive 
 prior probability."""
 function perturb(
-    κ::UniformKernel, 
+    κ::UniformPerturbationKernel, 
     θ::AbstractVector, 
     π::AbstractPrior
 )::AbstractVector
@@ -200,7 +200,7 @@ end
 """Perturbs a particle, ensuring that the perturbed particle has a positive 
 prior probability."""
 function perturb(
-    κ::GaussianKernel, 
+    κ::GaussianPerturbationKernel, 
     θ::AbstractVector, 
     π::AbstractPrior
 )::AbstractVector
