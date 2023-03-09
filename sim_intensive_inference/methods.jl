@@ -188,7 +188,7 @@ function run_abc_mcmc(
     y_obs::Vector,
     G::Matrix,
     d::Function,
-    K::AbstractPerturbationKernel,
+    κ::AbstractPerturbationKernel,
     N::Int,
     ε::Real
 )
@@ -217,7 +217,7 @@ function run_abc_mcmc(
     for i ∈ 2:N
 
         # Propose a new set of parameters
-        θ⁺ = perturb(K, θ, π)
+        θ⁺ = perturb(κ, θ, π)
 
         # Simulate a dataset
         y = f(θ⁺)
@@ -231,8 +231,8 @@ function run_abc_mcmc(
             # Calculate the acceptance probability of θ⁺
             h = min(
                 1, 
-                (density(π, θ⁺) * density(K, θ⁺, θ)) / 
-                    (density(π, θ) * density(K, θ, θ⁺))
+                (density(π, θ⁺) * density(κ, θ⁺, θ)) / 
+                    (density(π, θ) * density(κ, θ, θ⁺))
             )
             
             if h ≥ rand()
@@ -253,6 +253,79 @@ function run_abc_mcmc(
 
     return θs, α / N
     
+end
+
+
+function run_probabilistic_abc_mcmc(
+    π::AbstractPrior,
+    f::Function,
+    y_obs::Vector,
+    G::Matrix,
+    κ::AbstractPerturbationKernel,
+    E::AbstractAcceptanceKernel,
+    N::Int;
+    verbose::Bool = true
+)
+
+    # Sample a starting point from the prior
+    θ = sample(π)
+    y = f(θ)
+    y_m = G * y
+
+    println("Finding starting point...")
+
+    while density(E, y_obs - y_m) / E.c < rand()
+
+        #θ = sample(π)
+        θ = [1.0, 1.0]
+        y = f(θ)
+        y_m = G * f(θ)
+
+    end
+
+    println("Starting point located.")
+
+    # Initialise a vector to contain the chain that is produced
+    θs = [θ]
+    ys = [y]
+
+    # Initialise acceptance counter
+    α = 0
+
+    for i ∈ 2:N
+
+        # Propose a new set of parameters
+        θ⁺ = perturb(κ, θ, π)
+
+        # Simulate a dataset
+        y⁺ = f(θ⁺)
+        y_m⁺ = G * y⁺
+
+        r = min(
+            1, 
+            (density(E, y_obs - y_m⁺) * density(κ, θ⁺, θ) * density(π, θ⁺)) / 
+                (density(E, y_obs - y_m) * density(κ, θ, θ⁺) * density(π, θ))
+        )
+
+        if r ≥ rand()
+            α += 1
+            θ = θ⁺
+            y = y⁺
+            y_m = y_m⁺
+        end
+
+        push!(θs, θ)
+        push!(ys, y)
+
+        if verbose && i % 1000 == 0
+            @info("Finished running model with $(i) sets of parameters.")
+            @info("Acceptance rate: $(α / i).")
+        end 
+
+    end
+
+    return θs, ys
+
 end
 
 

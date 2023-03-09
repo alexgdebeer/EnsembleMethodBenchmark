@@ -298,10 +298,11 @@ function plot_abc_smc_posterior_predictions(ts_obs, ys_obs, ts, ys, is, ys_true)
 end
 
 
-true_posterior = false
+true_posterior = true
 abc = false
-probabilistic_abc = true
+probabilistic_abc = false
 abc_smc = false
+probabilistic_abc_mcmc = true
 
 
 # ----------------
@@ -358,8 +359,8 @@ if true_posterior
     # Define the likelihood
     L = SimIntensiveInference.GaussianLikelihood(xs_obs, Σₑ)
 
-    for (i, x) ∈ enumerate(ys)
-        for (j, y) ∈ enumerate(xs)
+    for (j, x) ∈ enumerate(xs)
+        for (i, y) ∈ enumerate(ys)
 
             θ = [x, y]
 
@@ -381,6 +382,7 @@ if true_posterior
     PyPlot.legend(fontsize = 16)
 
     PyPlot.savefig("plots/lokta_volterra/true_posterior.pdf")
+    PyPlot.clf()
 
 end
 
@@ -432,5 +434,51 @@ if abc_smc
     plot_abc_smc_posterior_predictions(ts_obs, xs_obs, ts, ys, is, xs_true)
     # 4.78146474496098
     # 16.16298990060011
+
+end
+
+
+if probabilistic_abc_mcmc
+
+    N = 1_000_000
+
+    σκ = 0.1
+    Σκ = σκ .* Matrix(1.0LinearAlgebra.I, 2, 2)
+    κ = SimIntensiveInference.GaussianPerturbationKernel(Σκ)
+
+    # Define an acceptance kernel 
+    E = SimIntensiveInference.GaussianAcceptanceKernel(Σₑ)
+
+    θs, ys = SimIntensiveInference.run_probabilistic_abc_mcmc(
+        π,
+        f,
+        xs_obs, 
+        G, 
+        κ,
+        E,
+        N
+    )
+
+    inds = [i for i ∈ 1:N if i % 5000 == 0]
+
+    Seaborn.kdeplot(
+        x = [θ[1] for θ ∈ θs][inds],
+        y = [θ[2] for θ ∈ θs][inds],
+        cmap = "coolwarm", 
+        fill = true
+    )
+
+    PyPlot.scatter([1], [1], c = "k", marker = "x", label = "True parameter values")
+
+    PyPlot.xlim(0.8, 1.2)
+    PyPlot.ylim(0.8, 1.2)
+    PyPlot.gca().set_aspect("equal")
+
+    PyPlot.title("Probabilistic ABC-MCMC posterior density", fontsize = 20)
+    PyPlot.xlabel("\$a\$", fontsize = 16)
+    PyPlot.ylabel("\$b\$", fontsize = 16)
+    PyPlot.legend(fontsize = 16)
+
+    PyPlot.savefig("plots/lokta_volterra/abc_mcmc_posterior.pdf")
 
 end
