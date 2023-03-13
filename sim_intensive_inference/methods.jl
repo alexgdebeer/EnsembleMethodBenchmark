@@ -181,6 +181,154 @@ function run_abc_smc(
 end
 
 
+function run_probabilistic_abc_smc(
+    π::AbstractPrior,
+    f::Function,
+    y_obs::AbstractVector,
+    G::Matrix,
+    κ::AbstractPerturbationKernel,
+    T::Int,
+    n::Int,
+    Es::AbstractVector;
+    verbose::Bool = true
+)
+
+    θs = Dict(i => [] for i ∈ 1:T)
+    ys = Dict(i => [] for i ∈ 1:T)
+    is = Dict(i => [] for i ∈ 1:T)
+    ws = Dict(i => [] for i ∈ 1:T)
+    
+    for t ∈ 1:T
+
+        @info("Sampling population $(t)")
+
+        i = 0
+
+        while i < n
+
+            if t == 1
+
+                # Sample from the prior
+                θ = sample(π)
+
+            else
+
+                # Sample from previous population
+                θ⁺ = sample_from_population(θs[t-1][is[t-1]], ws[t-1])
+                θ = perturb(κ, θ⁺, π)
+                
+            end
+
+            y = G * f(θ)
+            
+            push!(θs[t], θ)
+            push!(ys[t], y)
+
+            if density(Es[t], y - y_obs) / Es[t].c > rand()
+            
+                i += 1
+                push!(is[t], length(θs[t]))
+
+                # Calculate the weight of the particle
+                if t == 1
+
+                    push!(ws[t], 1.0)
+
+                else
+
+                    w = density(π, θ) / sum(w * density(κ, θ⁺, θ) 
+                        for (θ⁺, w) ∈ zip(θs[t-1][is[t-1]], ws[t-1]))
+                    push!(ws[t], w)
+
+                end
+
+                if verbose && i % 100 == 0
+                    @info("$i / $(length(θs[t])) sets of parameters accepted.")
+                end
+            
+            end
+
+        end
+
+        # Normalise the weights 
+        ws[t] ./= sum(ws[t])
+
+    end
+    
+end
+
+
+function run_probabilistic_abc_smc_b(
+    π::AbstractPrior,
+    f::Function,
+    y_obs::AbstractVector,
+    G::Matrix,
+    κ::AbstractPerturbationKernel,
+    T::Int,
+    n::Int,
+    Es::AbstractVector;
+    verbose::Bool = true
+)
+
+    θs = Dict(i => [] for i ∈ 1:T)
+    ys = Dict(i => [] for i ∈ 1:T)
+    ws = Dict(i => [] for i ∈ 1:T)
+    
+    for t ∈ 1:T
+
+        if verbose
+            @info("Sampling population $(t).")
+        end
+
+        for i ∈ 1:n
+
+            if t == 1
+
+                # Sample from the prior
+                θ = sample(π)
+
+            else
+
+                # Sample from previous population
+                θ⁺ = sample_from_population(θs[t-1], ws[t-1])
+                θ = perturb(κ, θ⁺, π)
+                
+            end
+
+            y = G * f(θ)
+            
+            push!(θs[t], θ)
+            push!(ys[t], y)
+
+            # Calculate the weight of the particle
+            if t == 1
+
+                push!(ws[t], 1.0)
+
+            else
+
+                w = (density(π, θ) * density(Es[t], y - y_obs)) / 
+                    sum(w * density(κ, θ⁺, θ) for (θ⁺, w) ∈ zip(θs[t-1], ws[t-1]))
+                push!(ws[t], w)
+
+            end
+
+            if verbose && i % 1_000 == 0
+                println("Finished sampling $(i) particles.")
+            end
+
+        end
+
+        # Normalise the weights 
+        ws[t] ./= sum(ws[t])
+
+    end
+
+    return θs, ys, ws
+    
+end
+
+
 function run_abc_mcmc(
     π::AbstractPrior,
     f::Function,
@@ -339,6 +487,10 @@ function run_mcmc(
 )
 
     θ = sample(π)
+
+    # Temporary: just start at the true value of the parameters
+    θ = [1, 1]
+
     y_m = G * f(θ)
 
     α = 0

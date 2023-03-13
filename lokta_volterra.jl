@@ -5,6 +5,7 @@ import Distributions
 import LinearAlgebra
 import Random
 
+using LaTeXStrings
 import PyPlot
 import Seaborn
 
@@ -298,11 +299,14 @@ function plot_abc_smc_posterior_predictions(ts_obs, ys_obs, ts, ys, is, ys_true)
 end
 
 
-true_posterior = true
+true_posterior = false
+
 abc = false
-probabilistic_abc = false
 abc_smc = false
-probabilistic_abc_mcmc = true
+
+probabilistic_abc = false
+probabilistic_abc_smc = true
+probabilistic_abc_mcmc = false
 
 
 # ----------------
@@ -408,7 +412,7 @@ if probabilistic_abc
     N = 10_000_000
 
     # Define an acceptance kernel 
-    K = SimIntensiveInference.GaussianAcceptanceKernel(16.0 .* Σₑ)
+    K = SimIntensiveInference.GaussianAcceptanceKernel(50.0 .* Σₑ)
 
     SimIntensiveInference.run_probabilistic_abc(π, f, xs_obs, G, N, K)
 
@@ -440,7 +444,7 @@ end
 
 if probabilistic_abc_mcmc
 
-    N = 1_000_000
+    N = 100_000
 
     σκ = 0.1
     Σκ = σκ .* Matrix(1.0LinearAlgebra.I, 2, 2)
@@ -459,11 +463,11 @@ if probabilistic_abc_mcmc
         N
     )
 
-    inds = [i for i ∈ 1:N if i % 5000 == 0]
+    # inds = [i for i ∈ 1:N if i % 5000 == 0]
 
     Seaborn.kdeplot(
-        x = [θ[1] for θ ∈ θs][inds],
-        y = [θ[2] for θ ∈ θs][inds],
+        x = [θ[1] for θ ∈ θs],
+        y = [θ[2] for θ ∈ θs],
         cmap = "coolwarm", 
         fill = true
     )
@@ -475,10 +479,84 @@ if probabilistic_abc_mcmc
     PyPlot.gca().set_aspect("equal")
 
     PyPlot.title("Probabilistic ABC-MCMC posterior density", fontsize = 20)
-    PyPlot.xlabel("\$a\$", fontsize = 16)
-    PyPlot.ylabel("\$b\$", fontsize = 16)
+    PyPlot.xlabel(L"a", fontsize = 16)
+    PyPlot.ylabel(L"b", fontsize = 16)
     PyPlot.legend(fontsize = 16)
 
-    PyPlot.savefig("plots/lokta_volterra/abc_mcmc_posterior.pdf")
+    PyPlot.savefig("plots/lokta_volterra/mcmc_posterior.pdf")
+    PyPlot.clf()
+
+    # Plot diagnostic curves
+    fig, ax = PyPlot.subplots(2, 1)
+    ax[1].plot([θ[1] for θ ∈ θs])
+    ax[2].plot([θ[2] for θ ∈ θs])
+
+    PyPlot.suptitle("Diagnostic curves", fontsize = 20)
+    ax[1].set_xlabel("Iteration", fontsize = 16)
+    ax[2].set_xlabel("Iteration", fontsize = 16)
+    ax[1].set_ylabel(L"\theta_{1}", fontsize = 16)
+    ax[2].set_ylabel(L"\theta_{2}", fontsize = 16)
+
+    PyPlot.tight_layout()
+    PyPlot.savefig("plots/lokta_volterra/mcmc_diagnostic_curves.pdf")
+
+end
+
+
+if probabilistic_abc_smc
+
+    # Define perturbation kernel
+    σκ = 0.05
+    Σκ = σκ .* Matrix(1.0LinearAlgebra.I, 2, 2)
+    κ = SimIntensiveInference.GaussianPerturbationKernel(Σκ)
+
+    # Define sequence of error distributions to evaluate 
+    
+    Σs = [
+        (m*σₑ)^2 * Matrix(1.0 * LinearAlgebra.I, 2n_data, 2n_data)
+        for m ∈ [
+            10.0, 8.0, 6.0, 4.0, 2.0, 1.5, 1.0, 0.75, 0.5
+        ]
+    ]
+
+    Es = [SimIntensiveInference.GaussianAcceptanceKernel(Σ) for Σ ∈ Σs]
+    
+    T = length(Σs)
+    n = 10_000
+
+    θs, ys, ws = SimIntensiveInference.run_probabilistic_abc_smc_b(
+        π,
+        f,
+        xs_obs,
+        G,
+        κ,
+        T, 
+        n, 
+        Es
+    )
+
+    θs_sample = [SimIntensiveInference.sample_from_population(θs[T], ws[T]) for _ ∈ 1:n]
+
+    Seaborn.kdeplot(
+        x = [θ[1] for θ ∈ θs_sample],
+        y = [θ[2] for θ ∈ θs_sample],
+        cmap = "coolwarm", 
+        fill = true
+    )
+
+    PyPlot.scatter([1], [1], c = "k", marker = "x", label = "True parameter values")
+
+    PyPlot.xlim(0.8, 1.2)
+    PyPlot.ylim(0.8, 1.2)
+    PyPlot.gca().set_aspect("equal")
+
+    PyPlot.title("Probabilistic ABC-SMC posterior density", fontsize = 20)
+    PyPlot.xlabel(L"a", fontsize = 16)
+    PyPlot.ylabel(L"b", fontsize = 16)
+    PyPlot.legend(fontsize = 16)
+
+    PyPlot.tight_layout()
+    PyPlot.savefig("plots/lokta_volterra/probabilistic_abc_smc_posterior_2.pdf")
+    PyPlot.clf()
 
 end
