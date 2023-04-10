@@ -50,8 +50,6 @@ function run_abc(
 end
 
 
-"""Carries out the probabilistic ABC algorithm as described in Wilkinson 
-(2013)."""
 function run_probabilistic_abc(
     π::AbstractPrior,
     f::Function,
@@ -96,225 +94,139 @@ function run_abc_smc(
     e::AbstractErrorModel,
     y_obs::Vector,
     G::Matrix,
-    d::Function,
-    κ::AbstractPerturbationKernel,
+    Δ::Function,
+    K::AbstractPerturbationKernel,
     T::Int,
-    n::Int,
-    α₁::Float64,
-    αs::Vector{Float64};
+    N::Int,
+    εs::AbstractVector;
     verbose::Bool = true
 )
 
     θs = Dict(i => [] for i ∈ 1:T)
     ys = Dict(i => [] for i ∈ 1:T)
     ds = Dict(i => [] for i ∈ 1:T)
-    is = Dict(i => [] for i ∈ 1:T)
     ws = Dict(i => [] for i ∈ 1:T)
 
-    # Determine how many particles need to be sampled in the first population
-    N = round(Int, n / α₁)
-
-    # Run the first population 
-    θs[1], ys[1], ds[1], is[1] = run_abc(π, f, e, y_obs, G, d, N, α₁)
-
-    ws[1] = ones(n) ./ n
-
-    # Calculate the acceptance tolerance for the first population 
-    ε₁ = maximum(ds[1][is[1]])
-
-    # Define the acceptance tolerances for subsequent populations 
-    εs = vcat([ε₁], [α * ε₁ for α ∈ αs])
-
-    for t ∈ 2:T
-
-        println(εs[t])
-
-        # Define the number of accepted particles
-        i = 0
-
-        while i < n
-            
-            # Sample a particle from the previous population and perturb it
-            θ⁺ = sample_from_population(θs[t-1][is[t-1]], ws[t-1])
-            θ = perturb(κ, θ⁺, π)
-
-            # Run the forward model
-            y = f(θ)
-
-            # Generate noisy modelled values at the times of interest
-            y_m = G * y
-            add_noise!(y_m, e)
-
-            dist = d(y_obs, y_m)
-
-            push!(θs[t], θ)
-            push!(ys[t], y)
-            push!(ds[t], dist)
-            
-            if dist ≤ εs[t]
-
-                i += 1
-
-                # Calculate the weight of the particle
-                w = density(π, θ) ./ 
-                    sum(w * density(κ, θ⁺, θ) 
-                        for (θ⁺, w) ∈ zip(θs[t-1][is[t-1]], ws[t-1]))
-
-                push!(is[t], length(ds[t]))
-                push!(ws[t], w)
-
-                if verbose && i % 100 == 0
-                    @info("$i / $(length(ds[t])) sets of parameters accepted.")
-                end
-
-            end
-
-        end
-
-        # Normalise the weights
-        ws[t] ./= sum(ws[t])
-
-    end
-
-    return θs, ys, ds, is, ws
-
-end
-
-
-function run_probabilistic_abc_smc(
-    π::AbstractPrior,
-    f::Function,
-    y_obs::AbstractVector,
-    G::Matrix,
-    κ::AbstractPerturbationKernel,
-    T::Int,
-    n::Int,
-    Es::AbstractVector;
-    verbose::Bool = true
-)
-
-    θs = Dict(i => [] for i ∈ 1:T)
-    ys = Dict(i => [] for i ∈ 1:T)
-    is = Dict(i => [] for i ∈ 1:T)
-    ws = Dict(i => [] for i ∈ 1:T)
-    
-    for t ∈ 1:T
-
-        @info("Sampling population $(t)")
-
-        i = 0
-
-        while i < n
-
-            if t == 1
-
-                # Sample from the prior
-                θ = sample(π)
-
-            else
-
-                # Sample from previous population
-                θ⁺ = sample_from_population(θs[t-1][is[t-1]], ws[t-1])
-                θ = perturb(κ, θ⁺, π)
-                
-            end
-
-            y = G * f(θ)
-            
-            push!(θs[t], θ)
-            push!(ys[t], y)
-
-            if density(Es[t], y - y_obs) / Es[t].c > rand()
-            
-                i += 1
-                push!(is[t], length(θs[t]))
-
-                # Calculate the weight of the particle
-                if t == 1
-
-                    push!(ws[t], 1.0)
-
-                else
-
-                    w = density(π, θ) / sum(w * density(κ, θ⁺, θ) 
-                        for (θ⁺, w) ∈ zip(θs[t-1][is[t-1]], ws[t-1]))
-                    push!(ws[t], w)
-
-                end
-
-                if verbose && i % 100 == 0
-                    @info("$i / $(length(θs[t])) sets of parameters accepted.")
-                end
-            
-            end
-
-        end
-
-        # Normalise the weights 
-        ws[t] ./= sum(ws[t])
-
-    end
-    
-end
-
-
-function run_probabilistic_abc_smc_b(
-    π::AbstractPrior,
-    f::Function,
-    y_obs::AbstractVector,
-    G::Matrix,
-    κ::AbstractPerturbationKernel,
-    T::Int,
-    n::Int,
-    Es::AbstractVector;
-    verbose::Bool = true
-)
-
-    θs = Dict(i => [] for i ∈ 1:T)
-    ys = Dict(i => [] for i ∈ 1:T)
-    ws = Dict(i => [] for i ∈ 1:T)
-    
-    for t ∈ 1:T
+    for t ∈ 1:T 
 
         if verbose
-            @info("Sampling population $(t).")
+            @info("Sampling population $t.")
         end
 
-        for i ∈ 1:n
+        if (t > 1) && (typeof(K) <: AbstractAdaptivePerturbationKernel)
+            update!(K, θs, ws, ds, t, εs[t])
+        end
+
+        i = 0; j = 0
+
+        while i < N
+
+            j += 1
 
             if t == 1
-
-                # Sample from the prior
                 θ = sample(π)
-
             else
-
-                # Sample from previous population
                 θ⁺ = sample_from_population(θs[t-1], ws[t-1])
-                θ = perturb(κ, θ⁺, π)
+                θ = perturb(K, θ⁺, π)
+            end
+
+            y_m = f(θ)
+            y = G * y_m
+            add_noise!(y, e)
+            d = Δ(y, y_obs)
+
+            if d ≤ εs[t]
                 
-            end
+                i += 1
+                
+                if t == 1
+                    w = 1.0
+                else
+                    w = density(π, θ) / 
+                        sum(w * density(K, θ⁺, θ) for (θ⁺, w) ∈ zip(θs[t-1], ws[t-1]))
+                end
 
-            y = G * f(θ)
-            
-            push!(θs[t], θ)
-            push!(ys[t], y)
-
-            # Calculate the weight of the particle
-            if t == 1
-
-                push!(ws[t], 1.0)
-
-            else
-
-                w = (density(π, θ) * density(Es[t], y - y_obs)) / 
-                    sum(w * density(κ, θ⁺, θ) for (θ⁺, w) ∈ zip(θs[t-1], ws[t-1]))
+                push!(θs[t], θ)
+                push!(ys[t], y_m)
+                push!(ds[t], d)
                 push!(ws[t], w)
-
+            
             end
 
-            if verbose && i % 1_000 == 0
-                println("Finished sampling $(i) particles.")
+            if (verbose) && (j % 1000 == 0)
+                α = round(100i/j, digits=2)
+                @info("$i / $j sets of parameters accepted (α = $α%).")
+            end
+
+        end
+
+        ws[t] ./= sum(ws[t])
+
+    end
+
+    return θs, ys, ds, ws
+
+end
+
+
+function run_smc_b(
+    π::AbstractPrior,
+    f::Function,
+    y_obs::AbstractVector,
+    G::Matrix,
+    K::AbstractPerturbationKernel,
+    T::Int,
+    N::Int,
+    Es::AbstractVector;
+    verbose::Bool = true
+)
+
+    θs = Dict(i => [] for i ∈ 1:T)
+    ys = Dict(i => [] for i ∈ 1:T)
+    ws = Dict(i => [] for i ∈ 1:T)
+    
+    for t ∈ 1:T
+
+        if (t > 1) && (typeof(K) <: AbstractAdaptivePerturbationKernel)
+            update!(K, θs, ws, t)
+        end
+
+        i = 0; j = 0
+
+        while i < N
+
+            j += 1
+
+            if t == 1
+                θ = sample(π)
+            else
+                θ⁺ = sample_from_population(θs[t-1], ws[t-1])
+                θ = perturb(K, θ⁺, π)
+            end
+
+            y_m = f(θ)
+            y = G * y_m
+
+            if (density(Es[t], y - y_obs) / Es[t].c) > rand()
+            
+                i += 1
+
+                if t == 1
+                    w = 1.0
+                else
+                    w = density(π, θ) / 
+                        sum(w * density(K, θ⁺, θ) for (θ⁺, w) ∈ zip(θs[t-1], ws[t-1]))
+                end
+
+                push!(θs[t], θ)
+                push!(ys[t], y)
+                push!(ws[t], w)
+            
+            end
+
+            if (verbose) && (j % 1000 == 0)
+                α = round(100i/j, digits=2)
+                @info("$i / $j sets of parameters accepted (α = $α%).")
             end
 
         end
@@ -329,151 +241,62 @@ function run_probabilistic_abc_smc_b(
 end
 
 
-function run_abc_mcmc(
+function run_smc(
     π::AbstractPrior,
     f::Function,
-    e::AbstractErrorModel, 
-    y_obs::Vector,
+    y_obs::AbstractVector,
     G::Matrix,
-    d::Function,
-    κ::AbstractPerturbationKernel,
+    K::AbstractPerturbationKernel,
+    T::Int,
     N::Int,
-    ε::Real
-)
-
-    # Sample a starting point from the prior 
-    θ = sample(π)
-    y = f(θ)
-    y_m = G * y
-    add_noise!(y_m, e)
-
-    while d(y_m, y_obs) > ε
-
-        θ = sample(π)
-        y = f(θ)
-        y_m = G * y
-        add_noise!(y_m, e)
-
-    end
-
-    # Initialise a vector to contain the chain that is produced
-    θs = [θ]
-
-    # Initialise acceptance counter
-    α = 0
-
-    for i ∈ 2:N
-
-        # Propose a new set of parameters
-        θ⁺ = perturb(κ, θ, π)
-
-        # Simulate a dataset
-        y = f(θ⁺)
-
-        # Generate noisy modelled values at the times of interest
-        y_m = G * y
-        add_noise!(y_m, e)
-        
-        if d(y_m, y_obs) ≤ ε
-
-            # Calculate the acceptance probability of θ⁺
-            h = min(
-                1, 
-                (density(π, θ⁺) * density(κ, θ⁺, θ)) / 
-                    (density(π, θ) * density(κ, θ, θ⁺))
-            )
-            
-            if h ≥ rand()
-                α += 1
-                θ = θ⁺
-            end
-        
-        end
-
-        push!(θs, θ)
-
-        if (i % 1000 == 0)
-            @info("Finished running model with $(i) sets of parameters.")
-            println(α / i)
-        end 
-
-    end
-
-    return θs, α / N
-    
-end
-
-
-function run_probabilistic_abc_mcmc(
-    π::AbstractPrior,
-    f::Function,
-    y_obs::Vector,
-    G::Matrix,
-    κ::AbstractPerturbationKernel,
-    E::AbstractAcceptanceKernel,
-    N::Int;
+    Es::AbstractVector;
     verbose::Bool = true
 )
 
-    # Sample a starting point from the prior
-    θ = sample(π)
-    y = f(θ)
-    y_m = G * y
+    θs = Dict(i => [] for i ∈ 1:T)
+    ys = Dict(i => [] for i ∈ 1:T)
+    ws = Dict(i => [] for i ∈ 1:T)
+    
+    for t ∈ 1:T
 
-    println("Finding starting point...")
-
-    while density(E, y_obs - y_m) / E.c < rand()
-
-        #θ = sample(π)
-        θ = [1.0, 1.0]
-        y = f(θ)
-        y_m = G * f(θ)
-
-    end
-
-    println("Starting point located.")
-
-    # Initialise a vector to contain the chain that is produced
-    θs = [θ]
-    ys = [y]
-
-    # Initialise acceptance counter
-    α = 0
-
-    for i ∈ 2:N
-
-        # Propose a new set of parameters
-        θ⁺ = perturb(κ, θ, π)
-
-        # Simulate a dataset
-        y⁺ = f(θ⁺)
-        y_m⁺ = G * y⁺
-
-        r = min(
-            1, 
-            (density(E, y_obs - y_m⁺) * density(κ, θ⁺, θ) * density(π, θ⁺)) / 
-                (density(E, y_obs - y_m) * density(κ, θ, θ⁺) * density(π, θ))
-        )
-
-        if r ≥ rand()
-            α += 1
-            θ = θ⁺
-            y = y⁺
-            y_m = y_m⁺
+        if (t > 1) && (typeof(K) <: AbstractAdaptivePerturbationKernel)
+            update!(K, θs, ws, t)
         end
 
-        push!(θs, θ)
-        push!(ys, y)
+        for i ∈ 1:N
 
-        if verbose && i % 1000 == 0
-            @info("Finished running model with $(i) sets of parameters.")
-            @info("Acceptance rate: $(α / i).")
-        end 
+            if t == 1
+                θ = sample(π)
+            else
+                θ⁺ = sample_from_population(θs[t-1], ws[t-1])
+                θ = perturb(K, θ⁺, π)
+            end
+
+            y = G * f(θ)
+
+            if t == 1
+                w = 1.0
+            else
+                w = (density(π, θ) * density(Es[t], y - y_obs)) / 
+                    sum(w * density(K, θ⁺, θ) for (θ⁺, w) ∈ zip(θs[t-1], ws[t-1]))
+            end
+
+            push!(θs[t], θ)
+            push!(ys[t], y)
+            push!(ws[t], w)
+
+            if (verbose) && (i % 1_000 == 0)
+                println("Finished sampling $(i) particles.")
+            end
+
+        end
+
+        ws[t] ./= sum(ws[t])
 
     end
 
-    return θs, ys
-
+    return θs, ys, ws
+    
 end
 
 
@@ -483,19 +306,19 @@ function run_mcmc(
     L::AbstractLikelihood,
     G::Matrix,
     κ::AbstractPerturbationKernel,
-    N::Int
+    N::Int;
+    verbose::Bool = true
 )
 
-    θ = sample(π)
-
-    # Temporary: just start at the true value of the parameters
-    θ = [1, 1]
+    # θ = sample(π)
+    θ = [1.0, 1.0]
 
     y_m = G * f(θ)
 
-    α = 0
+    θs = [θ]
+    i = 0
 
-    for i ∈ 1:N 
+    for j ∈ 2:N 
 
         # Sample a new parameter 
         θ⁺ = perturb(κ, θ, π)
@@ -511,15 +334,168 @@ function run_mcmc(
         )
 
         if h ≥ rand()
-            α += 1
-            θ = θ⁺
-            y_m = y_m⁺
+            i += 1
+            θ = copy(θ⁺)
+            y_m = copy(y_m⁺)
         end
 
-        if i % 100 == 0
-            println(α / i)
+        push!(θs, θ)
+
+        if (verbose) && (j % 1000 == 0)
+            α = round(100i/j, digits=2)
+            @info("$j iterations complete (α = $α%).")
         end
         
     end
+
+    return θs
+
+end
+
+
+function run_abc_mcmc(
+    π::AbstractPrior,
+    f::Function,
+    e::AbstractErrorModel, 
+    y_obs::Vector,
+    G::Matrix,
+    Δ::Function,
+    κ::AbstractPerturbationKernel,
+    N::Int,
+    ε::Real;
+    verbose::Bool=true
+)
+
+    # Sample a starting point from the prior 
+    # θ = sample(π)
+    θ = [1.0, 1.0]
+    y = f(θ)
+    y_m = G * y
+    add_noise!(y_m, e)
+
+    while Δ(y_m, y_obs) > ε
+
+        # θ = sample(π)
+        θ = [1.0, 1.0]
+        y = f(θ)
+        y_m = G * y
+        add_noise!(y_m, e)
+
+    end
+
+    θs = [θ]
+    i = 0
+
+    for j ∈ 2:N
+
+        # Propose a new set of parameters
+        θ⁺ = perturb(κ, θ, π)
+
+        # Simulate a dataset
+        y = f(θ⁺)
+        y_m = G * y
+        # add_noise!(y_m, e)
+        
+        if Δ(y_m, y_obs) ≤ ε
+
+            # Calculate the acceptance probability of θ⁺
+            h = (density(π, θ⁺) * density(κ, θ⁺, θ)) / (density(π, θ) * density(κ, θ, θ⁺))
+            
+            if h ≥ rand()
+                i += 1
+                θ = copy(θ⁺)
+            end
+        
+        end
+
+        push!(θs, θ)
+
+        if (verbose) && (j % 1000 == 0)
+            α = round(100i/j, digits=2)
+            @info("$j iterations complete (α = $α%).")
+        end
+
+    end
+
+    return θs
+    
+end
+
+
+function run_ibis(
+    π::AbstractPrior,
+    f::Function,
+    Ls::AbstractVector,
+    y_batches::AbstractVector,
+    Gs::AbstractVector,
+    N::Int;
+    verbose::Bool=true
+)
+
+    θs_dict = Dict(i => [] for i ∈ 1:length(y_batches))
+
+    n_batches = length(y_batches)
+
+    # Sample an initial set of particles
+    θs = sample(π, n=N)
+
+    ws = ones(N) ./ N
+    ys = Vector{Vector{Float64}}(undef, N)
+
+    for j ∈ 1:n_batches  
+
+        for (i, θ) ∈ enumerate(θs) 
+
+            if j == 1
+                ys[i] = f(θ)
+                ws[i] *= density(Ls[1], Gs[j] * ys[i])
+            else
+                ws[i] *= density(Ls[j], Gs[j] * ys[i]) / density(Ls[j-1], Gs[j-1] * ys[i])
+            end
+
+        end
+
+        ws ./= sum(ws)
+
+        println(maximum(ws))
+
+        # Re-sample the population with replacement
+        θs, ys = SimIntensiveInference.resample_population(θs, ys, ws)
+        ws = ones(N) ./ N
+
+        # Generate proposal distribution
+        μₖ = Statistics.mean(θs)
+        Σₖ = Statistics.cov(θs)
+
+        K = Distributions.MvNormal(μₖ, Σₖ)
+
+        α = 0
+
+        # Perturb the particles using MH kernel
+        for (i, θ) ∈ enumerate(θs) 
+
+            θ⁺ = rand(K)
+            y⁺ = f(θ⁺)
+
+            h = (density(Ls[j], Gs[j] * y⁺) * density(π, θ⁺) * Distributions.pdf(K, θ)) /
+                (density(Ls[j], Gs[j] * ys[i]) * density(π, θ) * Distributions.pdf(K, θ⁺)) 
+
+            if h ≥ rand()
+                θs[i] = θ⁺
+                ys[i] = y⁺
+                α += 1
+            end
+
+        end
+
+        if verbose
+            @info("Batch $j complete (MH acceptance rate: $(100α/N)).")
+        end
+
+        θs_dict[j] = θs
+
+    end
+
+    return θs_dict
 
 end

@@ -4,6 +4,7 @@ import DifferentialEquations
 import Distributions
 import LinearAlgebra
 import Random
+import Statistics
 
 using LaTeXStrings
 import PyPlot
@@ -16,6 +17,12 @@ Random.seed!(16)
 
 PyPlot.rc("text", usetex = true)
 PyPlot.rc("font", family = "serif")
+
+# Define plotting font sizes
+TITLE_SIZE = 20
+LABEL_SIZE = 16
+SMALL_SIZE = 8
+TINY_SIZE = 5
 
 
 # Define a set of t values to solve over
@@ -63,8 +70,10 @@ end
 """Generates the observation operator."""
 function generate_obs_operator(is_obs)
 
-    G_filled = zeros(n_data, n_steps)
-    G_blank = zeros(n_data, n_steps)
+    n = length(is_obs)
+
+    G_filled = zeros(n, n_steps)
+    G_blank = zeros(n, n_steps)
 
     for (i, i_obs) ∈ enumerate(is_obs)
         G_filled[i, i_obs] = 1.0
@@ -78,6 +87,11 @@ end
 """Returns a distance measure between a set of outputs and the data."""
 function d(x_a, x_b)
     return sum((x_a .- x_b).^2)
+end
+
+
+function Δ_uniform(x_a, x_b)
+    return max(abs.(x_a-x_b)...)
 end
 
 
@@ -101,212 +115,211 @@ function plot_solution(ts, xs_true, ts_obs, xs_obs)
 end
 
 
-"""Plot the posterior found using ABC."""
-function plot_abc_posterior(θs, is)
+function plot_posterior(θs, title, save_path; plot_uniform_posterior=false, caption=nothing)
 
-    fig, ax = PyPlot.subplots(1, 2)
-    fig.suptitle("ABC: Prior vs Posterior", fontsize = 20)
-    fig.set_size_inches(8, 4)
+    a, b = [θ[1] for θ ∈ θs], [θ[2] for θ ∈ θs]
 
-    Seaborn.kdeplot(
-        x = [θ[1] for θ ∈ θs],
-        y = [θ[2] for θ ∈ θs],
-        cmap = "coolwarm", 
-        fill = true,
-        ax = ax[1]
-    )
+    g = Seaborn.JointGrid(xlim=(0.6, 1.4), ylim=(0.6, 1.4))
 
-    Seaborn.kdeplot(
-        x = [θ[1] for θ ∈ θs[is]],
-        y = [θ[2] for θ ∈ θs[is]],
-        cmap = "coolwarm", 
-        fill = true,
-        ax = ax[2]
-    )
+    Seaborn.kdeplot(x=a, y=b, ax=g.ax_joint, fill=true, cmap="coolwarm", levels=9, bw_adjust=2.0)
+    g.ax_joint.scatter(x=[1], y=[1], c="k", marker="x", label="True parameters")
+    
+    Seaborn.kdeplot(x=a, ax=g.ax_marg_x, c="#4358CB", label="Sampled density")
+    Seaborn.kdeplot(y=b, ax=g.ax_marg_y, c="#4358CB")
 
-    ax[1].set_title("Prior")
-    ax[2].set_title("Posterior")
+    g.ax_marg_x.axvline(x=1, c="k", label="True parameters")
+    g.ax_marg_y.axhline(y=1, c="k")
+    
+    g.ax_marg_x.plot(xs, marg_x, c="tab:gray", ls="--", label="True posterior density")
+    g.ax_marg_y.plot(marg_y, ys, c="tab:gray", ls="--")
 
-    for i ∈ 1:2
+    if plot_uniform_posterior
+        g.ax_marg_x.plot(xs, marg_x_uniform, c="tab:purple", ls="--", label="Density of posterior\nwith uniform likelihood")
+        g.ax_marg_y.plot(marg_y_uniform, ys, c="tab:purple", ls="--")
+    end
 
-        ax[i].scatter([1], [1], marker = "x", color = "k")
-        ax[i].set_xlabel("\$a\$")
-        ax[i].set_ylabel("\$b\$")
+    g.ax_marg_x.set_title(title, fontsize=TITLE_SIZE)
+    g.ax_joint.set_xlabel(L"a", fontsize=LABEL_SIZE)
+    g.ax_joint.set_ylabel(L"b", fontsize=LABEL_SIZE)
+    
+    g.ax_joint.legend(fontsize=TINY_SIZE)
+    g.ax_marg_x.legend(fontsize=TINY_SIZE, frameon=false, loc="lower right")
 
-    end 
+    if caption !== nothing 
+        fig = PyPlot.gcf()
+        fig.supxlabel(caption, x=0.01, ha="left", fontsize=SMALL_SIZE)
+    end
+
+    g.ax_joint.set_facecolor("#4358CB")
 
     PyPlot.tight_layout()
-    PyPlot.savefig("plots/abc_posterior.pdf")
+    PyPlot.savefig(save_path)
     PyPlot.clf()
 
 end
 
 
-"""Plot the predictions made using the parameters from the posterior."""
-function plot_abc_posterior_predictions(ts_obs, ys_obs, ts, ys, is, ys_true)
+function plot_intermediate_distributions(
+    θs, ws, εs, nrows, ncols, 
+    title, save_path; caption = nothing
+)
 
-    ts_obs_x, ts_obs_y = ts_obs[1:n_data], ts_obs[(n_data+1):end]
-    ys_obs_x, ys_obs_y = ys_obs[1:n_data], ys_obs[(n_data+1):end]
+    fig, axes = PyPlot.subplots(nrows, ncols, sharey="row", figsize=(3*ncols, 3*nrows))
 
-    fig, ax = PyPlot.subplots(1, 2)
-    fig.suptitle("ABC: Predictions", fontsize = 20)
-    fig.set_size_inches(8, 4)
+    T = length(εs)
 
-    ax[1].plot(ts, ys_true[1:n_steps], c = "k", zorder = 5)
-    ax[2].plot(ts, ys_true[(n_steps+1):end], c = "k", zorder = 5)
+    pmap = reshape(1:(nrows*ncols), (nrows, ncols))'
 
-    ax[1].scatter(ts_obs_x, ys_obs_x, marker = "o", color = "k", zorder = 4)
-    ax[2].scatter(ts_obs_y, ys_obs_y, marker = "^", color = "k", zorder = 4)
+    for t ∈ 1:T
 
-    for y ∈ ys[is]
+        θs_sample = [SimIntensiveInference.sample_from_population(θs[t], ws[t]) for _ ∈ 1:10_000]
+        a, b = [θ[1] for θ ∈ θs_sample], [θ[2] for θ ∈ θs_sample]
 
-        ax[1].plot(ts, y[1:n_steps], c = "tab:green", zorder = 2)
-        ax[2].plot(ts, y[(n_steps+1):end], c = "tab:green", zorder = 2)
+        ax = axes[pmap[t]]
+        ax.set_facecolor("#4358CB")
+        ax.set_aspect("equal", adjustable="datalim")
 
-    end
+        Seaborn.kdeplot(x=a, y=b, ax=ax, fill=true, cmap="coolwarm", levels=9, bw_adjust=2.0)
+        ax.scatter(x=[1], y=[1], c="k", marker="x")
 
-    for y ∈ ys[setdiff(1:10_000, is)]
-
-        ax[1].plot(ts, y[1:n_steps], c = "tab:gray", zorder = 1, alpha = 0.5)
-        ax[2].plot(ts, y[(n_steps+1):end], c = "tab:gray", zorder = 1, alpha = 0.5)
+        ax.set_title("Iteration $(t) ("*L"$\varepsilon$ = "*"$(εs[t]))", fontsize=LABEL_SIZE)
 
     end
 
-    ax[1].set_ylim(0, 5.0)
-    ax[2].set_ylim(0, 5.0)
+    for t ∈ (T+1):(nrows*ncols)
+        axes[pmap[t]].set_axis_off()
+    end
 
-    ax[1].set_title("\$x(t)\$")
-    ax[2].set_title("\$y(t)\$")
+    fig.suptitle(title, fontsize=TITLE_SIZE)
+    fig.supxlabel(L"a", fontsize=LABEL_SIZE)
+    fig.supylabel(L"b", fontsize=LABEL_SIZE)
 
-    ax[1].set_xlabel("\$t\$")
-    ax[2].set_xlabel("\$t\$")
-    
-    ax[1].set_ylabel("\$x(t)\$")
-    ax[2].set_ylabel("\$y(t)\$")
+    if caption !== nothing 
+        fig = PyPlot.gcf()
+        fig.supxlabel(caption, x=0.01, ha="left", fontsize=10)
+    end
 
     PyPlot.tight_layout()
-    PyPlot.savefig("plots/abc_posterior_predictions.pdf")
+    PyPlot.savefig(save_path)
     PyPlot.clf()
 
 end
 
 
-function plot_abc_smc_posterior(θs, is, ws)
+function plot_intermediate_distributions(
+    θs, T, nrows, ncols, title, save_path; caption = nothing
+)
 
-    fig, ax = PyPlot.subplots(3, 2)
-    fig.suptitle("ABC SMC: Prior vs Posterior", fontsize = 20)
-    fig.set_size_inches(10, 12)
+    fig, axes = PyPlot.subplots(nrows, ncols, sharey="row", figsize=(3*ncols, 3*nrows))
 
-    # Plot the prior
-    Seaborn.kdeplot(
-        x = [θ[1] for θ ∈ θs[1]],
-        y = [θ[2] for θ ∈ θs[1]],
-        cmap = "coolwarm", 
-        fill = true,
-        ax = ax[1, 1]
-    )
+    pmap = reshape(1:(nrows*ncols), (nrows, ncols))'
 
-    ax[1, 1].scatter([1], [1], marker = "x", color = "k")
+    for t ∈ 1:T
 
-    ax[1, 1].set_title("Prior")
-    ax[1, 1].set_xlabel("\$a\$")
-    ax[1, 1].set_ylabel("\$b\$")
-    
-    for i ∈ 2:6
+        a, b = [θ[1] for θ ∈ θs[t]], [θ[2] for θ ∈ θs[t]]
 
-        r = floor(Int64, (i + 1) / 2)
-        c = 2 - (i % 2)
+        ax = axes[pmap[t]]
+        ax.set_facecolor("#4358CB")
+        ax.set_aspect("equal", adjustable="datalim")
 
-        # Re-sample with the weights
-        θs_r = [
-            SimIntensiveInference.sample_from_population(
-                θs[i-1][is[i-1]], ws[i-1]
-            ) for _ ∈ 1:1000
-        ]
+        Seaborn.kdeplot(x=a, y=b, ax=ax, fill=true, cmap="coolwarm", levels=9, bw_adjust=2.0)
+        ax.scatter(x=[1], y=[1], c="k", marker="x")
 
-        Seaborn.kdeplot(
-            x = [θ[1] for θ ∈ θs_r],
-            y = [θ[2] for θ ∈ θs_r],
-            cmap = "coolwarm", 
-            fill = true,
-            ax = ax[r, c]
-        )
+        # Hack to clean up the axes
+        ylim = ax.get_ylim()
+        ax.set_ylim(max(ylim[1], -1.0), min(ylim[2], 2.0))
 
-        ax[r, c].scatter([1], [1], marker = "x", color = "k")
-
-        ax[r, c].set_title("Population $(i-1)")
-        ax[r, c].set_xlabel("\$a\$")
-        ax[r, c].set_ylabel("\$b\$")
+        ax.set_title("Iteration $(t)", fontsize=LABEL_SIZE)
 
     end
 
+    for t ∈ (T+1):(nrows*ncols)
+        axes[pmap[t]].set_axis_off()
+    end
+
+    fig.suptitle(title, fontsize=TITLE_SIZE)
+    fig.supxlabel(L"a", fontsize=LABEL_SIZE)
+    fig.supylabel(L"b", fontsize=LABEL_SIZE)
+
+    if caption !== nothing 
+        fig = PyPlot.gcf()
+        fig.supxlabel(caption, x=0.01, ha="left", fontsize=10)
+    end
+
     PyPlot.tight_layout()
-    PyPlot.savefig("plots/abc_smc_posterior.pdf")
+    PyPlot.savefig(save_path)
     PyPlot.clf()
 
 end
 
 
-function plot_abc_smc_posterior_predictions(ts_obs, ys_obs, ts, ys, is, ys_true)
+function plot_diagnostic_curves(θs, title, save_name)
 
-    ts_obs_x, ts_obs_y = ts_obs[1:n_data], ts_obs[(n_data+1):end]
-    ys_obs_x, ys_obs_y = ys_obs[1:n_data], ys_obs[(n_data+1):end]
+    fig, ax = PyPlot.subplots(2)
 
-    fig, ax = PyPlot.subplots(5, 2)
-    fig.suptitle("ABC SMC: Predictions", fontsize = 20)
-    fig.set_size_inches(8, 12)
-    
-    for i ∈ 1:5
+    ax[1].plot([θ[1] for θ ∈ θs], lw=0.5)
+    ax[2].plot([θ[2] for θ ∈ θs], lw=0.5)
 
-        ax[i, 1].plot(ts, ys_true[1:n_steps], c = "k", zorder = 5)
-        ax[i, 2].plot(ts, ys_true[(n_steps+1):end], c = "k", zorder = 5)
-
-        ax[i, 1].scatter(ts_obs_x, ys_obs_x, marker = "o", color = "k", zorder = 4)
-        ax[i, 2].scatter(ts_obs_y, ys_obs_y, marker = "^", color = "k", zorder = 4)
-
-        for y ∈ ys[i][is[i]]
-
-            ax[i, 1].plot(ts, y[1:n_steps], c = "tab:green", zorder = 2, alpha = 0.5)
-            ax[i, 2].plot(ts, y[(n_steps+1):end], c = "tab:green", zorder = 2, alpha = 0.5)
-    
-        end
-    
-        for y ∈ ys[i][setdiff(1:end, is[i])]
-    
-            ax[i, 1].plot(ts, y[1:n_steps], c = "tab:gray", zorder = 1, alpha = 0.1)
-            ax[i, 2].plot(ts, y[(n_steps+1):end], c = "tab:gray", zorder = 1, alpha = 0.1)
-    
-        end
-
-        ax[i, 1].set_ylim(0, 5.0)
-        ax[i, 2].set_ylim(0, 5.0)
-
-        ax[i, 1].set_title("Population $(i)")
-        ax[i, 2].set_title("Population $(i)")
-
-        ax[i, 1].set_xlabel("\$t\$")
-        ax[i, 2].set_xlabel("\$t\$")
-        
-        ax[i, 1].set_ylabel("\$x(t)\$")
-        ax[i, 2].set_ylabel("\$y(t)\$")
-
-    end
+    fig.suptitle(title, fontsize=TITLE_SIZE)
+    ax[1].set_xlabel("Iteration", fontsize=LABEL_SIZE)
+    ax[1].set_ylabel(L"a", fontsize=LABEL_SIZE)
+    ax[2].set_xlabel("Iteration", fontsize=LABEL_SIZE)
+    ax[2].set_ylabel(L"b", fontsize=LABEL_SIZE)
 
     PyPlot.tight_layout()
-    PyPlot.savefig("plots/abc_smc_posterior_predictions.pdf")
+    PyPlot.savefig(save_name)
     PyPlot.clf()
 
 end
 
 
-true_posterior = false
+function plot_autocorrelations(θs, ks, title, save_name)
+
+    as, bs = [θ[1] for θ ∈ θs], [θ[2] for θ ∈ θs]
+    
+    ρs_as = [Statistics.cor(as[1:(end-k)], as[(k+1):end]) for k ∈ ks]
+    ρs_bs = [Statistics.cor(bs[1:(end-k)], bs[(k+1):end]) for k ∈ ks]
+
+    fig, ax = PyPlot.subplots(2)
+
+    ax[1].stem(ks, ρs_as, markerfmt=" ", basefmt="k")
+    ax[2].stem(ks, ρs_bs, markerfmt=" ", basefmt="k")
+
+    fig.suptitle(title, fontsize=TITLE_SIZE)
+    ax[1].set_xlabel(L"k", fontsize=LABEL_SIZE)
+    ax[1].set_ylabel(L"\rho(a_{t}, a_{t+k})", fontsize=LABEL_SIZE)
+    ax[2].set_xlabel(L"k", fontsize=LABEL_SIZE)
+    ax[2].set_ylabel(L"\rho(b_{t}, b_{t+k})", fontsize=LABEL_SIZE)
+
+    PyPlot.tight_layout()
+    PyPlot.savefig(save_name)
+    PyPlot.clf()
+
+end
+
+
+"""Calculates the area under a curve using the trapezoidal rule."""
+function area(x, y)
+    return 0.5 * sum((x[i+1]-x[i]) * (y[i+1]+y[i]) for i ∈ 1:(length(x)-1))
+end
+
+
+true_posterior = true
+uniform_posterior = true
 
 abc = false
-abc_smc = false
 
-probabilistic_abc = false
-probabilistic_abc_smc = true
-probabilistic_abc_mcmc = false
+smc = false
+smc_uniform = false
+abc_smc = false
+abc_smc_uniform = false
+
+mcmc = false
+mcmc_uniform = false
+abc_mcmc = false
+abc_mcmc_uniform = false
+
+ibis = true
 
 
 # ----------------
@@ -326,7 +339,7 @@ xs_obs = vec(vcat(xs_true[is_obs, :], xs_true[is_obs .+ n_steps, :]))
 # Add independent Gaussian noise to the data
 σₑ = 0.25
 dist = Distributions.Normal(0.0, σₑ)
-xs_obs .+= rand(dist, 2 * n_data)
+xs_obs .+= rand(dist, 2*n_data)
 
 plot_solution(ts, xs_true, ts_obs, xs_obs)
 
@@ -339,7 +352,7 @@ G = generate_obs_operator(is_obs)
 # Specify a Gaussian prior
 μπ = zeros(2)
 σπ = 3.0
-Σπ = σπ ^ 2 .* Matrix(LinearAlgebra.I, 2, 2)
+Σπ = σπ^2 .* Matrix(LinearAlgebra.I, 2, 2)
 π = SimIntensiveInference.GaussianPrior(μπ, Σπ)
 
 # Specify an error model
@@ -353,10 +366,10 @@ e = SimIntensiveInference.GaussianError(μₑ, Σₑ)
 
 if true_posterior
 
-    n_points = 100
+    n_points = 200
 
-    xs = range(0.8, 1.2, n_points)
-    ys = range(0.8, 1.2, n_points)
+    xs = range(0.6, 1.4, n_points)
+    ys = range(0.6, 1.4, n_points)
 
     density = zeros(Float64, n_points, n_points)
 
@@ -375,17 +388,86 @@ if true_posterior
         end
     end
 
-    PyPlot.contourf(xs, ys, density, cmap = "coolwarm")
-    PyPlot.scatter([1], [1], c = "k", marker = "x", label = "True parameter values")
+    # Estimate the marginal densities
+    marg_x = dropdims(sum(density, dims=1), dims=1)
+    marg_y = dropdims(sum(density, dims=2), dims=2)
+    marg_x ./= area(xs, marg_x)
+    marg_y ./= area(ys, marg_y)
 
-    PyPlot.gca().set_aspect("equal")
+    g = Seaborn.JointGrid(xlim=(0.6, 1.4), ylim=(0.6, 1.4))
 
-    PyPlot.title("True posterior density", fontsize = 20)
-    PyPlot.xlabel("\$a\$", fontsize = 16)
-    PyPlot.ylabel("\$b\$", fontsize = 16)
-    PyPlot.legend(fontsize = 16)
+    g.ax_joint.contourf(xs, ys, density, cmap="coolwarm", levels=8)
+    g.ax_joint.scatter(x=[1], y=[1], c="k", marker="x", label="True parameters")
+    
+    g.ax_marg_x.plot(xs, marg_x, c="tab:gray")
+    g.ax_marg_y.plot(marg_y, ys, c="tab:gray")
 
+    g.ax_marg_x.axvline(x=1, c="k")
+    g.ax_marg_y.axhline(y=1, c="k")
+
+    PyPlot.suptitle("True posterior", fontsize=20)
+    g.ax_joint.set_xlabel(L"a", fontsize=16)
+    g.ax_joint.set_ylabel(L"b", fontsize=16)
+    
+    g.ax_joint.legend(fontsize=10)
+
+    PyPlot.tight_layout()
     PyPlot.savefig("plots/lokta_volterra/true_posterior.pdf")
+    PyPlot.clf()
+
+end
+
+
+if uniform_posterior
+
+    n_points = 200
+
+    xs = range(0.6, 1.4, n_points)
+    ys = range(0.6, 1.4, n_points)
+
+    density = zeros(Float64, n_points, n_points)
+
+    lbs = xs_obs .- 0.5
+    ubs = xs_obs .+ 0.5
+    L = SimIntensiveInference.UniformLikelihood(lbs, ubs)
+
+    for (j, x) ∈ enumerate(xs)
+        for (i, y) ∈ enumerate(ys)
+
+            θ = [x, y]
+
+            # Evaluate the posterior density at each set of parameters
+            density[i, j] = SimIntensiveInference.density(π, θ) * 
+                SimIntensiveInference.density(L, G * f(θ))
+        
+        end
+    end
+
+    # Estimate the marginal densities
+    marg_x_uniform = dropdims(sum(density, dims=1), dims=1)
+    marg_y_uniform = dropdims(sum(density, dims=2), dims=2)
+    marg_x_uniform ./= area(xs, marg_x_uniform)
+    marg_y_uniform ./= area(ys, marg_y_uniform)
+
+    g = Seaborn.JointGrid(xlim=(0.6, 1.4), ylim=(0.6, 1.4))
+
+    g.ax_joint.contourf(xs, ys, density, cmap="coolwarm", levels=8)
+    g.ax_joint.scatter(x=[1], y=[1], c="k", marker="x", label="True parameters")
+    
+    g.ax_marg_x.plot(xs, marg_x_uniform, c="tab:purple")
+    g.ax_marg_y.plot(marg_y_uniform, ys, c="tab:purple")
+
+    g.ax_marg_x.axvline(x=1, c="k")
+    g.ax_marg_y.axhline(y=1, c="k")
+
+    PyPlot.suptitle("Posterior with uniform likelihood", fontsize=20)
+    g.ax_joint.set_xlabel(L"a", fontsize=16)
+    g.ax_joint.set_ylabel(L"b", fontsize=16)
+    
+    g.ax_joint.legend(fontsize=10)
+
+    PyPlot.tight_layout()
+    PyPlot.savefig("plots/lokta_volterra/uniform_posterior.pdf")
     PyPlot.clf()
 
 end
@@ -407,156 +489,268 @@ if abc
 end
 
 
-if probabilistic_abc
+if smc
 
-    N = 10_000_000
+    K = SimIntensiveInference.ComponentwiseGaussianKernel()
 
-    # Define an acceptance kernel 
-    K = SimIntensiveInference.GaussianAcceptanceKernel(50.0 .* Σₑ)
+    # Define sequence of error distributions to evaluate 
+    ms = [10, 8, 6, 5, 4, 3, 2, 1.5, 1.25, 1.15, 1.05, 1.0]
+    Σs = [(m*σₑ)^2 * Matrix(1.0LinearAlgebra.I, 2n_data, 2n_data) for m ∈ ms]
+    Es = [SimIntensiveInference.GaussianAcceptanceKernel(Σ) for Σ ∈ Σs]
+    
+    T = length(ms)
+    N = 5000
 
-    SimIntensiveInference.run_probabilistic_abc(π, f, xs_obs, G, N, K)
+    t1 = time()
+
+    #  TODO: fix ys (conflicts with another variable)
+    θs, _, ws = SimIntensiveInference.run_smc(π, f, xs_obs, G, K, T, N, Es)
+
+    t2 = time()
+    @info("Elapsed time: $((t2-t1)/60) mins.")
+
+    title = "SMC intermediate distributions"
+    save_path = "plots/lokta_volterra/smc_intermediate_distributions.pdf"
+    nrows, ncols = 3, 4
+    plot_intermediate_distributions(θs, ws, ms, nrows, ncols, title, save_path)
+
+    # Re-sample with replacement from the final population
+    θs = [SimIntensiveInference.sample_from_population(θs[T], ws[T]) for _ ∈ 1:10_000]
+
+    title = "SMC posterior"
+    save_path = "plots/lokta_volterra/smc_posterior.pdf"
+    caption = "5000 samples from the true posterior."
+    plot_posterior(θs, title, save_path, caption=caption)
+
+end
+
+
+if smc_uniform
+
+    K = SimIntensiveInference.ComponentwiseGaussianKernel()
+
+    # Define sequence of error distributions to evaluate 
+    δs = [5.0, 4.0, 3.0, 2.5, 2.0, 1.5, 1.25, 1.0, 0.75, 0.5]
+    δs = [repeat([δ], 2n_data) for δ ∈ δs]
+
+    Es = [SimIntensiveInference.UniformAcceptanceKernel(-δ, δ) for δ ∈ δs]
+    
+    T = length(δs)
+    N = 1000
+
+    #  TODO: fix ys (conflicts with another variable)
+    θs, _, ws = SimIntensiveInference.run_smc_b(π, f, xs_obs, G, K, T, N, Es)
+
+    # Re-sample with replacement from the final population
+    θs = [SimIntensiveInference.sample_from_population(θs[T], ws[T]) for _ ∈ 1:10_000]
+
+    title = "SMC posterior (uniform likelihood)"
+    save_path = "plots/lokta_volterra/smc_posterior_uniform.pdf"
+    caption = L"\noindent 1000 samples from posterior where the true Gaussian likelihood ($\mathcal{N}(y_{\textrm{obs}}, 0.25^{2}\textrm{I})$) has been replaced by a\\uniform likelihood ($\mathcal{U}(y_{\textrm{obs}}-0.5, y_{\textrm{obs}}+0.5)$)."
+    plot_posterior(θs, title, save_path, plot_uniform_posterior=true, caption=caption)
 
 end
 
 
 if abc_smc
 
-    σκ = 0.5
-    Σκ = σκ .* Matrix(1.0LinearAlgebra.I, 2, 2)
-    κ = SimIntensiveInference.GaussianPerturbationKernel(Σκ)
+    K = SimIntensiveInference.MultivariateGaussianKernel()
 
-    T = 5
-    n = 500
-    α₁ = 0.05
-    αs = [0.7, 0.5, 0.4, 0.2958]
+    N = 1000
+    εs = [20.0, 16.0, 12.0, 10.0, 8.0, 6.0, 4.0, 3.0, 2.0, 1.75, 1.5]
+    T = length(εs)
 
-    θs, ys, ds, is, ws = SimIntensiveInference.run_abc_smc(
-        π, f, e, xs_obs, G, d, κ, T, n, α₁, αs
-    )
+    t1 = time()
 
-    plot_abc_smc_posterior(θs, is, ws)
-    plot_abc_smc_posterior_predictions(ts_obs, xs_obs, ts, ys, is, xs_true)
-    # 4.78146474496098
-    # 16.16298990060011
+    θs, _, _, ws = SimIntensiveInference.run_abc_smc(π, f, e, xs_obs, G, d, K, T, N, εs)
+
+    t2 = time()
+    @info("Elapsed time: $((t2-t1)/60) mins.")
+
+    title = "ABC SMC intermediate distributions"
+    save_path = "plots/lokta_volterra/abc_smc_intermediate_distributions.pdf"
+    nrows, ncols = 3, 4
+    plot_intermediate_distributions(θs, ws, εs, nrows, ncols, title, save_path)
+
+    # Re-sample with replacement from the final population
+    θs = [SimIntensiveInference.sample_from_population(θs[T], ws[T]) for _ ∈ 1:10_000]
+
+    title = "ABC SMC posterior"
+    save_path = "plots/lokta_volterra/abc_smc_posterior.pdf"
+    caption = L"\noindent 1000 samples from approximate posterior $p(\theta | \rho(y_{\textrm{obs}}, y) \leq \varepsilon)$.\\ $\rho(y_{\textrm{obs}}, y)$ = sum of squared differences between noisy model outputs and observations.\\ $\varepsilon$ = 1.5."
+    plot_posterior(θs, title, save_path, caption=caption)
 
 end
 
 
-if probabilistic_abc_mcmc
+if abc_smc_uniform
 
+    K = SimIntensiveInference.MultivariateGaussianKernel()
+
+    N = 1000
+    εs = [5.0, 2.5, 2.0, 1.75, 1.5, 1.25, 1.0, 0.75, 0.5]
+    T = length(εs)
+
+    t1 = time()
+
+    θs, _, _, ws = SimIntensiveInference.run_abc_smc(π, f, e, xs_obs, G, Δ_uniform, K, T, N, εs)
+
+    t2 = time()
+    @info("Elapsed time: $((t2-t1)/60) mins.")
+
+    # Re-sample with replacement from the final population
+    θs = [SimIntensiveInference.sample_from_population(θs[T], ws[T]) for _ ∈ 1:10_000]
+
+    title = "ABC SMC posterior (uniform distance)"
+    save_path = "plots/lokta_volterra/abc_smc_posterior_uniform.pdf"
+    caption = L"\noindent 1000 samples from approximate posterior $p(\theta | \rho(y_{\textrm{obs}}, y) \leq \varepsilon)$.\\ $\rho(y_{\textrm{obs}}, y) = \textrm{max}\{|y_{\textrm{obs}} - y|\}$, where $y$ denotes the (non-noisy) model output.\\ $\varepsilon$ = 0.5."
+    plot_posterior(θs, title, save_path, plot_uniform_posterior=true, caption=caption)
+
+end
+
+
+if mcmc 
+
+    # Define the likelihood
+    L = SimIntensiveInference.GaussianLikelihood(xs_obs, Σₑ)
+
+    # Define a perturbation kernel
+    σκ = 0.05
+    Σκ = σκ^2 .* Matrix(1.0LinearAlgebra.I, 2, 2)
+    κ = SimIntensiveInference.StaticGaussianKernel(Σκ)
+
+    # Define number of simulations to run
     N = 100_000
 
-    σκ = 0.1
-    Σκ = σκ .* Matrix(1.0LinearAlgebra.I, 2, 2)
-    κ = SimIntensiveInference.GaussianPerturbationKernel(Σκ)
+    t1 = time()
 
-    # Define an acceptance kernel 
-    E = SimIntensiveInference.GaussianAcceptanceKernel(Σₑ)
+    θs = SimIntensiveInference.run_mcmc(π, f, L, G, κ, N)
 
-    θs, ys = SimIntensiveInference.run_probabilistic_abc_mcmc(
-        π,
-        f,
-        xs_obs, 
-        G, 
-        κ,
-        E,
-        N
-    )
+    t2 = time()
+    @info("Elapsed time: $((t2-t1)/60) mins.")
 
-    # inds = [i for i ∈ 1:N if i % 5000 == 0]
+    title = "MCMC posterior"
+    save_name = "plots/lokta_volterra/mcmc_posterior.pdf"
+    caption = "100,000 samples from the true posterior."
+    plot_posterior(θs, title, save_name, caption=caption)
 
-    Seaborn.kdeplot(
-        x = [θ[1] for θ ∈ θs],
-        y = [θ[2] for θ ∈ θs],
-        cmap = "coolwarm", 
-        fill = true
-    )
+    title = "MCMC diagnostic curves"
+    save_name = "plots/lokta_volterra/mcmc_diagnostic_curves.pdf"
+    plot_diagnostic_curves(θs, title, save_name)
 
-    PyPlot.scatter([1], [1], c = "k", marker = "x", label = "True parameter values")
-
-    PyPlot.xlim(0.8, 1.2)
-    PyPlot.ylim(0.8, 1.2)
-    PyPlot.gca().set_aspect("equal")
-
-    PyPlot.title("Probabilistic ABC-MCMC posterior density", fontsize = 20)
-    PyPlot.xlabel(L"a", fontsize = 16)
-    PyPlot.ylabel(L"b", fontsize = 16)
-    PyPlot.legend(fontsize = 16)
-
-    PyPlot.savefig("plots/lokta_volterra/mcmc_posterior.pdf")
-    PyPlot.clf()
-
-    # Plot diagnostic curves
-    fig, ax = PyPlot.subplots(2, 1)
-    ax[1].plot([θ[1] for θ ∈ θs])
-    ax[2].plot([θ[2] for θ ∈ θs])
-
-    PyPlot.suptitle("Diagnostic curves", fontsize = 20)
-    ax[1].set_xlabel("Iteration", fontsize = 16)
-    ax[2].set_xlabel("Iteration", fontsize = 16)
-    ax[1].set_ylabel(L"\theta_{1}", fontsize = 16)
-    ax[2].set_ylabel(L"\theta_{2}", fontsize = 16)
-
-    PyPlot.tight_layout()
-    PyPlot.savefig("plots/lokta_volterra/mcmc_diagnostic_curves.pdf")
+    title = "MCMC autocorrelations"
+    save_name = "plots/lokta_volterra/mcmc_autocorrelations.pdf"
+    ks = 0:10:500
+    plot_autocorrelations(θs, ks, title, save_name)
 
 end
 
 
-if probabilistic_abc_smc
+if mcmc_uniform
 
-    # Define perturbation kernel
-    σκ = 0.05
-    Σκ = σκ .* Matrix(1.0LinearAlgebra.I, 2, 2)
-    κ = SimIntensiveInference.GaussianPerturbationKernel(Σκ)
+    # Define the likelihood 0.43 for same variance
+    lbs = xs_obs .- 0.5
+    ubs = xs_obs .+ 0.5
+    L = SimIntensiveInference.UniformLikelihood(lbs, ubs)
 
-    # Define sequence of error distributions to evaluate 
-    
-    Σs = [
-        (m*σₑ)^2 * Matrix(1.0 * LinearAlgebra.I, 2n_data, 2n_data)
-        for m ∈ [
-            10.0, 8.0, 6.0, 4.0, 2.0, 1.5, 1.0, 0.75, 0.5
-        ]
+    # Define a perturbation kernel
+    σₖ = 0.05
+    Σₖ = σₖ^2 .* Matrix(1.0LinearAlgebra.I, 2, 2)
+    K = SimIntensiveInference.StaticGaussianKernel(Σₖ)
+
+    # Define number of simulations to run
+    N = 100_000
+
+    θs = SimIntensiveInference.run_mcmc(π, f, L, G, K, N)
+
+    title = "MCMC posterior (uniform likelihood)"
+    save_name = "plots/lokta_volterra/mcmc_posterior_uniform.pdf"
+    caption = L"\noindent 100,000 samples from posterior where the true Gaussian likelihood ($\mathcal{N}(y_{\textrm{obs}}, 0.25^{2}\textrm{I})$) has been replaced by a\\uniform likelihood ($\mathcal{U}(y_{\textrm{obs}}-0.5, y_{\textrm{obs}}+0.5)$)."
+    plot_posterior(θs, title, save_name, plot_uniform_posterior=true, caption=caption)
+
+end
+
+
+if abc_mcmc 
+
+    σₖ = 0.05
+    Σₖ = σₖ^2 .* Matrix(1.0LinearAlgebra.I, 2, 2)
+    K = SimIntensiveInference.StaticGaussianKernel(Σₖ)
+
+    N = 100_000
+    ε = 1.5
+
+    t1 = time()
+
+    θs = SimIntensiveInference.run_abc_mcmc(π, f, e, xs_obs, G, d, K, N, ε)
+
+    t2 = time()
+    @info("Elapsed time: $((t2-t1)/60) mins.")
+
+    title = "ABC MCMC posterior"
+    save_name = "plots/lokta_volterra/abc_mcmc_posterior.pdf"
+    caption = L"\noindent 100,000 samples from approximate posterior $p(\theta | \rho(y_{\textrm{obs}}, y) \leq \varepsilon)$.\\ $\rho(y_{\textrm{obs}}, y)$ = sum of squared differences between noisy model outputs and observations.\\ $\varepsilon$ = 1.5."
+    plot_posterior(θs, title, save_name, caption=caption)
+
+    title = "ABC MCMC diagnostic curves"
+    save_name = "plots/lokta_volterra/abc_mcmc_diagnostic_curves.pdf"
+    plot_diagnostic_curves(θs, title, save_name)
+
+    title = "ABC MCMC autocorrelations"
+    save_name = "plots/lokta_volterra/abc_mcmc_autocorrelations.pdf"
+    ks = 0:10:500
+    plot_autocorrelations(θs, ks, title, save_name)
+
+end
+
+
+if abc_mcmc_uniform
+
+    σₖ = 0.05
+    Σₖ = σₖ^2 .* Matrix(1.0LinearAlgebra.I, 2, 2)
+    K = SimIntensiveInference.StaticGaussianKernel(Σₖ)
+
+    N = 100_000
+    ε = 0.5
+
+    t1 = time()
+
+    θs = SimIntensiveInference.run_abc_mcmc(π, f, e, xs_obs, G, Δ_uniform, K, N, ε)
+
+    t2 = time()
+    @info("Elapsed time: $((t2-t1)/60) mins.")
+
+    title = "ABC MCMC posterior (uniform distance)"
+    save_name = "plots/lokta_volterra/abc_mcmc_posterior_uniform.pdf"
+    caption = L"\noindent 100,000 samples from approximate posterior $p(\theta | \rho(y_{\textrm{obs}}, y) \leq \varepsilon)$.\\ $\rho(y_{\textrm{obs}}, y) = \textrm{max}\{|y_{\textrm{obs}} - y|\}$, where $y$ denotes the (non-noisy) model output.\\ $\varepsilon$ = 0.5."
+    plot_posterior(θs, title, save_name, plot_uniform_posterior=true, caption=caption)
+
+end
+
+
+if ibis
+
+    Gs = [generate_obs_operator(is_obs[1:i]) for i ∈ 1:n_data]
+    y_batches = [vcat(xs_obs[1:i], xs_obs[(n_data+1):(n_data+i)]) for i ∈ 1:n_data]
+    Ls = [
+        SimIntensiveInference.GaussianLikelihood(y_batches[i], σₑ^2*Matrix(1.0LinearAlgebra.I, 2i, 2i)) 
+            for i ∈ 1:n_data
     ]
 
-    Es = [SimIntensiveInference.GaussianAcceptanceKernel(Σ) for Σ ∈ Σs]
-    
-    T = length(Σs)
-    n = 10_000
+    N = 10_000
 
-    θs, ys, ws = SimIntensiveInference.run_probabilistic_abc_smc_b(
-        π,
-        f,
-        xs_obs,
-        G,
-        κ,
-        T, 
-        n, 
-        Es
-    )
+    θs = SimIntensiveInference.run_ibis(π, f, Ls, y_batches, Gs, N)
 
-    θs_sample = [SimIntensiveInference.sample_from_population(θs[T], ws[T]) for _ ∈ 1:n]
+    T = length(y_batches)
 
-    Seaborn.kdeplot(
-        x = [θ[1] for θ ∈ θs_sample],
-        y = [θ[2] for θ ∈ θs_sample],
-        cmap = "coolwarm", 
-        fill = true
-    )
+    title = "IBIS posterior"
+    save_path = "plots/lokta_volterra/ibis_posterior.pdf"
+    caption = "10,000 samples from the true posterior."
+    plot_posterior(θs[T], title, save_path, caption=caption)
 
-    PyPlot.scatter([1], [1], c = "k", marker = "x", label = "True parameter values")
-
-    PyPlot.xlim(0.8, 1.2)
-    PyPlot.ylim(0.8, 1.2)
-    PyPlot.gca().set_aspect("equal")
-
-    PyPlot.title("Probabilistic ABC-SMC posterior density", fontsize = 20)
-    PyPlot.xlabel(L"a", fontsize = 16)
-    PyPlot.ylabel(L"b", fontsize = 16)
-    PyPlot.legend(fontsize = 16)
-
-    PyPlot.tight_layout()
-    PyPlot.savefig("plots/lokta_volterra/probabilistic_abc_smc_posterior_2.pdf")
-    PyPlot.clf()
+    title = "IBIS intermediate distributions"
+    save_path = "plots/lokta_volterra/ibis_intermediate_distributions.pdf"
+    nrows, ncols = 3, 3
+    plot_intermediate_distributions(θs, T, nrows, ncols, title, save_path)
 
 end
