@@ -135,6 +135,14 @@ function sample(π::GaussianPrior; n::Int = -1)::Union{AbstractVector, Real}
 end
 
 
+function sample(L::GaussianLikelihood)::AbstractVector
+
+    d = Distributions.MvNormal(L.μ, L.Σ)
+    return rand(d)
+
+end
+
+
 function add_noise!(y::AbstractVector, n::GaussianError)::Nothing
 
     e = Distributions.MvNormal(n.μ, n.Σ)

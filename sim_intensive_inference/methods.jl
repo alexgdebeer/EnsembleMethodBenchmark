@@ -164,7 +164,7 @@ function run_abc_smc(
 
     end
 
-    return θs, ys, ds, ws
+    return θs, ys, ws
 
 end
 
@@ -327,11 +327,8 @@ function run_mcmc(
         y_m⁺ = G * f(θ⁺)
 
         # Calculate the acceptance probability
-        h = min(
-            1, 
-            (density(π, θ⁺) * density(L, y_m⁺) * density(κ, θ⁺, θ)) / 
+        h = (density(π, θ⁺) * density(L, y_m⁺) * density(κ, θ⁺, θ)) / 
                 (density(π, θ) * density(L, y_m) * density(κ, θ, θ⁺))
-        )
 
         if h ≥ rand()
             i += 1
@@ -399,7 +396,8 @@ function run_abc_mcmc(
         if Δ(y_m, y_obs) ≤ ε
 
             # Calculate the acceptance probability of θ⁺
-            h = (density(π, θ⁺) * density(κ, θ⁺, θ)) / (density(π, θ) * density(κ, θ, θ⁺))
+            h = (density(π, θ⁺) * density(κ, θ⁺, θ)) / 
+                (density(π, θ) * density(κ, θ, θ⁺))
             
             if h ≥ rand()
                 i += 1
@@ -450,7 +448,8 @@ function run_ibis(
                 ys[i] = f(θ)
                 ws[i] *= density(Ls[1], Gs[j] * ys[i])
             else
-                ws[i] *= density(Ls[j], Gs[j] * ys[i]) / density(Ls[j-1], Gs[j-1] * ys[i])
+                ws[i] *= density(Ls[j], Gs[j] * ys[i]) / 
+                    density(Ls[j-1], Gs[j-1] * ys[i])
             end
 
         end
@@ -497,5 +496,181 @@ function run_ibis(
     end
 
     return θs_dict
+
+end
+
+
+"""
+Draws N samples from the approximate posterior using the randomised maximum 
+likelihood algorithm.
+
+TODO: find a way to save the function evaluated at each value of θ.
+TODO: consider changing the optimiser / allowing for a Jacobian to be passed in.
+TODO: check for convergence to the MAP estimate?
+"""
+function run_rml(
+    f::Function,
+    π::GaussianPrior,
+    L::GaussianLikelihood,
+    G::Matrix,
+    N::Int;
+    verbose::Bool=true
+)
+
+    L_p = LinearAlgebra.cholesky(inv(π.Σ)).U  
+    L_y = LinearAlgebra.cholesky(inv(L.Σ)).U
+
+    # Calculate the MAP estimate
+    map_func(θ) = 0.5sum([L_p*(θ-π.μ); L_y*(G*f(θ)-L.μ)].^2)
+    res = Optim.optimize(map_func, [1.0, 1.0], Optim.NelderMead())
+    θ_MAP = Optim.minimizer(res)
+
+    println(θ_MAP)
+
+    # TODO: check for convergence?
+
+    θs = []
+
+    for i ∈ 1:N
+
+        θ⁺ = sample(π)
+        y⁺ = sample(L)
+
+        # TODO: consider changing the optimiser here (could use LBFGS?)
+        θ_func(θ) = 0.5sum([L_p*(θ-θ⁺); L_y*(G*f(θ)-y⁺)].^2)
+        res = Optim.optimize(θ_func, θ_MAP, Optim.NelderMead())
+
+        push!(θs, Optim.minimizer(res))
+
+        if verbose && i % 100 == 0
+            @info("$i samples generated.")
+        end
+
+    end
+
+    return θ_MAP, θs
+
+end
+
+
+function run_rto(
+    f::Function,
+    π::GaussianPrior,
+    L::GaussianLikelihood,
+    G::Matrix,
+    N::Int;
+    verbose::Bool=true
+)
+
+    L_θ = LinearAlgebra.cholesky(inv(π.Σ)).U  
+    L_ϵ = LinearAlgebra.cholesky(inv(L.Σ)).U
+
+    # Define augmented system 
+    f̃(θ) = [L_ϵ*G*f(θ); L_θ*θ]
+    ỹ = [L_ϵ*L.μ; L_θ*π.μ]
+
+    # Calculate the MAP estimate
+    map_func(θ) = 0.5sum((f̃(θ)-ỹ).^2)
+    res = Optim.optimize(map_func, [1.0, 1.0], Optim.NelderMead())
+    θ_MAP = Optim.minimizer(res)
+
+    J̃θ_MAP = ForwardDiff.jacobian(f̃, θ_MAP)
+    Q = Matrix(LinearAlgebra.qr(J̃θ_MAP))
+    LinearAlgebra.normalize!.(eachcol(Q))
+
+    θs = []
+    ws = []
+    evals = []
+
+    for i ∈ 1:N
+
+        ỹⁱ = [L_ϵ*sample(L); L_θ*sample(π)]
+
+        θ_func(θ) = sum((Q' * (f̃(θ)-ỹⁱ)).^2)
+        res = Optim.optimize(θ_func, θ_MAP, Optim.NelderMead())
+
+        Optim.minimum(res) > 1e-6 && @warn "Non-zero result of optimisation."
+
+        θ = Optim.minimizer(res)
+        J̃θ = ForwardDiff.jacobian(f̃, θ)
+
+        fθ = G*f(θ)
+        f̃θ = [L_ϵ*fθ; L_θ*θ]
+
+        w = abs(LinearAlgebra.det(Q' * J̃θ))^-1 * 
+            exp(-0.5sum((f̃θ-ỹ).^2) + 0.5sum((Q'*(f̃θ-ỹ)).^2))
+        
+        push!(θs, θ)
+        push!(ws, w)
+        push!(evals, Optim.f_calls(res))
+
+        if verbose && i % 100 == 0
+            @info "$i samples generated. Mean number of function " *
+                "evaluations per optimisation: $(Statistics.mean(evals))."
+        end
+
+    end
+
+    ws ./= sum(ws)
+
+    return θ_MAP, θs, ws
+
+end
+
+
+function run_enkf(
+    f::Function,
+    g::Function,
+    ts_obs::Vector, 
+    ys_obs::Vector,
+    σ_y::Real,
+    π_θ::AbstractPrior,
+    π_p::AbstractPrior,
+    N_e::Int
+)
+
+    # Define a vector that offsets the times by 1
+    ts_obs_p = [0.0, ts_obs[1:(end-1)]...]
+
+    # Generate a number of initial samples
+    θs = sample(π_θ, n=N_e)
+    ps = sample(π_p, n=N_e)
+
+    n_θs = length(π_θ.μ)
+    
+    # Run the samples forward to the first time at which measurements were recorded.
+    for (t_p, t, ys) ∈ zip(ts_obs_p, ts_obs, ys_obs)
+        
+        # Run the state model and measurement model for each ensemble member
+        p̃s = [f(θ; x₀=p, t_start=t_p, t_end=t)[[Int(end/2), end]] for (θ, p) ∈ zip(θs, ps)]
+        ũs = [vcat(θ, p̃) for (θ, p̃) ∈ zip(θs, p̃s)]
+        g̃s = [g(θ, p̃) for (θ, p̃) ∈ zip(θs, p̃s)]
+
+        # Generate some pertubed data
+        Γ_y = σ_y^2 * Matrix(1.0LinearAlgebra.I, length(ys), length(ys))
+        ỹs = [rand(Distributions.MvNormal(ys, Γ_y)) for _ ∈ 1:N_e]
+
+        # Compute centred matrices for the vectors of states and predictions
+        ũs_c = hcat(ũs...)'; ũs_c .-= Statistics.mean(ũs_c, dims=1)
+        g̃s_c = hcat(g̃s...)'; g̃s_c .-= Statistics.mean(g̃s_c, dims=1)
+
+        Γ_ug = (ũs_c'*g̃s_c) / (N_e-1.0)
+        Γ_gg = (g̃s_c'*g̃s_c) / (N_e-1.0)
+
+        # Calculate the gain matrix 
+        K = Γ_ug * inv(Γ_gg + Γ_y)
+
+        # Update each ensemble member 
+        us = [ũ + K*(ỹ-g̃) for (ũ, ỹ, g̃) ∈ zip(ũs, ỹs, g̃s)]
+
+        # Extract the updated parameters and observations
+        θs = [u[1:n_θs] for u ∈ us]
+        ps = [u[(n_θs+1):end] for u ∈ us]
+
+    end
+
+    println(θs)
+
+    return θs
 
 end
