@@ -566,6 +566,7 @@ function run_rto(
     π::GaussianPrior,
     L::GaussianLikelihood,
     N::Int;
+    J::Union{Function,Nothing}=nothing,
     verbose::Bool=true
 )
 
@@ -578,14 +579,22 @@ function run_rto(
 
     # Calculate the MAP estimate
     res = Optim.optimize(
-        θ -> sum((f̃(θ).-ỹ).^2), [1.0, 1.0], 
+        θ -> sum((f̃(θ).-ỹ).^2), π.μ, 
         Optim.Newton(), 
-        Optim.Options(show_trace=false, f_abstol=1e-10), autodiff=:forward
+        Optim.Options(show_trace=false), autodiff=:forward
     )
     
     !Optim.converged(res) && @warn "MAP estimate optimisation failed to converge."
     θ_MAP = Optim.minimizer(res)
-    J̃θ_MAP = ForwardDiff.jacobian(f̃, θ_MAP)
+
+    if J !== nothing
+        J̃θ_MAP = J(θ_MAP)
+    else
+        J̃θ_MAP = ForwardDiff.jacobian(f̃, θ_MAP)
+    end
+
+    println(θ_MAP)
+    println(J̃θ_MAP)
 
     Q = Matrix(LinearAlgebra.qr(J̃θ_MAP))
     LinearAlgebra.normalize!.(eachcol(Q))
@@ -601,26 +610,31 @@ function run_rto(
 
         # Optimise to find the corresponding set of parameters
         res = Optim.optimize(
-            θ -> sum((Q' * (f̃(θ).-ỹ_i)).^2), θ_MAP, 
+            θ -> sum((Q'*(f̃(θ).-ỹ_i)).^2), θ_MAP, 
             Optim.Newton(), 
-            Optim.Options(show_trace=false, f_abstol=1e-10), autodiff=:forward
+            Optim.Options(show_trace=false), autodiff=:forward
         )
 
         !Optim.converged(res) && @warn "Optimisation failed to converge."
-        Optim.minimum(res) > 1e-6 && @warn "Non-zero minimum: $(Optim.minimum(res))."
+        Optim.minimum(res) > 1e-10 && @warn "Non-zero minimum: $(Optim.minimum(res))."
         θ = Optim.minimizer(res)
-        J̃θ = ForwardDiff.jacobian(f̃, θ)
+
+        if J !== nothing
+            J̃θ = J(θ)
+        else
+            J̃θ = ForwardDiff.jacobian(f̃, θ)
+        end
 
         # Compute the weight of the sample
         f̃θ = [L_ϵ*g(f(θ)); L_θ*θ]
-        w = abs(LinearAlgebra.det(Q'*J̃θ))^-1 * 
-            exp(-0.5sum((f̃θ-ỹ).^2) + 0.5sum((Q'*(f̃θ-ỹ)).^2))
-        
+        w = exp(log(abs(LinearAlgebra.det(Q'*J̃θ))^-1) - 0.5sum((f̃θ-ỹ).^2) + 0.5sum((Q'*(f̃θ-ỹ)).^2))
+
         push!(θs, θ)
         push!(ws, w)
         push!(evals, Optim.f_calls(res))
 
         if verbose && i % 100 == 0
+            println(w)
             @info "$i samples generated. Mean number of function " *
                 "evaluations per optimisation: $(Statistics.mean(evals))."
         end
@@ -629,6 +643,98 @@ function run_rto(
 
     # Normalise the weights
     ws ./= sum(ws)
+
+    println(maximum(ws))
+
+    return θ_MAP, Q, θs, ws
+
+end
+
+
+function run_rto_alt(
+    f::Function,
+    g::Function,
+    π::GaussianPrior,
+    L::GaussianLikelihood,
+    N::Int;
+    verbose::Bool=true
+)
+
+    L_θ = LinearAlgebra.cholesky(inv(π.Σ)).U  
+    L_ϵ = LinearAlgebra.cholesky(inv(L.Σ)).U
+
+    # Define augmented system 
+    f̃(θ) = [L_ϵ*g(f(θ)); L_θ*θ]
+    ỹ = [L_ϵ*L.μ; L_θ*π.μ]
+
+    # Calculate the MAP estimate
+    res = Optim.optimize(
+        θ -> sum((f̃(θ).-ỹ).^2), π.μ, 
+        Optim.Newton(), 
+        Optim.Options(show_trace=false), autodiff=:forward
+    )
+    
+    !Optim.converged(res) && @warn "MAP estimate optimisation failed to converge."
+    θ_MAP = Optim.minimizer(res)
+
+    if J !== nothing
+        J̃θ_MAP = J(θ_MAP)
+    else
+        J̃θ_MAP = ForwardDiff.jacobian(f̃, θ_MAP)
+    end
+
+    println(θ_MAP)
+    println(J̃θ_MAP)
+
+    Q = Matrix(LinearAlgebra.qr(J̃θ_MAP))
+    LinearAlgebra.normalize!.(eachcol(Q))
+
+    θs = []
+    ws = []
+    evals = []
+
+    for i ∈ 1:N
+
+        # Sample an augmented vector
+        ỹ_i = [L_ϵ*sample(L); L_θ*sample(π)]
+
+        # Optimise to find the corresponding set of parameters
+        res = Optim.optimize(
+            θ -> sum((Q'*(f̃(θ).-ỹ_i)).^2), θ_MAP, 
+            Optim.Newton(), 
+            Optim.Options(show_trace=false), autodiff=:forward
+        )
+
+        !Optim.converged(res) && @warn "Optimisation failed to converge."
+        Optim.minimum(res) > 1e-10 && @warn "Non-zero minimum: $(Optim.minimum(res))."
+        θ = Optim.minimizer(res)
+
+        if J !== nothing
+            J̃θ = J(θ)
+        else
+            J̃θ = ForwardDiff.jacobian(f̃, θ)
+        end
+
+        # Compute the weight of the sample
+        f̃θ = [L_ϵ*g(f(θ)); L_θ*θ]
+        w = exp(log(abs(LinearAlgebra.det(Q'*J̃θ))^-1) - 0.5sum((f̃θ-ỹ).^2) + 0.5sum((Q'*(f̃θ-ỹ)).^2))
+
+        push!(θs, θ)
+        push!(ws, w)
+        push!(evals, Optim.f_calls(res))
+
+        if verbose && i % 100 == 0
+            println(w)
+            @info "$i samples generated. Mean number of function " *
+                "evaluations per optimisation: $(Statistics.mean(evals))."
+        end
+
+    end
+
+    # Normalise the weights
+    ws ./= sum(ws)
+
+    println(max(ws))
 
     return θ_MAP, Q, θs, ws
 

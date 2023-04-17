@@ -188,8 +188,18 @@ function resample_population(
 )::Tuple
 
     is = [findfirst(cumsum(ws) .+ 1e-8 .≥ rand()) for _ ∈ 1:length(θs)]
-
     return θs[is], ys[is]
+
+end
+
+
+function resample_population(
+    θs::AbstractVector,
+    ws::AbstractVector;
+    N::Int=length(θs)
+)::AbstractVector
+
+    return θs[[findfirst(cumsum(ws) .≥ rand()) for _ ∈ 1:N]]
 
 end
 

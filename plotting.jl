@@ -1,4 +1,4 @@
-module LVModelPlotting
+module Plotting
 
 
 using Statistics
@@ -36,29 +36,41 @@ function plot_lv_system(ts, ys_t, ts_o, ys_o)
 end
 
 
-"""Plots the joint and marginal densities of the parameters evaluated on a 
-grid."""
-function plot_density_grid(as, bs, joint_density, marg_a, marg_b, title, fname)
+"""Plots the joint posterior density of two parameters."""
+function plot_density_grid(
+    θ1_vals::AbstractVector, 
+    θ2_vals::AbstractVector, 
+    joint::AbstractMatrix, 
+    marg_θ1::AbstractVector, 
+    marg_θ2::AbstractVector, 
+    title::AbstractString, 
+    fname::AbstractString;
+    θs_t::Union{AbstractVector,Nothing}=nothing
+)
 
-    g = Seaborn.JointGrid(
-        xlim=(minimum(as), maximum(as)), 
-        ylim=(minimum(bs), maximum(bs))
-    )
+    # Initialise the grid for plotting
+    θ1_range = (θ1_vals[1], θ1_vals[end])
+    θ2_range = (θ2_vals[1], θ2_vals[end])
+    g = Seaborn.JointGrid(xlim=θ1_range, ylim=θ2_range)
 
-    g.ax_joint.contourf(as, bs, joint_density, cmap="coolwarm", levels=8)
-    g.ax_joint.scatter(x=[1], y=[1], c="k", marker="x", label="True parameters")
-    
-    g.ax_marg_x.plot(as, marg_a, c="tab:gray")
-    g.ax_marg_y.plot(marg_b, bs, c="tab:gray")
-
-    g.ax_marg_x.axvline(x=1, c="k")
-    g.ax_marg_y.axhline(y=1, c="k")
+    # Plot the joint and marginal densities
+    g.ax_joint.contourf(θ1_vals, θ2_vals, joint, cmap="coolwarm", levels=8)
+    g.ax_marg_x.plot(θ1_vals, marg_θ1, c="tab:gray")
+    g.ax_marg_y.plot(marg_θ2, θ2_vals, c="tab:gray")
 
     PyPlot.suptitle(title, fontsize=TITLE_SIZE)
     g.ax_joint.set_xlabel(L"a", fontsize=LABEL_SIZE)
     g.ax_joint.set_ylabel(L"b", fontsize=LABEL_SIZE)
-    
-    g.ax_joint.legend(fontsize=SMALL_SIZE)
+
+    # Plot the true values of the parameters
+    if θs_t !== nothing
+        g.ax_joint.scatter(
+            x=θs_t[1], y=θs_t[2], c="k", 
+            marker="x", label="True parameters")
+        g.ax_marg_x.axvline(x=θs_t[1], c="k")
+        g.ax_marg_y.axhline(y=θs_t[2], c="k")
+        g.ax_joint.legend(fontsize=SMALL_SIZE)
+    end
 
     PyPlot.tight_layout()
     PyPlot.savefig(fname)
@@ -70,7 +82,7 @@ end
 function plot_approx_posterior(
     θs_sampled,
     as, bs, post_marg_a, post_marg_b, 
-    title, save_path; caption=nothing
+    title, save_path; θs_t=nothing, caption=nothing
 )
 
     as_sampled = [θ[1] for θ ∈ θs_sampled]
@@ -78,28 +90,32 @@ function plot_approx_posterior(
 
     g = Seaborn.JointGrid(xlim=(minimum(as), maximum(as)), ylim=(minimum(bs), maximum(bs)))
 
+    # Plot the sampled values
     Seaborn.kdeplot(x=as_sampled, y=bs_sampled, ax=g.ax_joint, fill=true, cmap="coolwarm", levels=9, bw_adjust=2.0)
-    g.ax_joint.scatter(x=[1], y=[1], c="k", marker="x", label="True parameters")
-    
     Seaborn.kdeplot(x=as_sampled, ax=g.ax_marg_x, c="#4358CB", label="Sampled density")
     Seaborn.kdeplot(y=bs_sampled, ax=g.ax_marg_y, c="#4358CB")
-
-    g.ax_marg_x.axvline(x=1, c="k", label="True parameters")
-    g.ax_marg_y.axhline(y=1, c="k")
     
+    # Plot the true posterior marginals
     g.ax_marg_x.plot(as, post_marg_a, c="tab:gray", ls="--", label="True posterior density")
     g.ax_marg_y.plot(post_marg_b, bs, c="tab:gray", ls="--")
 
     g.ax_marg_x.set_title(title, fontsize=TITLE_SIZE)
-    g.ax_joint.set_xlabel(L"a", fontsize=LABEL_SIZE)
-    g.ax_joint.set_ylabel(L"b", fontsize=LABEL_SIZE)
-    
-    g.ax_joint.legend(fontsize=SMALL_SIZE)
+    g.ax_joint.set_xlabel(L"\theta_{1}", fontsize=LABEL_SIZE)
+    g.ax_joint.set_ylabel(L"\theta_{2}", fontsize=LABEL_SIZE)
     g.ax_marg_x.legend(fontsize=SMALL_SIZE, frameon=false, loc="lower right")
 
+    # Plot the true parameter values
+    if θs_t !== nothing
+        g.ax_joint.scatter(
+            x=θs_t[1], y=θs_t[2], c="k", 
+            marker="x", label="True parameters")
+        g.ax_marg_x.axvline(x=θs_t[1], c="k", label="True parameters")
+        g.ax_marg_y.axhline(y=θs_t[2], c="k")
+        g.ax_joint.legend(fontsize=SMALL_SIZE)
+    end
+
     if caption !== nothing 
-        fig = PyPlot.gcf()
-        fig.supxlabel(caption, x=0.01, ha="left", fontsize=SMALL_SIZE)
+        PyPlot.gcf().supxlabel(caption, x=0.01, ha="left", fontsize=SMALL_SIZE)
     end
 
     g.ax_joint.set_facecolor("#4358CB")
