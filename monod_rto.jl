@@ -12,11 +12,10 @@ const π = SimIntensiveInference.GaussianPrior(MONODModel.μ_π, MONODModel.Γ_�
 const L = SimIntensiveInference.GaussianLikelihood(MONODModel.YS_O, MONODModel.Γ_ϵ)
 
 # Define the number of samples to draw
-const N = 300_000
+const N = 50_000
 
 θ_MAP, Q, θs, ws = SimIntensiveInference.run_rto(
-    MONODModel.f, MONODModel.g, 
-    π, L, N, #J=MONODModel.J
+    MONODModel.f, MONODModel.g, π, L, N
 )
 
 Plotting.plot_approx_posterior(
@@ -29,7 +28,7 @@ Plotting.plot_approx_posterior(
 )
 
 # Re-sample the final population with replacement 
-θs_r = SimIntensiveInference.resample_population(θs, ws, N=N)
+θs_r = @time SimIntensiveInference.resample_population(θs, ws, N=N)
 
 Plotting.plot_approx_posterior(
     θs_r, 

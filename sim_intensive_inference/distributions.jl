@@ -199,7 +199,9 @@ function resample_population(
     N::Int=length(θs)
 )::AbstractVector
 
-    return θs[[findfirst(cumsum(ws) .≥ rand()) for _ ∈ 1:N]]
+    cs = cumsum(ws)
+    is = [findfirst(cs .≥ rand()) for _ ∈ 1:N]
+    return θs[is]
 
 end
 
