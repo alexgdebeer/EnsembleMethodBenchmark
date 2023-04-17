@@ -627,6 +627,7 @@ function run_rto(
 
     end
 
+    # Normalise the weights
     ws ./= sum(ws)
 
     return θ_MAP, Q, θs, ws
@@ -640,12 +641,13 @@ function run_enkf(
     π_u::SimIntensiveInference.AbstractPrior,
     ts::Vector,
     ys::Matrix,
+    θs::Vector,
     t_1::Real,
     σ_ϵ::Real,
     N_e::Int
 )
 
-    # Generate an initial sample of states from the prior
+    # Generate an initial ensemble by sampling from the prior
     us_e = SimIntensiveInference.sample(π_u, n=N_e)
 
     # Define a vector that offsets the times by 1
@@ -657,16 +659,16 @@ function run_enkf(
     for (t_0, t_1, y) ∈ zip(ts_0, ts, eachcol(ys))
 
         # Run each ensemble member forward in time 
-        us_e = [f(LVModel.θS_T; y_0=u, t_0=t_0, t_1=t_1)[:, 2:end] for u ∈ eachcol(us_e)]
+        us_e = [f(θs; y_0=u, t_0=t_0, t_1=t_1)[:, 2:end] for u ∈ eachcol(us_e)]
         us_e_combined = hcat(us_e_combined, reduce(vcat, us_e))
 
         # Extract the forecast states and generate the predictions 
         us_ef = reduce(hcat, [u[:, end] for u ∈ us_e])
-        ys_ef = H(us_ef, LVModel.θS_T)
+        ys_ef = H(us_ef, θs)
 
         # Generate a set of perturbed data vectors 
         Γ_ϵϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(y), length(y))
-        ys_p = reduce(hcat, [rand(Distributions.MvNormal(y, Γ_ϵϵ)) for _ ∈ 1:N_e])
+        ys_p = rand(Distributions.MvNormal(y, Γ_ϵϵ), N_e)
 
         # Compute the Kalman gain
         U_c = us_ef * (I - ones(N_e, N_e)/N_e)
@@ -681,7 +683,7 @@ function run_enkf(
 
     # Run each ensemble member to the final timestep if necessary
     if ts[end] < t_1
-        us_e = [f(LVModel.θS_T; y_0=u, t_0=ts[end])[:, 2:end] for u ∈ eachcol(us_e)]
+        us_e = [f(θs; y_0=u, t_0=ts[end])[:, 2:end] for u ∈ eachcol(us_e)]
         us_e_combined = hcat(us_e_combined, reduce(vcat, us_e))
     end
 
@@ -709,8 +711,8 @@ function run_enkf_params(
     n_us = length(π_u.μ)
 
     # Generate an initial sample of states and parameters from the prior
-    us_e = SimIntensiveInference.sample(π_u, n=N_e)
-    θs_e = SimIntensiveInference.sample(π_θ, n=N_e)
+    us_e = sample(π_u, n=N_e)
+    θs_e = sample(π_θ, n=N_e)
 
     us_e_combined = reduce(vcat, us_e)
     θs_e_combined = reduce(vcat, θs_e)
@@ -733,9 +735,9 @@ function run_enkf_params(
 
         # Generate a set of perturbed data vectors 
         Γ_ϵϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(y), length(y))
-        ys_p = reduce(hcat, [rand(Distributions.MvNormal(y, Γ_ϵϵ)) for _ ∈ 1:N_e])
+        ys_p = rand(Distributions.MvNormal(y, Γ_ϵϵ), N_e)
 
-        # Compute Kalman gain
+        # Compute the Kalman gain
         U_c = vcat(us_ef, θs_e) * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
         Y_c = ys_ef * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
         Γ_uy_e = 1/(N_e-1)*U_c*Y_c'
@@ -756,5 +758,45 @@ function run_enkf_params(
     end
 
     return us_e_combined, θs_e_combined
+
+end
+
+
+function run_enkf_simplified(
+    f::Function,
+    π::AbstractPrior,
+    ts::Vector,
+    ys::Matrix,
+    σ_ϵ::Real,
+    N_e::Int
+)
+
+    # Sample an ensemble of sets of parameters from the prior
+    θs_e = reduce(hcat, sample(π, n=N_e))
+
+    for (t, y) ∈ zip(ts, eachcol(ys))
+
+        # Run each ensemble member forward to the current time
+        ys_e = reduce(hcat, [f(θ; t_1=t)[:, end] for θ ∈ eachcol(θs_e)])
+
+        # Generate a set of perturbed data vectors 
+        Γ_ϵϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(y), length(y))
+        ys_p = rand(Distributions.MvNormal(y, Γ_ϵϵ), N_e)
+
+        # Compute the Kalman gain
+        θ_c = θs_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
+        Y_c = ys_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
+        Γ_θy_e = 1/(N_e-1)*θ_c*Y_c'
+        Γ_yy_e = 1/(N_e-1)*Y_c*Y_c'
+        K = Γ_θy_e * inv(Γ_yy_e + Γ_ϵϵ)
+
+        # Update each set of parameters
+        θs_e = θs_e + K*(ys_p-ys_e)
+
+        println("It. complete")
+
+    end
+
+    return θs_e
 
 end

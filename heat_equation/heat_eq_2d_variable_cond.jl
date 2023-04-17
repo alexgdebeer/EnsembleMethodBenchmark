@@ -1,4 +1,4 @@
-"""Solves the heat equation in one dimension."""
+"""Solves the heat equation in two dimensions."""
 
 using DomainSets
 using MethodOfLines
@@ -8,18 +8,18 @@ using OrdinaryDiffEq
 using Distributions
 
 using LaTeXStrings
-using PyPlot
+using Plots
 
-PyPlot.rc("text", usetex = true)
-PyPlot.rc("font", family = "serif")
+#PyPlot.rc("text", usetex = true)
+#PyPlot.rc("font", family = "serif")
 
-Δt = 20.0
-Δx = 0.05
-Δy = 0.05
+Δt = 0.25
+Δx = 0.5
+Δy = 0.5
 
-tmin, tmax = 0.0, 100.0
-xmin, xmax = 0.0, 0.5
-ymin, ymax = 0.0, 0.5
+tmin, tmax = 0.0, 2.0
+xmin, xmax = -10.0, 10.0
+ymin, ymax = -10.0, 10.0
 
 ts = tmin:Δt:tmax
 xs = xmin:Δx:xmax
@@ -35,27 +35,30 @@ ys = ymin:Δy:ymax
 ∂x² = Differential(x)^2
 ∂y² = Differential(y)^2
 
-k(x) = 200.0#x ≤ 0.5xmax ? 50.0 : 200.0
+k(x) = 1.0
 @register_symbolic k(x)
 
-vx(x, y) = x
-@register_symbolic vx(x, y)
+vx(x, y) = 1
+vy(x, y) = 1
 
-vy(x, y) = 1.0
+@register_symbolic vx(x, y)
 @register_symbolic vy(x, y)
 
 eqs = [
     vxu(t,x,y) ~ vx(x,y)*u(t,x,y),
     vyu(t,x,y) ~ vy(x,y)*u(t,x,y),
-    c*ρ*∂t(u(t,x,y)) ~ ∂x(k(x) * ∂x(u(t,x,y))) + ∂y(k(x) * ∂y(u(t,x,y))) + ∂x(vxu(t,x,y)) + ∂y(vyu(t,x,y))
+    ∂t(u(t,x,y)) ~ ∂x(k(x) * ∂x(u(t,x,y))) + ∂y(k(x) * ∂y(u(t,x,y))) - ∂x(vxu(t,x,y)) - ∂y(vyu(t,x,y))
 ]
 
+ic(x, y) = x^2 + y^2 ≤ π^2 ? 0.25(cos(x)+1)*(cos(y)+1) : 0.0
+@register_symbolic ic(x, y)
+
 bcs = [
-    u(tmin, x, y) ~ 300.0,
-    u(t, xmin, y) ~ 500.0, 
-    u(t, xmax, y) ~ 500.0,
-    u(t, x, ymin) ~ 500.0,
-    u(t, x, ymax) ~ 500.0
+    u(tmin, x, y) ~ ic(x, y),
+    u(t, xmin, y) ~ 0.0, 
+    u(t, xmax, y) ~ 0.0,
+    u(t, x, ymin) ~ 0.0,
+    u(t, x, ymax) ~ 0.0
 ]
 
 domains = [
@@ -67,7 +70,7 @@ domains = [
 @named pde_sys = PDESystem(eqs, bcs, domains, [t, x, y], [u(t, x, y), vxu(t,x,y), vyu(t,x,y)])
 
 discretization = MOLFiniteDifference([x => Δx, y => Δy], t)
-prob = discretize(pde_sys, discretization)
+prob = MethodOfLines.discretize(pde_sys, discretization)
 
 println("Solving...")
 sol = solve(prob, Tsit5(), saveat=Δt)
@@ -75,29 +78,29 @@ println("Solved.")
 
 solu = sol[u(t, x, y)]
 
-# Hack?
-solu[:,1,1] .= 500.0
-solu[:,1,end] .= 500.0
-solu[:,end,1] .= 500.0
-solu[:,end,end] .= 500.0
-
-println(size(solu))
-
 for (i, t) ∈ enumerate(ts)
 
-    println(solu[i,:,:])
-
-    PyPlot.contourf(xs, ys, solu[i,:,:], cmap="coolwarm")
-    
-    PyPlot.title("Time: $(Int(round(t))) s")
-    PyPlot.xlabel(L"x"*" (m)", fontsize=16)
-    PyPlot.ylabel(L"y"*" (m)", fontsize=16)
-
-    PyPlot.tight_layout()
-    PyPlot.savefig("plots/time_$(i).pdf")
-    PyPlot.clf()
+    surface(xs, ys, solu[i,:,:], palette=:tempo, zlim=(0.0, 1.05))
+    title!("Time $i")
+    xlabel!(L"x")
+    ylabel!(L"y")
+    savefig("t$(i).pdf")
 
 end
+
+# for (i, t) ∈ enumerate(ts)
+
+#     PyPlot.contourf(xs, ys, solu[i,:,:], cmap="coolwarm")
+    
+#     PyPlot.title("Time: $(Int(round(t))) s")
+#     PyPlot.xlabel(L"x"*" (m)", fontsize=16)
+#     PyPlot.ylabel(L"y"*" (m)", fontsize=16)
+
+#     PyPlot.tight_layout()
+#     PyPlot.savefig("plots/time_$(i).pdf")
+#     PyPlot.clf()
+
+# end
 
 # for (i, t) ∈ enumerate(ts)
 #     PyPlot.plot(xs, solu[i,:,:], label=L"t ="*" $(Int(round(t))) s") 
