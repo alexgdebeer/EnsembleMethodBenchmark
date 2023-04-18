@@ -1,4 +1,4 @@
-"""Defines the Lotka-Volterra model, as used in Toni (2009)."""
+"""Defines the Lotka-Volterra model, as used in Toni et al. (2009)."""
 
 module LVModel
 

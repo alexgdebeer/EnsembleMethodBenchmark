@@ -8,7 +8,7 @@ include("sim_intensive_inference/sim_intensive_inference.jl")
 const π = SimIntensiveInference.GaussianPrior(LinearModel.μ_π, LinearModel.Γ_π)
 
 # Define the ensemble size 
-const N_e = 10_000
+const N_e = 1_000
 
 θs = SimIntensiveInference.run_enkf_simplified(
     LinearModel.f, 

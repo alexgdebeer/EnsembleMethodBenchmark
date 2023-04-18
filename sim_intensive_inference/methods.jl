@@ -761,13 +761,14 @@ function run_enkf_simplified(
     ts::AbstractVector,
     ys::AbstractMatrix,
     σ_ϵ::Real,
-    N_e::Int
+    N_e::Int;
+    verbose::Bool=true
 )
 
     # Sample an ensemble of sets of parameters from the prior
     θs_e = reduce(hcat, sample(π, n=N_e))
 
-    for (t, y) ∈ zip(ts, eachcol(ys))
+    for (i, (t, y)) ∈ enumerate(zip(ts, eachcol(ys)))
 
         # Run each ensemble member forward to the current time
         ys_e = reduce(hcat, [f(θ; t_1=t)[:, end] for θ ∈ eachcol(θs_e)])
@@ -786,7 +787,7 @@ function run_enkf_simplified(
         # Update each set of parameters
         θs_e = θs_e + K*(ys_p-ys_e)
 
-        println("Iteration complete")
+        verbose && @info "$i iterations complete."
 
     end
 

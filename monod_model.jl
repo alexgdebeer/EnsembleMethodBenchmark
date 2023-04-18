@@ -1,4 +1,4 @@
-"""Defines a simple MONOD model (Bardsley 2014)."""
+"""Defines a simple MONOD model, as used in Bardsley et al. (2014)."""
 
 module MONODModel
 

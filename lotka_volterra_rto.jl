@@ -1,4 +1,4 @@
-"""Runs RML and RTO on the MONOD model."""
+"""Runs RML and RTO on the Lotka-Volterra model."""
 
 using Distributions
 using ForwardDiff
