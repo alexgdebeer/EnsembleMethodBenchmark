@@ -27,11 +27,11 @@ const L = SimIntensiveInference.GaussianLikelihood(MONODModel.YS_O, MONODModel.�
 
 # Define the model, and the mapping between the outputs and observations (in 
 # this case, they are the same)
-const f(θ) = (θ[1]*XS) ./ (θ[2].+XS)
-const g(θ) = θ 
+const f(θs) = (θs[1]*XS) ./ (θs[2].+XS)
+const g(ys) = ys 
 
 # Define a function that returns the modelled y value corresponding to a given x 
-const H(θ, x) = f(θ)[XS.==x]
+const H(θs, xs) = f(θs)[XS.==xs]
 
 # Compute the true posterior on a grid
 const N_PTS = 500

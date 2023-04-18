@@ -14,6 +14,8 @@ const TITLE_SIZE = 20
 const LABEL_SIZE = 16
 const SMALL_SIZE = 8
 
+const DARK_BLUE = "#4358CB"
+
 
 """Calculates the joint and marginal densities of two parameters on a grid of 
 values."""
@@ -37,7 +39,7 @@ function density_grid(
 end
 
 
-"""Plots the outputs of the model run with the true values of the parameters,
+"""Plots the outputs of the LV model run with the true values of the parameters,
 and the noisy data."""
 function plot_lv_system(
     ts::AbstractVector, 
@@ -64,6 +66,8 @@ function plot_lv_system(
 end
 
 
+"""Plots the outputs of the linear model run with the true values of the 
+parameters, and the noisy data."""
 function plot_linear_model(
     ts::AbstractVector,
     ys_t::AbstractVector,
@@ -128,30 +132,34 @@ function plot_density_grid(
 end
 
 
+"""Plots a set of samples from a posterior distribution."""
 function plot_approx_posterior(
-    θs_sampled,
-    as, bs, post_marg_a, post_marg_b, 
-    title, save_path; θs_t=nothing, caption=nothing
+    θs_s, 
+    θ1s::AbstractVector, 
+    θ2s::AbstractVector, 
+    marg_θ1::Vector, 
+    marg_θ2::Vector, 
+    title::AbstractString, 
+    fname::AbstractString; 
+    θs_t::Union{Nothing,AbstractVector}=nothing, 
+    caption::Union{Nothing,AbstractString}=nothing
 )
 
-    as_sampled = [θ[1] for θ ∈ θs_sampled]
-    bs_sampled = [θ[2] for θ ∈ θs_sampled]
+    θ1s_s = [θ[1] for θ ∈ θs_s]
+    θ2s_s = [θ[2] for θ ∈ θs_s]
+    θ1_range = (minimum(θ1s), maximum(θ1s))
+    θ2_range = (minimum(θ2s), maximum(θ2s))
 
-    g = Seaborn.JointGrid(xlim=(minimum(as), maximum(as)), ylim=(minimum(bs), maximum(bs)))
+    g = Seaborn.JointGrid(xlim=θ1_range, ylim=θ2_range)
 
     # Plot the sampled values
-    Seaborn.kdeplot(x=as_sampled, y=bs_sampled, ax=g.ax_joint, fill=true, cmap="coolwarm", levels=9, bw_adjust=2.0)
-    Seaborn.kdeplot(x=as_sampled, ax=g.ax_marg_x, c="#4358CB", label="Sampled density")
-    Seaborn.kdeplot(y=bs_sampled, ax=g.ax_marg_y, c="#4358CB")
+    Seaborn.kdeplot(x=θ1s_s, y=θ2s_s, ax=g.ax_joint, fill=true, cmap="coolwarm", levels=9, bw_adjust=2.0)
+    Seaborn.kdeplot(x=θ1s_s, ax=g.ax_marg_x, c=DARK_BLUE, label="Sampled density")
+    Seaborn.kdeplot(y=θ2s_s, ax=g.ax_marg_y, c=DARK_BLUE)
     
     # Plot the true posterior marginals
-    g.ax_marg_x.plot(as, post_marg_a, c="tab:gray", ls="--", label="True posterior density")
-    g.ax_marg_y.plot(post_marg_b, bs, c="tab:gray", ls="--")
-
-    g.ax_marg_x.set_title(title, fontsize=TITLE_SIZE)
-    g.ax_joint.set_xlabel(L"\theta_{1}", fontsize=LABEL_SIZE)
-    g.ax_joint.set_ylabel(L"\theta_{2}", fontsize=LABEL_SIZE)
-    g.ax_marg_x.legend(fontsize=SMALL_SIZE, frameon=false)
+    g.ax_marg_x.plot(θ1s, marg_θ1, c="tab:gray", ls="--", label="True posterior density")
+    g.ax_marg_y.plot(marg_θ2, θ2s, c="tab:gray", ls="--")
 
     # Plot the true parameter values
     if θs_t !== nothing
@@ -163,14 +171,19 @@ function plot_approx_posterior(
         g.ax_joint.legend(fontsize=SMALL_SIZE)
     end
 
+    g.ax_marg_x.set_title(title, fontsize=TITLE_SIZE)
+    g.ax_joint.set_xlabel(L"\theta_{1}", fontsize=LABEL_SIZE)
+    g.ax_joint.set_ylabel(L"\theta_{2}", fontsize=LABEL_SIZE)
+    g.ax_marg_x.legend(fontsize=SMALL_SIZE, frameon=false)
+
     if caption !== nothing 
         PyPlot.gcf().supxlabel(caption, x=0.01, ha="left", fontsize=SMALL_SIZE)
     end
 
-    g.ax_joint.set_facecolor("#4358CB")
+    g.ax_joint.set_facecolor(DARK_BLUE)
 
     PyPlot.tight_layout()
-    PyPlot.savefig(save_path)
+    PyPlot.savefig(fname)
     PyPlot.clf()
 
 end
