@@ -3,7 +3,7 @@ using LinearAlgebra
 using Statistics
 
 include("lotka_volterra_model.jl")
-include("lotka_volterra_plotting.jl")
+include("plotting.jl")
 include("sim_intensive_inference/sim_intensive_inference.jl")
 
 

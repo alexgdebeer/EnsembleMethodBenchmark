@@ -15,9 +15,37 @@ const LABEL_SIZE = 16
 const SMALL_SIZE = 8
 
 
+"""Calculates the joint and marginal densities of two parameters on a grid of 
+values."""
+function density_grid(
+    θ1s::Vector, 
+    θ2s::Vector, 
+    density::Function
+)::Tuple
+
+    area(x, y) = 0.5sum((x[i+1]-x[i])*(y[i+1]+y[i]) for i ∈ 1:(length(x)-1))
+
+    joint = [density([θ1, θ2]) for θ2 ∈ θ2s, θ1 ∈ θ1s]
+
+    marg_θ1 = vec(sum(joint, dims=1))
+    marg_θ2 = vec(sum(joint, dims=2))
+    marg_θ1 ./= area(θ1s, marg_θ1)
+    marg_θ2 ./= area(θ2s, marg_θ2)
+
+    return joint, marg_θ1, marg_θ2
+
+end
+
+
 """Plots the outputs of the model run with the true values of the parameters,
 and the noisy data."""
-function plot_lv_system(ts, ys_t, ts_o, ys_o)
+function plot_lv_system(
+    ts::AbstractVector, 
+    ys_t::AbstractMatrix, 
+    ts_o::AbstractVector, 
+    ys_o::AbstractMatrix,
+    fname::AbstractString
+)
 
     PyPlot.plot(ts, ys_t[1, :], label=L"x(t)")
     PyPlot.plot(ts, ys_t[2, :], label=L"y(t)")
@@ -30,7 +58,7 @@ function plot_lv_system(ts, ys_t, ts_o, ys_o)
     PyPlot.ylabel(L"x(t), y(t)", fontsize=LABEL_SIZE)
     PyPlot.legend(fontsize=LABEL_SIZE)
 
-    PyPlot.savefig("plots/lotka_volterra/lv_system.pdf")
+    PyPlot.savefig(fname)
     PyPlot.clf()
 
 end
@@ -102,7 +130,7 @@ function plot_approx_posterior(
     g.ax_marg_x.set_title(title, fontsize=TITLE_SIZE)
     g.ax_joint.set_xlabel(L"\theta_{1}", fontsize=LABEL_SIZE)
     g.ax_joint.set_ylabel(L"\theta_{2}", fontsize=LABEL_SIZE)
-    g.ax_marg_x.legend(fontsize=SMALL_SIZE, frameon=false, loc="lower right")
+    g.ax_marg_x.legend(fontsize=SMALL_SIZE, frameon=false)#, loc="lower right")
 
     # Plot the true parameter values
     if θs_t !== nothing

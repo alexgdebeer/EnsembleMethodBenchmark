@@ -1,4 +1,4 @@
-"""Runs RML and RTO on the MONOD model."""
+"""Runs RTO on the MONOD model."""
 
 using LinearAlgebra
 
@@ -14,6 +14,7 @@ const L = SimIntensiveInference.GaussianLikelihood(MONODModel.YS_O, MONODModel.�
 # Define the number of samples to draw
 const N = 50_000
 
+
 θ_MAP, Q, θs, ws = SimIntensiveInference.run_rto(
     MONODModel.f, MONODModel.g, π, L, N
 )
@@ -27,8 +28,8 @@ Plotting.plot_approx_posterior(
     caption="$N uncorrected samples."
 )
 
-# Re-sample the final population with replacement 
-θs_r = @time SimIntensiveInference.resample_population(θs, ws, N=N)
+# Re-sample from the final population with replacement 
+θs_r = SimIntensiveInference.resample_population(θs, ws, N=N)
 
 Plotting.plot_approx_posterior(
     θs_r, 

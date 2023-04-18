@@ -1,27 +1,21 @@
+"""Runs RML and RTO on the MONOD model."""
+
 using Distributions
 using ForwardDiff
 using LinearAlgebra
 using Statistics
 
 include("lotka_volterra_model.jl")
-include("lotka_volterra_plotting.jl")
+include("plotting.jl")
 include("sim_intensive_inference/sim_intensive_inference.jl")
 
 
-# Define the prior
-const μ_π = [0.0, 0.0]
-const σ_π = 3.0
-const Γ_π = σ_π^2 * Matrix(I, 2, 2)
-const π = SimIntensiveInference.GaussianPrior(μ_π, Γ_π)
-
-# Define the likelihood
-const μ_L = reduce(vcat, LVModel.YS_O) 
-const σ_L = LVModel.σ_ϵ
-const Γ_L = σ_L^2 * Matrix(I, 2LVModel.N_IS_O, 2LVModel.N_IS_O)
-const L = SimIntensiveInference.GaussianLikelihood(μ_L, Γ_L)
+# Define the prior and likelihood
+const π = SimIntensiveInference.GaussianPrior(LVModel.μ_π, LVModel.Γ_π)
+const L = SimIntensiveInference.GaussianLikelihood(LVModel.μ_L, LVModel.Γ_ϵ)
 
 # Define the number of samples to generate
-const N = 1000
+const N = 10000
 
 const RML = false 
 const RTO = true
@@ -60,7 +54,7 @@ if RML
         LVModel.f, LVModel.g, π, L, N
     )
 
-    LVModelPlotting.plot_approx_posterior(
+    Plotting.plot_approx_posterior(
         θs,
         LVModel.AS, LVModel.BS, LVModel.POST_MARG_A, LVModel.POST_MARG_B, 
         "RML Posterior", 
@@ -77,7 +71,7 @@ if RTO
         LVModel.f, LVModel.g, π, L, N
     )
 
-    LVModelPlotting.plot_approx_posterior(
+    Plotting.plot_approx_posterior(
         θs,
         LVModel.AS, LVModel.BS, LVModel.POST_MARG_A, LVModel.POST_MARG_B, 
         "RTO Posterior", 
@@ -85,9 +79,9 @@ if RTO
         caption="$N samples from RTO density."
     )
 
-    θs_reweighted = [SimIntensiveInference.sample_from_population(θs, ws) for _ ∈ 1:5N]
+    θs_reweighted = [SimIntensiveInference.sample_from_population(θs, ws) for _ ∈ 1:N]
 
-    LVModelPlotting.plot_approx_posterior(
+    Plotting.plot_approx_posterior(
         θs_reweighted,
         LVModel.AS, LVModel.BS, LVModel.POST_MARG_A, LVModel.POST_MARG_B, 
         "Reweighted RTO Posterior", 
@@ -101,7 +95,7 @@ if RTO
         π, L, Q
     )
 
-    LVModelPlotting.plot_density_grid(
+    Plotting.plot_density_grid(
         LVModel.AS, LVModel.BS, 
         RTO_JOINT, RTO_MARG_A, RTO_MARG_B, 
         "RTO Density",
