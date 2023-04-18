@@ -44,6 +44,9 @@ end
 # Define a mapping from the complete set of model outputs to the observations
 const g(ys::AbstractMatrix) = reduce(vcat, ys[:, IS_O])
 
+# Define a function to return the model outputs at a given time
+const H(θ, t) = f(θ; t_1=t)[:, end]
+
 # Define true model initial conditions, parameters and outputs
 const Y_0 = [1.0, 0.5]
 const θS_T = [1.0, 1.0]

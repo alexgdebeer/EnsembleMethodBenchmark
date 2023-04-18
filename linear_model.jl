@@ -20,8 +20,11 @@ const TS = T_0:ΔT:T_1
 const N_TS = length(TS)
 
 # Define the forward model and the mapping from its outputs to the observations
-const f(θs; t_1=T_1) = (θs[1].+θs[2]*TS[TS.≤t_1])[:,:]'
+const f(θs; t_1=T_1) = (θs[1].+θs[2]*TS[TS.≤t_1])
 const g(ys) = ys[IS_O]
+
+# Define a function to output the results of the model at a given time 
+const H(θ, t) = f(θ, t_1=t)[end]
 
 # Define true model parameters and outputs
 const θS_T = [1.0, 1.0]

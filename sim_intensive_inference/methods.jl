@@ -756,7 +756,7 @@ end
 
 
 function run_enkf_simplified(
-    f::Function,
+    H::Function,
     π::AbstractPrior,
     ts::AbstractVector,
     ys::AbstractMatrix,
@@ -770,8 +770,8 @@ function run_enkf_simplified(
 
     for (i, (t, y)) ∈ enumerate(zip(ts, eachcol(ys)))
 
-        # Run each ensemble member forward to the current time
-        ys_e = reduce(hcat, [f(θ; t_1=t)[:, end] for θ ∈ eachcol(θs_e)])
+        # Generate the ensemble observations predictions for the current time
+        ys_e = reduce(hcat, [H(θ, t) for θ ∈ eachcol(θs_e)])
 
         # Generate a set of perturbed data vectors 
         Γ_ϵϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(y), length(y))
@@ -787,7 +787,7 @@ function run_enkf_simplified(
         # Update each set of parameters
         θs_e = θs_e + K*(ys_p-ys_e)
 
-        verbose && @info "$i iterations complete."
+        verbose && @info "Iteration $i complete."
 
     end
 
