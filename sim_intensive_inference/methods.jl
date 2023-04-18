@@ -500,13 +500,7 @@ function run_ibis(
 end
 
 
-"""
-Draws N samples from the approximate posterior using the randomised maximum 
-likelihood algorithm.
-
-TODO: find a way to save the function evaluated at each value of θ.
-TODO: consider changing the optimiser.
-"""
+"""TODO: find a way to save the function evaluated at each value of θ."""
 function run_rml(
     f::Function,
     g::Function,
@@ -578,7 +572,7 @@ function run_rto(
 
     # Calculate the MAP estimate
     res = Optim.optimize(
-        θ -> sum((f̃(θ).-ỹ).^2), π.μ, 
+        θ -> sum((f̃(θ).-ỹ).^2), [1.0, 1.0], 
         Optim.Newton(), 
         Optim.Options(show_trace=false), autodiff=:forward
     )
@@ -691,7 +685,7 @@ function run_enkf(
 end
 
 
-"""Runs the EnFK algorithm, with the parameters augmented to the states."""
+"""Runs the EnKF algorithm, with the parameters augmented to the states."""
 function run_enkf_params(
     f::Function,
     H::Function,
@@ -764,8 +758,8 @@ end
 function run_enkf_simplified(
     f::Function,
     π::AbstractPrior,
-    ts::Vector,
-    ys::Matrix,
+    ts::AbstractVector,
+    ys::AbstractMatrix,
     σ_ϵ::Real,
     N_e::Int
 )
@@ -792,7 +786,7 @@ function run_enkf_simplified(
         # Update each set of parameters
         θs_e = θs_e + K*(ys_p-ys_e)
 
-        println("It. complete")
+        println("Iteration complete")
 
     end
 

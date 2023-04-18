@@ -14,16 +14,16 @@ const XS = [28, 55, 83, 110, 138, 225, 375]
 const YS_O = [0.053, 0.060, 0.112, 0.105, 0.099, 0.122, 0.125]
 const N_IS = length(YS_O)
 
-# Define the prior
+# Define the prior 
 const μ_π = [0.15, 50.0]
 const σs_π = [0.2, 50.0]
 const Γ_π = diagm(σs_π.^2)
-const π = SimIntensiveInference.GaussianPrior(μ_π, Γ_π)
+const π = SimIntensiveInference.GaussianPrior(MONODModel.μ_π, MONODModel.Γ_π)
 
 # Define the likelihood
 const σ_ϵ = 0.012
 const Γ_ϵ = σ_ϵ^2 * Matrix(I, N_IS, N_IS)
-const L = SimIntensiveInference.GaussianLikelihood(YS_O, Γ_ϵ)
+const L = SimIntensiveInference.GaussianLikelihood(MONODModel.YS_O, MONODModel.Γ_ϵ)
 
 # Define the model, and the mapping between the outputs and observations (in 
 # this case, they are the same)

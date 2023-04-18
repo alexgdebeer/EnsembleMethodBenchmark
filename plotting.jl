@@ -64,6 +64,27 @@ function plot_lv_system(
 end
 
 
+function plot_linear_model(
+    ts::AbstractVector,
+    ys_t::AbstractVector,
+    ts_o::AbstractVector,
+    ys_o::AbstractVector,
+    fname::AbstractString
+)
+
+    PyPlot.plot(ts, ys_t)
+    PyPlot.scatter(ts_o, ys_o)
+
+    PyPlot.title("True Linear Model and Observations", fontsize=TITLE_SIZE)
+    PyPlot.xlabel(L"t", fontsize=LABEL_SIZE)
+    PyPlot.ylabel(L"y(t)", fontsize=LABEL_SIZE)
+
+    PyPlot.savefig(fname)
+    PyPlot.clf()
+
+end
+
+
 """Plots the joint posterior density of two parameters."""
 function plot_density_grid(
     θ1_vals::AbstractVector, 
@@ -87,8 +108,8 @@ function plot_density_grid(
     g.ax_marg_y.plot(marg_θ2, θ2_vals, c="tab:gray")
 
     PyPlot.suptitle(title, fontsize=TITLE_SIZE)
-    g.ax_joint.set_xlabel(L"a", fontsize=LABEL_SIZE)
-    g.ax_joint.set_ylabel(L"b", fontsize=LABEL_SIZE)
+    g.ax_joint.set_xlabel(L"\theta_{1}", fontsize=LABEL_SIZE)
+    g.ax_joint.set_ylabel(L"\theta_{2}", fontsize=LABEL_SIZE)
 
     # Plot the true values of the parameters
     if θs_t !== nothing
@@ -130,7 +151,7 @@ function plot_approx_posterior(
     g.ax_marg_x.set_title(title, fontsize=TITLE_SIZE)
     g.ax_joint.set_xlabel(L"\theta_{1}", fontsize=LABEL_SIZE)
     g.ax_joint.set_ylabel(L"\theta_{2}", fontsize=LABEL_SIZE)
-    g.ax_marg_x.legend(fontsize=SMALL_SIZE, frameon=false)#, loc="lower right")
+    g.ax_marg_x.legend(fontsize=SMALL_SIZE, frameon=false)
 
     # Plot the true parameter values
     if θs_t !== nothing

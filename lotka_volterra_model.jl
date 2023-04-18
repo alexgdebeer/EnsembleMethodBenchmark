@@ -11,7 +11,6 @@ using Statistics
 include("plotting.jl")
 include("sim_intensive_inference/sim_intensive_inference.jl")
 
-
 const PLOTS_DIR = "plots/lotka_volterra"
 
 # Define time parameters
@@ -43,7 +42,7 @@ function f(
 end
 
 # Define a mapping from the complete set of model outputs to the observations
-const g(ys::AbstractMatrix) = reduce(vcat, ys[:, LVModel.IS_O])
+const g(ys::AbstractMatrix) = reduce(vcat, ys[:, IS_O])
 
 # Define true model initial conditions, parameters and outputs
 const Y_0 = [1.0, 0.5]
@@ -57,15 +56,17 @@ const IS_O = sort(randperm(N_TS)[1:N_IS_O])
 const TS_O = TS[IS_O]
 const YS_O = YS_T[:, IS_O] + rand(Normal(0.0, σ_ϵ), size(YS_T[:, IS_O]))
 
-# Define the parameters of the prior
+# Define the prior
 const μ_π = [0.0, 0.0]
 const σ_π = 3.0
 const Γ_π = σ_π^2 * Matrix(I, 2, 2)
+const π = SimIntensiveInference.GaussianPrior(μ_π, Γ_π)
 
-# Define the parameters of the errors / likelihood
-const μ_ϵ = zeros(2LVModel.N_IS_O)
-const μ_L = reduce(vcat, LVModel.YS_O)
-const Γ_ϵ = σ_ϵ^2 * Matrix(I, 2LVModel.N_IS_O, 2LVModel.N_IS_O)
+# Define the likelihood
+const μ_ϵ = zeros(2N_IS_O)
+const μ_L = reduce(vcat, YS_O)
+const Γ_ϵ = σ_ϵ^2 * Matrix(I, 2N_IS_O, 2N_IS_O)
+const L = SimIntensiveInference.GaussianLikelihood(μ_L, Γ_ϵ)
 
 # Compute the properties of the true posterior 
 const N_PTS = 200

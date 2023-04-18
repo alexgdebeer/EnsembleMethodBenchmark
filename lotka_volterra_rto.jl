@@ -9,13 +9,12 @@ include("lotka_volterra_model.jl")
 include("plotting.jl")
 include("sim_intensive_inference/sim_intensive_inference.jl")
 
-
 # Define the prior and likelihood
 const π = SimIntensiveInference.GaussianPrior(LVModel.μ_π, LVModel.Γ_π)
 const L = SimIntensiveInference.GaussianLikelihood(LVModel.μ_L, LVModel.Γ_ϵ)
 
 # Define the number of samples to generate
-const N = 10000
+const N = 10_000
 
 const RML = false 
 const RTO = true
@@ -75,18 +74,20 @@ if RTO
         θs,
         LVModel.AS, LVModel.BS, LVModel.POST_MARG_A, LVModel.POST_MARG_B, 
         "RTO Posterior", 
-        "$(LVModel.PLOTS_DIR)/rml_rto/rto_posterior.pdf"; 
-        caption="$N samples from RTO density."
+        "$(LVModel.PLOTS_DIR)/rml_rto/rto_posterior_uncorrected.pdf"; 
+        θs_t=LVModel.θS_T,
+        caption="$N uncorrected samples."
     )
 
-    θs_reweighted = [SimIntensiveInference.sample_from_population(θs, ws) for _ ∈ 1:N]
+    θs_r = SimIntensiveInference.resample_population(θs, ws, N=N)
 
     Plotting.plot_approx_posterior(
-        θs_reweighted,
+        θs_r,
         LVModel.AS, LVModel.BS, LVModel.POST_MARG_A, LVModel.POST_MARG_B, 
         "Reweighted RTO Posterior", 
-        "$(LVModel.PLOTS_DIR)/rml_rto/rto_posterior_reweighted.pdf", 
-        caption="$N re-weighted RTO samples."
+        "$(LVModel.PLOTS_DIR)/rml_rto/rto_posterior_corrected.pdf";
+        θs_t=LVModel.θS_T,
+        caption="$N re-weighted samples."
     )
 
     const RTO_JOINT, RTO_MARG_A, RTO_MARG_B = rto_density(

@@ -1,4 +1,5 @@
 ## Simulation Intensive Inference
 
 TODO: 
- - Implement a resampling method with lower variance.
+ - Plot the linear and MONOD systems.
+ - Clean up all plotting functions.
