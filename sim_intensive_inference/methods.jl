@@ -581,7 +581,7 @@ function run_rto(
     θ_MAP = Optim.minimizer(res)
 
     J̃θ_MAP = ForwardDiff.jacobian(f̃, θ_MAP)
-    Q = LinearAlgebra.qr(J̃θ_MAP).Q[:, 1:length(π.μ)]
+    Q = Matrix(LinearAlgebra.qr(J̃θ_MAP).Q)
 
     θs = []
     ws = []
