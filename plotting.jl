@@ -102,9 +102,7 @@ function plot_density_grid(
 )
 
     # Initialise the grid for plotting
-    θ1_range = (θ1_vals[1], θ1_vals[end])
-    θ2_range = (θ2_vals[1], θ2_vals[end])
-    g = Seaborn.JointGrid(xlim=θ1_range, ylim=θ2_range)
+    g = Seaborn.JointGrid(xlim=extrema(θ1_vals), ylim=extrema(θ2_vals))
 
     # Plot the joint and marginal densities
     g.ax_joint.contourf(θ1_vals, θ2_vals, joint, cmap="coolwarm", levels=8)
@@ -147,10 +145,8 @@ function plot_approx_posterior(
 
     θ1s_s = [θ[1] for θ ∈ θs_s]
     θ2s_s = [θ[2] for θ ∈ θs_s]
-    θ1_range = (minimum(θ1s), maximum(θ1s))
-    θ2_range = (minimum(θ2s), maximum(θ2s))
 
-    g = Seaborn.JointGrid(xlim=θ1_range, ylim=θ2_range)
+    g = Seaborn.JointGrid(xlim=extrema(θ1s_s), ylim=extrema(θ2s_s))
 
     # Plot the sampled values
     Seaborn.kdeplot(x=θ1s_s, y=θ2s_s, ax=g.ax_joint, fill=true, cmap="coolwarm", levels=9, bw_adjust=2.0)
