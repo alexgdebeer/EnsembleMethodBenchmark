@@ -8,8 +8,8 @@ using LinearAlgebra
 using Random; Random.seed!(0)
 using Statistics
 
-include("plotting.jl")
-include("sim_intensive_inference/sim_intensive_inference.jl")
+include("../../plotting.jl")
+include("../../sim_intensive_inference/sim_intensive_inference.jl")
 
 const PLOTS_DIR = "plots/lotka_volterra"
 

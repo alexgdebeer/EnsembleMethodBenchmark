@@ -6,8 +6,8 @@ using LinearAlgebra
 using Statistics
 
 include("lotka_volterra_model.jl")
-include("plotting.jl")
-include("sim_intensive_inference/sim_intensive_inference.jl")
+include("../../plotting.jl")
+include("../../sim_intensive_inference/sim_intensive_inference.jl")
 
 # Define the prior and likelihood
 const π = SimIntensiveInference.GaussianPrior(LVModel.μ_π, LVModel.Γ_π)

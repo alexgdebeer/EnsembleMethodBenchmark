@@ -1,8 +1,8 @@
 """Runs the EnKF for parameter estimation on the MONOD model."""
 
 include("monod_model.jl")
-include("plotting.jl")
-include("sim_intensive_inference/sim_intensive_inference.jl")
+include("../../plotting.jl")
+include("../../sim_intensive_inference/sim_intensive_inference.jl")
 
 # Define the prior and ensemble size
 const π = SimIntensiveInference.GaussianPrior(MONODModel.μ_π, MONODModel.Γ_π)

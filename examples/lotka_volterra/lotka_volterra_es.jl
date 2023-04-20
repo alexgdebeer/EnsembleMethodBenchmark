@@ -1,8 +1,8 @@
 """Runs the ES on the Lotka-Volterra model."""
 
 include("lotka_volterra_model.jl")
-include("plotting.jl")
-include("sim_intensive_inference/sim_intensive_inference.jl")
+include("../../plotting.jl")
+include("../../sim_intensive_inference/sim_intensive_inference.jl")
 
 # Define the prior and ensemble size
 const π = SimIntensiveInference.GaussianPrior(LVModel.μ_π, LVModel.Γ_π)

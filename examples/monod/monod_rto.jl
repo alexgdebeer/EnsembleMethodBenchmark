@@ -3,8 +3,8 @@
 using LinearAlgebra
 
 include("monod_model.jl")
-include("plotting.jl")
-include("sim_intensive_inference/sim_intensive_inference.jl")
+include("../../plotting.jl")
+include("../../sim_intensive_inference/sim_intensive_inference.jl")
 
 
 # Define the prior and likelihood
