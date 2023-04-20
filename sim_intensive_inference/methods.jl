@@ -873,3 +873,102 @@ function run_ensemble_smoother_mda(
     return θs_e
 
 end
+
+
+"""Runs the batch ensemble randomised maximum likelihood algorithm as presented
+in Emerick and Reynolds (2012)."""
+function run_batch_enrml(
+    f::Function,
+    g::Function,
+    π::AbstractPrior,
+    ys::AbstractVector,
+    σ_ϵ::Real,
+    β_0::Real,
+    N_e::Int;
+    verbose::Bool=true
+)
+
+    function mean_misfit(ys_lp::AbstractMatrix, ys_p::AbstractMatrix)::Float64
+        return Statistics.mean(0.5(y_lp-y_p)'*inv(Γ_ϵ)*(y_lp-y_p) 
+            for (y_lp, y_p) ∈ zip(eachcol(ys_lp), eachcol(ys_p)))
+    end
+
+    function converged(θs_lp, θs_l, O_lp, O_l, n_it, n_cuts)
+        
+        # TODO: add parameter condition
+
+        abs((O_lp-O_l)/O_l) < 1e-2 && return true
+        n_it == 10 && return true
+        n_cuts == 5 && return true
+
+        println("not converged yet...")
+
+        return false
+
+    end
+
+    # Sample an ensemble from the prior and run it
+    θs_f = reduce(hcat, sample(π, n=N_e))
+    ys_f = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_f)])
+
+    # Form the covariance of the errors
+    Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys), length(ys))
+
+    # Calculate the prior covariance of the simulated values
+    θ_c = θs_f * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
+    Γ_θf = 1/(N_e-1)*θ_c*θ_c'
+
+    # Sample an ensemble of perturbed observations
+    ys_p = rand(Distributions.MvNormal(ys, Γ_ϵ), N_e)
+
+    O_l = mean_misfit(ys_f, ys_p)
+    
+    n_it = 0; n_cuts = 0
+    θs_l = copy(θs_f); θs_lp = copy(θs_f); 
+    ys_l = copy(ys_f); ys_lp = copy(ys_f); 
+    O_lp = O_l
+    β_l = β_0
+
+    while true
+
+        # Calculate the ensemble sensitivity
+        θ_c = θs_l * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
+        Y_c = ys_l * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
+        G_l = Y_c*LinearAlgebra.pinv(θ_c)
+
+        while true
+            
+            # Update the ensemble and run it forward in time
+            θs_lp = β_l*θs_f + (1-β_l)*θs_l - 
+                β_l*Γ_θf*G_l'*inv(G_l*Γ_θf*G_l'+Γ_ϵ)*(ys_l-ys_p-G_l*(θs_l-θs_f))
+
+            ys_lp = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_lp)])
+
+            O_lp = mean_misfit(ys_lp, ys_p)
+
+            if O_lp < O_l 
+
+                verbose && @info("Step accepted. Increasing step size.")
+                β_l = min(2β_l, β_0); n_cuts = 0;
+                n_it += 1; break
+
+            else 
+
+                verbose && @info("Step rejected. Decreasing step size.")
+                β_l *= 0.5; n_cuts += 1
+                n_cuts > 5 && break
+
+            end
+
+        end
+
+        # Check for convergence
+        converged(θs_lp, θs_l, O_lp, O_l, n_it, n_cuts) && break
+        θs_l = copy(θs_lp); ys_l = copy(ys_lp)
+        O_l = O_lp
+
+    end
+
+    return θs_l
+
+end

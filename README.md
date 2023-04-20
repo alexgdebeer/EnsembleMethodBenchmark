@@ -3,3 +3,4 @@
 TODO: 
  - Plot the linear and MONOD systems.
  - Clean up all plotting functions.
+ - Make covariance matrix notation consistent.
