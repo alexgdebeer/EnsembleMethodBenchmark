@@ -770,7 +770,7 @@ function run_enkf_simplified(
 
     for (i, (t, y)) ∈ enumerate(zip(ts, eachcol(ys)))
 
-        # Generate the ensemble observations predictions for the current time
+        # Generate the ensemble predictions for the current time
         ys_e = reduce(hcat, [H(θ, t) for θ ∈ eachcol(θs_e)])
 
         # Generate a set of perturbed data vectors 
@@ -784,11 +784,90 @@ function run_enkf_simplified(
         Γ_yy_e = 1/(N_e-1)*Y_c*Y_c'
         K = Γ_θy_e * inv(Γ_yy_e + Γ_ϵϵ)
 
-        # Update each set of parameters
+        # Update each ensemble member
         θs_e = θs_e + K*(ys_p-ys_e)
 
         verbose && @info "Iteration $i complete."
 
+    end
+
+    return θs_e
+
+end
+
+
+function run_ensemble_smoother(
+    f::Function,
+    g::Function,
+    π::AbstractPrior,
+    ys::AbstractVector,
+    σ_ϵ::Real, 
+    N_e::Int;
+    verbose::Bool=true
+)
+
+    # Sample an ensemble from the prior
+    θs_e = reduce(hcat, sample(π, n=N_e))
+
+    # Generate the ensemble predictions
+    ys_e = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_e)])
+
+    # Generate a set of perturbed data vectors 
+    Γ_ϵϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys), length(ys))
+    ys_p = rand(Distributions.MvNormal(ys, Γ_ϵϵ), N_e)
+
+    # Compute the gain
+    θ_c = θs_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
+    Y_c = ys_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
+    Γ_θy_e = 1/(N_e-1)*θ_c*Y_c'
+    Γ_yy_e = 1/(N_e-1)*Y_c*Y_c'
+    K = Γ_θy_e * inv(Γ_yy_e + Γ_ϵϵ)
+
+    # Update each ensemble member
+    θs_e = θs_e + K*(ys_p-ys_e)
+
+    return θs_e
+
+end
+
+
+function run_ensemble_smoother_mda(
+    f::Function,
+    g::Function,
+    π::AbstractPrior,
+    ys::AbstractVector,
+    σ_ϵ::Real, 
+    αs::AbstractVector,
+    N_e::Int;
+    verbose::Bool=true
+)
+
+    if abs(sum(1 ./ αs) - 1.0) > 1e-4 
+        error("Reciprocals of α values do not sum to 1.")
+    end
+
+    # Sample an ensemble from the prior
+    θs_e = reduce(hcat, sample(π, n=N_e))
+
+    for α ∈ αs 
+
+        # Generate the ensemble predictions 
+        ys_e = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_e)])
+
+        # Generate a set of perturbed data vectors 
+        Γ_ϵϵ = α * σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys), length(ys))
+        ys_p = rand(Distributions.MvNormal(ys, Γ_ϵϵ), N_e)
+
+        # Compute the gain
+        θ_c = θs_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
+        Y_c = ys_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
+        Γ_θy_e = 1/(N_e-1)*θ_c*Y_c'
+        Γ_yy_e = 1/(N_e-1)*Y_c*Y_c'
+        K = Γ_θy_e * inv(Γ_yy_e + Γ_ϵϵ)
+
+        # Update each ensemble member
+        θs_e = θs_e + K*(ys_p-ys_e)
+        
     end
 
     return θs_e

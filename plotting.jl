@@ -146,7 +146,7 @@ function plot_approx_posterior(
     θ1s_s = [θ[1] for θ ∈ θs_s]
     θ2s_s = [θ[2] for θ ∈ θs_s]
 
-    g = Seaborn.JointGrid(xlim=extrema(θ1s_s), ylim=extrema(θ2s_s))
+    g = Seaborn.JointGrid(xlim=extrema(θ1s), ylim=extrema(θ2s))
 
     # Plot the sampled values
     Seaborn.kdeplot(x=θ1s_s, y=θ2s_s, ax=g.ax_joint, fill=true, cmap="coolwarm", levels=9, bw_adjust=2.0)

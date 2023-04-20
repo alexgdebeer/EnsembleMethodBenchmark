@@ -12,7 +12,7 @@ const N_e = 10_000
     LinearModel.H, 
     π, 
     LinearModel.TS_O, 
-    LinearModel.YS_O, 
+    LinearModel.YS_O[:,:]', 
     LinearModel.σ_ϵ, 
     N_e
 )

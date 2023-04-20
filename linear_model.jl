@@ -35,7 +35,7 @@ const σ_ϵ = 1.0
 const N_IS_O = 8
 const IS_O = sort(randperm(N_TS)[1:N_IS_O])
 const TS_O = TS[IS_O]
-const YS_O = (YS_T[IS_O] + rand(Normal(0.0, σ_ϵ), N_IS_O))[:,:]'
+const YS_O = (YS_T[IS_O] + rand(Normal(0.0, σ_ϵ), N_IS_O))
 
 # Define the prior
 const μ_π = [0.0, 0.0]
