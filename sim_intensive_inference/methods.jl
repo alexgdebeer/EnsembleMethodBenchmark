@@ -500,7 +500,6 @@ function run_ibis(
 end
 
 
-"""TODO: find a way to save the function evaluated at each value of θ."""
 function run_rml(
     f::Function,
     g::Function,
@@ -787,6 +786,8 @@ function run_enkf_simplified(
         # Update each ensemble member
         θs_e = θs_e + K*(ys_p-ys_e)
 
+        println(Γ_yy_e)
+
         verbose && @info "Iteration $i complete."
 
     end
@@ -813,15 +814,15 @@ function run_ensemble_smoother(
     ys_e = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_e)])
 
     # Generate a set of perturbed data vectors 
-    Γ_ϵϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys), length(ys))
-    ys_p = rand(Distributions.MvNormal(ys, Γ_ϵϵ), N_e)
+    Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys), length(ys))
+    ys_p = rand(Distributions.MvNormal(ys, Γ_ϵ), N_e)
 
     # Compute the gain
     θ_c = θs_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
     Y_c = ys_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
     Γ_θy_e = 1/(N_e-1)*θ_c*Y_c'
-    Γ_yy_e = 1/(N_e-1)*Y_c*Y_c'
-    K = Γ_θy_e * inv(Γ_yy_e + Γ_ϵϵ)
+    Γ_y_e = 1/(N_e-1)*Y_c*Y_c'
+    K = Γ_θy_e * inv(Γ_y_e + Γ_ϵ)
 
     # Update each ensemble member
     θs_e = θs_e + K*(ys_p-ys_e)
@@ -894,15 +895,12 @@ function run_batch_enrml(
     end
 
     function converged(θs_lp, θs_l, O_lp, O_l, n_it, n_cuts)
-        
-        # TODO: add parameter condition
 
+        maximum(abs.(θs_lp-θs_l)) < 1e-3 && return true
         abs((O_lp-O_l)/O_l) < 1e-2 && return true
         n_it == 10 && return true
         n_cuts == 5 && return true
-
-        println("not converged yet...")
-
+        
         return false
 
     end
