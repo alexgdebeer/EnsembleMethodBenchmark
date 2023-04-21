@@ -73,10 +73,10 @@ if RTO
     Plotting.plot_approx_posterior(
         θs,
         LVModel.AS, LVModel.BS, LVModel.POST_MARG_A, LVModel.POST_MARG_B, 
-        "RTO Posterior", 
+        "LV Model: Uncorrected RTO Posterior", 
         "$(LVModel.PLOTS_DIR)/rml_rto/rto_posterior_uncorrected.pdf"; 
         θs_t=LVModel.θS_T,
-        caption="$N uncorrected samples."
+        caption="$N unweighted samples."
     )
 
     θs_r = SimIntensiveInference.resample_population(θs, ws, N=N)
@@ -84,10 +84,10 @@ if RTO
     Plotting.plot_approx_posterior(
         θs_r,
         LVModel.AS, LVModel.BS, LVModel.POST_MARG_A, LVModel.POST_MARG_B, 
-        "Reweighted RTO Posterior", 
+        "LV Model: Corrected RTO Posterior", 
         "$(LVModel.PLOTS_DIR)/rml_rto/rto_posterior_corrected.pdf";
         θs_t=LVModel.θS_T,
-        caption="$N re-weighted samples."
+        caption="$N reweighted samples."
     )
 
     const RTO_JOINT, RTO_MARG_A, RTO_MARG_B = rto_density(
@@ -100,7 +100,8 @@ if RTO
         LVModel.AS, LVModel.BS, 
         RTO_JOINT, RTO_MARG_A, RTO_MARG_B, 
         "RTO Density",
-        "$(LVModel.PLOTS_DIR)/rml_rto/rto_density.pdf"
+        "$(LVModel.PLOTS_DIR)/rml_rto/rto_density.pdf";
+        θs_t=LVModel.θS_T,
     )
 
 end

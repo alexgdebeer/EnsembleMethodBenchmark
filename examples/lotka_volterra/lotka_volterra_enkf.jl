@@ -19,7 +19,7 @@ Plotting.plot_approx_posterior(
     LVModel.AS, LVModel.BS, 
     LVModel.POST_MARG_A, LVModel.POST_MARG_B, 
     "LV Model: Final EnKF Posterior",
-    "$(LVModel.PLOTS_DIR)/enkf/posterior.pdf";
+    "$(LVModel.PLOTS_DIR)/enkf/enkf_posterior.pdf";
     θs_t=LVModel.θS_T,
     caption="Ensemble size: $N_e."
 )

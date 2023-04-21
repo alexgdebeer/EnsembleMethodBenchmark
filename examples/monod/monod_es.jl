@@ -10,8 +10,8 @@ const N_e = 10_000
 
 # Specify whether multiple data assimilation will occur, and if so, the α 
 # values to use
-const MDA = false
-#const αs = [9.333, 7.0, 4.0, 2.0]
+const MDA = true
+# const αs = [9.333, 7.0, 4.0, 2.0]
 const αs = [57.017, 35.0, 25.0, 20.0, 18.0, 15.0, 12.0, 8.0, 5.0, 3.0]
 
 if MDA
@@ -30,7 +30,7 @@ if MDA
         eachcol(θs), 
         MONODModel.θ1S, MONODModel.θ2S, 
         MONODModel.POST_MARG_θ1, MONODModel.POST_MARG_θ2,
-        "MONOD Model: ES MDA Posterior",
+        "MONOD: ES MDA Posterior",
         "$(MONODModel.PLOTS_DIR)/es/es_mda_posterior.pdf";
         caption="Ensemble size: $N_e."
     )
@@ -50,7 +50,7 @@ else
         eachcol(θs), 
         MONODModel.θ1S, MONODModel.θ2S, 
         MONODModel.POST_MARG_θ1, MONODModel.POST_MARG_θ2,
-        "MONOD Model: ES Posterior",
+        "MONOD: ES Posterior",
         "$(MONODModel.PLOTS_DIR)/es/es_posterior.pdf";
         caption="Ensemble size: $N_e."
     )

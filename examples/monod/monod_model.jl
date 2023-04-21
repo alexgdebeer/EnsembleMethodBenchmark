@@ -35,8 +35,8 @@ const H(θs, xs) = f(θs)[XS.==xs]
 
 # Compute the true posterior on a grid
 const N_PTS = 500
-const θ1S = collect(range(0.1, 0.25, N_PTS))
-const θ2S = collect(range(0.0, 150, N_PTS))
+const θ1S = collect(range(0, 0.3, N_PTS))
+const θ2S = collect(range(-50, 200, N_PTS))
 const d(θs) = SimIntensiveInference.density(π, θs) * SimIntensiveInference.density(L, g(f(θs)))
 const POST_JOINT, POST_MARG_θ1, POST_MARG_θ2 = Plotting.density_grid(θ1S, θ2S, d)
 

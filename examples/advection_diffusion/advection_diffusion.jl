@@ -31,21 +31,21 @@ const ts = tmin:Δt:tmax
 const xs = xmin:Δx:xmax
 const ys = ymin:Δy:ymax
 
-@parameters t x y
-@variables u(..) vxu(..) vyu(..)
-@constants c=500.0 ρ=8000.0
+ModelingToolkit.@parameters t x y
+ModelingToolkit.@variables u(..) vxu(..) vyu(..)
+ModelingToolkit.@constants c=500.0 ρ=8000.0
 
-∂t = Differential(t)
-∂x = Differential(x)
-∂y = Differential(y)
-∂x² = Differential(x)^2
-∂y² = Differential(y)^2
+∂t = ModelingToolkit.Differential(t)
+∂x = ModelingToolkit.Differential(x)
+∂y = ModelingToolkit.Differential(y)
+∂x² = ModelingToolkit.Differential(x)^2
+∂y² = ModelingToolkit.Differential(y)^2
 
 k(x) = 1.0
 ModelingToolkit.@register_symbolic k(x)
 
-vx(x, y) = 2
-vy(x, y) = 2
+vx(x, y) = 2.0
+vy(x, y) = 2.0
 
 ModelingToolkit.@register_symbolic vx(x, y)
 ModelingToolkit.@register_symbolic vy(x, y)
@@ -87,7 +87,7 @@ sol = @time solve(prob, Tsit5(), saveat=Δt)
 solu = sol[u(t, x, y)]
 
 maxu = maximum(solu[1,:,:])
-eqn_latex = L"\dot{u} + v \cdot \nabla u = \Delta u \quad (v = (2, 2))"
+eqn_latex = L"\dot{u} + v \cdot \nabla u = \Delta u"
 
 anim = @animate for i = 1:length(ts)
     
@@ -98,9 +98,9 @@ anim = @animate for i = 1:length(ts)
         colorbar_title=L"u(x,y,t)"
     )
 
-    title!(eqn_latex, fontsize=10TITLE_SIZE)
-    xlabel!(L"x", fontsize=10LABEL_SIZE)
-    ylabel!(L"y", fontsize=10LABEL_SIZE)
+    title!(eqn_latex, fontsize=TITLE_SIZE)
+    xlabel!(L"x", fontsize=LABEL_SIZE)
+    ylabel!(L"y", fontsize=LABEL_SIZE)
 
 end
  

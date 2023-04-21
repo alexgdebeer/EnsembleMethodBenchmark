@@ -797,6 +797,52 @@ function run_enkf_simplified(
 end
 
 
+function run_enkf_mda(
+    H::Function,
+    π::AbstractPrior,
+    ts::AbstractVector,
+    ys::AbstractMatrix,
+    σ_ϵ::Real,
+    αs::AbstractVector,
+    N_e::Int;
+    verbose::Bool=true
+)
+
+    # Sample an ensemble of sets of parameters from the prior
+    θs_e = reduce(hcat, sample(π, n=N_e))
+
+    for (i, (t, y)) ∈ enumerate(zip(ts, eachcol(ys)))
+
+        for α ∈ αs
+
+            # Generate the ensemble predictions for the current time
+            ys_e = reduce(hcat, [H(θ, t) for θ ∈ eachcol(θs_e)])
+
+            # Generate a set of perturbed data vectors 
+            Γ_ϵϵ = α * σ_ϵ^2 * Matrix(LinearAlgebra.I, length(y), length(y))
+            ys_p = rand(Distributions.MvNormal(y, Γ_ϵϵ), N_e)
+
+            # Compute the Kalman gain
+            θ_c = θs_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
+            Y_c = ys_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
+            Γ_θy_e = 1/(N_e-1)*θ_c*Y_c'
+            Γ_yy_e = 1/(N_e-1)*Y_c*Y_c'
+            K = Γ_θy_e * inv(Γ_yy_e + Γ_ϵϵ)
+
+            # Update each ensemble member
+            θs_e = θs_e + K*(ys_p-ys_e)
+
+        end
+
+        verbose && @info "Iteration $i complete."
+
+    end
+
+    return θs_e
+
+end
+
+
 function run_ensemble_smoother(
     f::Function,
     g::Function,
@@ -900,7 +946,7 @@ function run_batch_enrml(
         abs((O_lp-O_l)/O_l) < 1e-2 && return true
         n_it == 10 && return true
         n_cuts == 5 && return true
-        
+
         return false
 
     end
@@ -954,7 +1000,7 @@ function run_batch_enrml(
 
                 verbose && @info("Step rejected. Decreasing step size.")
                 β_l *= 0.5; n_cuts += 1
-                n_cuts > 5 && break
+                n_cuts == 5 && break
 
             end
 

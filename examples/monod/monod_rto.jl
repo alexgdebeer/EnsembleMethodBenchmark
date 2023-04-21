@@ -12,7 +12,7 @@ const π = SimIntensiveInference.GaussianPrior(MONODModel.μ_π, MONODModel.Γ_�
 const L = SimIntensiveInference.GaussianLikelihood(MONODModel.YS_O, MONODModel.Γ_ϵ)
 
 # Define the number of samples to draw
-const N = 10_000
+const N = 20_000
 
 
 θ_MAP, Q, θs, ws = SimIntensiveInference.run_rto(
@@ -25,7 +25,7 @@ Plotting.plot_approx_posterior(
     MONODModel.POST_MARG_θ1, MONODModel.POST_MARG_θ2,
     "MONOD Model: Uncorrected RTO Posterior",
     "$(MONODModel.PLOTS_DIR)/rml_rto/rto_posterior_uncorrected.pdf",
-    caption="$N uncorrected samples."
+    caption="$N unweighted samples."
 )
 
 θs_r = SimIntensiveInference.resample_population(θs, ws, N=N)
@@ -36,5 +36,5 @@ Plotting.plot_approx_posterior(
     MONODModel.POST_MARG_θ1, MONODModel.POST_MARG_θ2,
     "MONOD Model: Corrected RTO Posterior",
     "$(MONODModel.PLOTS_DIR)/rml_rto/rto_posterior_corrected.pdf",
-    caption="$N re-weighted samples."
+    caption="$N reweighted samples."
 )
