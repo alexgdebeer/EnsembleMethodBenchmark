@@ -24,7 +24,7 @@ const N_TS = length(TS)
 number of timesteps."""
 function f(
     θs; 
-    y_0::AbstractVector=Y_0, 
+    u::AbstractVector=Y_0, 
     t_0::Real=T_0,
     t_1::Real=T_1
 )::Matrix
@@ -35,7 +35,7 @@ function f(
         return [a*ys[1]-ys[1]*ys[2], b*ys[1]*ys[2]-ys[2]]
     end
 
-    prob = ODEProblem(dydt, y_0, (t_0, t_1), θs)
+    prob = ODEProblem(dydt, u, (t_0, t_1), θs)
     sol = solve(prob, AutoTsit5(Rosenbrock23()), saveat=t_0:ΔT:t_1)
     return reduce(hcat, sol.u)
 

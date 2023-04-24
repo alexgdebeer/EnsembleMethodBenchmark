@@ -10,7 +10,7 @@ const N_e = 100
 
 # Specify whether multiple data assimilation will occur, and if so, the α 
 # values to use
-const MDA = false
+const MDA = true
 #const αs = [9.333, 7.0, 4.0, 2.0]
 const αs = [57.017, 35.0, 25.0, 20.0, 18.0, 15.0, 12.0, 8.0, 5.0, 3.0]
 

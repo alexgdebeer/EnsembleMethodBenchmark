@@ -627,134 +627,59 @@ function run_rto(
 end
 
 
+"""Runs the EnKF algorithm, with the parameters augmented to the states."""
 function run_enkf(
     f::Function,
-    H::Function,
-    π_u::SimIntensiveInference.AbstractPrior,
-    ts::Vector,
-    ys::Matrix,
-    θs::Vector,
-    t_1::Real,
+    π::AbstractPrior,
+    u_0::AbstractVector,
+    ts::AbstractVector,
+    ys::AbstractMatrix,
     σ_ϵ::Real,
-    N_e::Int
+    N_e::Int;
+    verbose::Bool=true
 )
 
-    # Generate an initial ensemble by sampling from the prior
-    us_e = SimIntensiveInference.sample(π_u, n=N_e)
+    prepend!(ts, 0.0)
 
-    # Define a vector that offsets the times by 1
-    ts_0 = [0.0, ts[1:(end-1)]...]
+    n_us = length(u_0)
 
-    us_e_combined = reduce(vcat, us_e)
-    us_e = reduce(hcat, us_e)
+    # Generate an initial ensemble from the prior
+    θs_e = reduce(hcat, sample(π, n=N_e))
+    us_e = repeat(u_0', N_e)'
 
-    for (t_0, t_1, y) ∈ zip(ts_0, ts, eachcol(ys))
+    for (i, (t_0, t_1, y)) ∈ enumerate(zip(ts[1:(end-1)], ts[2:end], eachcol(ys)))
 
-        # Run each ensemble member forward in time 
-        us_e = [f(θs; y_0=u, t_0=t_0, t_1=t_1)[:, 2:end] for u ∈ eachcol(us_e)]
-        us_e_combined = hcat(us_e_combined, reduce(vcat, us_e))
+        # Run each ensemble member forward in time and extract the final state 
+        us_e = reduce(hcat, [f(θ, u=u, t_0=t_0, t_1=t_1)[:, end] 
+                    for (u, θ) ∈ zip(eachcol(us_e), eachcol(θs_e))])
 
-        # Extract the forecast states and generate the predictions 
-        us_ef = reduce(hcat, [u[:, end] for u ∈ us_e])
-        ys_ef = H(us_ef, θs)
+        ys_e = copy(us_e)
 
         # Generate a set of perturbed data vectors 
-        Γ_ϵϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(y), length(y))
-        ys_p = rand(Distributions.MvNormal(y, Γ_ϵϵ), N_e)
+        Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(y), length(y))
+        ys_p = rand(Distributions.MvNormal(y, Γ_ϵ), N_e)
 
         # Compute the Kalman gain
-        U_c = us_ef * (I - ones(N_e, N_e)/N_e)
-        Y_c = ys_ef * (I - ones(N_e, N_e)/N_e)
+        U_c = vcat(us_e, θs_e) * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
+        Y_c = ys_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
         Γ_uy_e = 1/(N_e-1)*U_c*Y_c'
-        Γ_yy_e = 1/(N_e-1)*Y_c*Y_c'
-        K = Γ_uy_e * inv(Γ_yy_e + Γ_ϵϵ)
+        Γ_y_e = 1/(N_e-1)*Y_c*Y_c'
+        K = Γ_uy_e * inv(Γ_y_e + Γ_ϵ)
         
-        us_e = us_ef + K*(ys_p-ys_ef)
+        # Update the ensemble
+        uθs_e = vcat(us_e, θs_e) + K*(ys_p-ys_e)
+        us_e, θs_e = uθs_e[1:n_us, :], uθs_e[(n_us+1):end, :]
+
+        verbose && @info("Iteration $i complete.")
 
     end
 
-    # Run each ensemble member to the final timestep if necessary
-    if ts[end] < t_1
-        us_e = [f(θs; y_0=u, t_0=ts[end])[:, 2:end] for u ∈ eachcol(us_e)]
-        us_e_combined = hcat(us_e_combined, reduce(vcat, us_e))
-    end
-
-    return us_e_combined
+    return θs_e
 
 end
 
 
-"""Runs the EnKF algorithm, with the parameters augmented to the states."""
-function run_enkf_params(
-    f::Function,
-    H::Function,
-    π_u::SimIntensiveInference.AbstractPrior,
-    π_θ::SimIntensiveInference.AbstractPrior,
-    ts::Vector,
-    ys::Matrix,
-    t_1::Real,
-    σ_ϵ::Real,
-    N_e::Int
-)
-
-    # Define a vector that offsets the times by 1
-    ts_0 = [0.0, ts[1:(end-1)]...]
-
-    n_us = length(π_u.μ)
-
-    # Generate an initial sample of states and parameters from the prior
-    us_e = sample(π_u, n=N_e)
-    θs_e = sample(π_θ, n=N_e)
-
-    us_e_combined = reduce(vcat, us_e)
-    θs_e_combined = reduce(vcat, θs_e)
-
-    us_e = reduce(hcat, us_e)
-    θs_e = reduce(hcat, θs_e)
-
-    for (t_0, t_1, y) ∈ zip(ts_0, ts, eachcol(ys))
-
-        # Run each ensemble member forward in time 
-        us_e = [f(θ; y_0=u, t_0=t_0, t_1=t_1)[:, 2:end] 
-                    for (u, θ) ∈ zip(eachcol(us_e), eachcol(θs_e))]
-        
-        us_e_combined = hcat(us_e_combined, reduce(vcat, us_e))
-        θs_e_combined = hcat(θs_e_combined, reduce(vcat, θs_e))
-
-        # Extract the forecast states and generate the predictions 
-        us_ef = reduce(hcat, [u[:, end] for u ∈ us_e])
-        ys_ef = H(us_ef, θs_e)
-
-        # Generate a set of perturbed data vectors 
-        Γ_ϵϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(y), length(y))
-        ys_p = rand(Distributions.MvNormal(y, Γ_ϵϵ), N_e)
-
-        # Compute the Kalman gain
-        U_c = vcat(us_ef, θs_e) * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
-        Y_c = ys_ef * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
-        Γ_uy_e = 1/(N_e-1)*U_c*Y_c'
-        Γ_yy_e = 1/(N_e-1)*Y_c*Y_c'
-        K = Γ_uy_e * inv(Γ_yy_e + Γ_ϵϵ)
-        
-        uθs_e = vcat(us_ef, θs_e) + K*(ys_p-ys_ef)
-        us_e = uθs_e[1:n_us, :]
-        θs_e = uθs_e[(n_us+1):end, :]
-
-    end
-
-    # Run each ensemble member to the final timestep if necessary
-    if ts[end] < t_1
-        us_e = [f(θ; y_0=u, t_0=ts[end])[:, 2:end] 
-                    for (u, θ) ∈ zip(eachcol(us_e), eachcol(θs_e))]
-        us_e_combined = hcat(us_e_combined, reduce(vcat, us_e))
-    end
-
-    return us_e_combined, θs_e_combined
-
-end
-
-
-function run_enkf_simplified(
+function run_enkf_hybrid(
     H::Function,
     π::AbstractPrior,
     ts::AbstractVector,
@@ -786,8 +711,6 @@ function run_enkf_simplified(
         # Update each ensemble member
         θs_e = θs_e + K*(ys_p-ys_e)
 
-        println(Γ_yy_e)
-
         verbose && @info "Iteration $i complete."
 
     end
@@ -797,7 +720,7 @@ function run_enkf_simplified(
 end
 
 
-function run_enkf_mda(
+function run_enkf_hybrid_mda(
     H::Function,
     π::AbstractPrior,
     ts::AbstractVector,
