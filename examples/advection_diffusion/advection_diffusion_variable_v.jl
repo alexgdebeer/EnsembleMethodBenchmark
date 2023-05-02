@@ -3,7 +3,7 @@
 using DomainSets
 using MethodOfLines
 using ModelingToolkit
-using OrdinaryDiffEq
+using DifferentialEquations
 
 using Distributions
 
@@ -69,14 +69,14 @@ eqs = [
     ∂t(u(t,x,y)) + ∂x(vxu(t,x,y)) + ∂y(vyu(t,x,y)) ~ ∂x(∂x(u(t,x,y))) + ∂y(∂y(u(t,x,y)))
 ]
 
-heat_source(x) = abs(x) < 3 ? 1.0 : 0.0
+heat_source(x) = abs(x) < 3 ? -2.0 : -0.5
 ModelingToolkit.@register_symbolic heat_source(x)
 
 bcs = [
     u(tmin, x, y) ~ 0.0,
     u(t, xmin, y) ~ 0.0, 
     u(t, xmax, y) ~ 0.0,
-    u(t, x, ymin) ~ heat_source(x),
+    ∂y(u(t, x, ymin)) ~ heat_source(x),
     u(t, x, ymax) ~ 0.0
 ]
 
@@ -100,7 +100,7 @@ println("Discretising...")
 prob = @time MethodOfLines.discretize(pde_sys, discretization)
 
 println("Solving...")
-sol = @time solve(prob, Tsit5(), saveat=Δt)
+sol = @time DifferentialEquations.solve(prob, saveat=Δt)
 
 solu = sol[u(t, x, y)]
 eqn_latex = L"\dot{u} + \nabla \cdot (vu) = \Delta u"
