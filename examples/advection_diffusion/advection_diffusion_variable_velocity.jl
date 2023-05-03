@@ -40,37 +40,30 @@ ModelingToolkit.@variables u(..) vxu(..) vyu(..)
 ∂x² = ModelingToolkit.Differential(x)^2
 ∂y² = ModelingToolkit.Differential(y)^2
 
-k(x) = 1.0
-ModelingToolkit.@register_symbolic k(x)
-
+# Define variable velocity field
 function vx(x, y)
-
     v = 4*((y-ymin)/(ymax-ymin) - 0.5)
     return x > 0 ? v : -v
-
 end
 
 function vy(x, y)
-
-    if x > 0
-        return -4(x/xmax-0.5)
-    else 
-        return -4(x/xmin-0.5)
-    end
-
+    return x > 0 ? -4(x/xmax-0.5) : -4(x/xmin-0.5)
 end
+
+k(x) = 1.0
+heat_source(x) = abs(x) < 3 ? -2.0 : -0.5
 
 ModelingToolkit.@register_symbolic vx(x, y)
 ModelingToolkit.@register_symbolic vy(x, y)
+
+ModelingToolkit.@register_symbolic heat_source(x)
+ModelingToolkit.@register_symbolic k(x)
 
 eqs = [
     vxu(t,x,y) ~ vx(x,y)*u(t,x,y),
     vyu(t,x,y) ~ vy(x,y)*u(t,x,y),
     ∂t(u(t,x,y)) + ∂x(vxu(t,x,y)) + ∂y(vyu(t,x,y)) ~ ∂x(∂x(u(t,x,y))) + ∂y(∂y(u(t,x,y)))
 ]
-
-heat_source(x) = abs(x) < 3 ? -2.0 : -0.5
-ModelingToolkit.@register_symbolic heat_source(x)
 
 bcs = [
     u(tmin, x, y) ~ 0.0,

@@ -31,7 +31,7 @@ vs = 1.0.*[vs -vs]
 Plots.quiver(
     vec(xs), vec(ys),
     quiver=(vec(us), vec(vs)),
-    aspect_ratio=:equal, arrow = :closed
+    aspect_ratio=:equal, arrow=:closed
 )
 
 Plots.xlims!(xmin, xmax)
