@@ -679,7 +679,7 @@ function run_enkf(
 end
 
 
-function run_enkf_hybrid(
+function run_hi_enkf(
     H::Function,
     π::AbstractPrior,
     ts::AbstractVector,
@@ -720,7 +720,7 @@ function run_enkf_hybrid(
 end
 
 
-function run_enkf_hybrid_mda(
+function run_hi_enkf_mda(
     H::Function,
     π::AbstractPrior,
     ts::AbstractVector,
