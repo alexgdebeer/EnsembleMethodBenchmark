@@ -6,7 +6,7 @@ using LinearAlgebra
 using Random
 using Statistics
 
-include("lotka_volterra_model.jl")
+include("lv_model.jl")
 include("../../sim_intensive_inference/sim_intensive_inference.jl")
 
 const RUN_SMC = false

@@ -1,6 +1,6 @@
 """Runs the ES on the Lotka-Volterra model."""
 
-include("lotka_volterra_model.jl")
+include("lv_model.jl")
 include("../../plotting.jl")
 include("../../sim_intensive_inference/sim_intensive_inference.jl")
 
