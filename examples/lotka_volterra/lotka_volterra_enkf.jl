@@ -1,4 +1,4 @@
-"""Runs the EnKF for parameter estimation on the LV model."""
+"""Runs the EnKF on the LV model."""
 
 include("lotka_volterra_model.jl")
 include("../../plotting.jl")
@@ -20,7 +20,7 @@ Plotting.plot_approx_posterior(
     LVModel.AS, LVModel.BS, 
     LVModel.POST_MARG_A, LVModel.POST_MARG_B,
     "LV: Final EnKF Posterior",
-    "$(LVModel.PLOTS_DIR)/enkf/true_enkf_posterior.pdf";
+    "$(LVModel.PLOTS_DIR)/enkf/enkf_posterior.pdf";
     θs_t=LVModel.θS_T,
     caption="Ensemble size: $N_e."
 )
