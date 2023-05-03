@@ -66,6 +66,25 @@ function plot_lv_system(
 end
 
 
+"""Plots the observations used for the MONOD model."""
+function plot_monod_obs(
+    xs::AbstractVector,
+    ys_o::AbstractVector,
+    fname::AbstractString
+)
+
+    PyPlot.scatter(xs, ys_o)
+    
+    PyPlot.title("MONOD Model Observations", fontsize=TITLE_SIZE)
+    PyPlot.xlabel(L"x", fontsize=LABEL_SIZE)
+    PyPlot.ylabel(L"y", fontsize=LABEL_SIZE)
+
+    PyPlot.savefig(fname)
+    PyPlot.clf()
+
+end
+
+
 """Plots the outputs of the linear model run with the true values of the 
 parameters, and the noisy data."""
 function plot_linear_model(

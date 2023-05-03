@@ -42,6 +42,8 @@ const POST_JOINT, POST_MARG_θ1, POST_MARG_θ2 = Plotting.density_grid(θ1S, θ2
 
 if abspath(PROGRAM_FILE) == @__FILE__
 
+    Plotting.plot_monod_obs(XS, YS_O, "$(PLOTS_DIR)/observations.pdf")
+
     Plotting.plot_density_grid(
         θ1S, θ2S, POST_JOINT, POST_MARG_θ1, POST_MARG_θ2, 
         "Posterior Density",
