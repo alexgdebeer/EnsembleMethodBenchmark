@@ -343,6 +343,45 @@ function plot_autocorrelations(θs, ks, title, save_name)
 end
 
 
+function plot_lv_posterior_predictions(
+    ts::AbstractVector,
+    ys::AbstractMatrix, 
+    ts_o::AbstractVector,
+    ys_o::AbstractMatrix,
+    title::AbstractString,
+    fname::AbstractString
+)::Nothing
+
+    # Extract the indices corresponding to the predator / prey predictions
+    ns = vec(1:size(ys, 1))
+    is_y1 = ns[ns .% 2 .== 1]
+    is_y2 = ns[ns .% 2 .== 0]
+
+    fig, ax = PyPlot.subplots(1, 2, figsize=(8, 4))
+    
+    # Plot the observations
+    ax[1].scatter(ts_o, ys_o[1, :], c="k", zorder=2)
+    ax[2].scatter(ts_o, ys_o[2, :], c="k", zorder=2)
+    
+    # Plot the model outputs
+    ax[1].plot(ts, ys[is_y1, :]', c="gray", alpha=0.8, zorder=1)
+    ax[2].plot(ts, ys[is_y2, :]', c="gray", alpha=0.8, zorder=1)
+
+    ax[1].set_ylim(-0.1, 5)
+    ax[2].set_ylim(-0.1, 5)
+
+    PyPlot.suptitle(title, fontsize=TITLE_SIZE)
+    ax[1].set_title(L"y_{1}", fontsize=LABEL_SIZE)
+    ax[2].set_title(L"y_{2}", fontsize=LABEL_SIZE) 
+
+    PyPlot.tight_layout()
+    PyPlot.savefig(fname)
+
+    return nothing
+
+end
+
+
 """Plots the evolution of the states over time as found using the EnKF."""
 function plot_enkf_states(us_e, N_e, ts, ys_t, ts_o, ys_o, fname)
 
