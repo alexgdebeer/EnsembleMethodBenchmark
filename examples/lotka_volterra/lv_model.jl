@@ -24,7 +24,7 @@ const N_TS = length(TS)
 number of timesteps."""
 function f(
     θs; 
-    u::AbstractVector=Y_0, 
+    u_0::AbstractVector=Y_0, 
     t_0::Real=T_0,
     t_1::Real=T_1
 )::Matrix
@@ -35,17 +35,23 @@ function f(
         return [a*ys[1]-ys[1]*ys[2], b*ys[1]*ys[2]-ys[2]]
     end
 
-    prob = ODEProblem(dydt, u, (t_0, t_1), θs)
+    prob = ODEProblem(dydt, u_0, (t_0, t_1), θs)
     sol = solve(prob, AutoTsit5(Rosenbrock23()), saveat=t_0:ΔT:t_1)
     return reduce(hcat, sol.u)
 
 end
 
-# Define a mapping from the complete set of model outputs to the observations
-const g(ys::AbstractMatrix) = reduce(vcat, ys[:, IS_O])
 
-# Define a function to return the model outputs at a given time
-const H(θ, t) = f(θ; t_1=t)[:, end]
+"""Returns a vector of the model outputs at a specified set of time indices."""
+function h(ys::AbstractMatrix; is::AbstractVector=IS_O)::AbstractVector
+    return reduce(vcat, ys[:, is])
+end
+
+
+"""Maps from the parameters / states to the modelled observations."""
+function b(θ::AbstractVector, u::AbstractVector)::AbstractVector
+    return u
+end
 
 # Define true model initial conditions, parameters and outputs
 const Y_0 = [1.0, 0.5]
@@ -75,7 +81,7 @@ const L = SimIntensiveInference.GaussianLikelihood(μ_L, Γ_ϵ)
 const N_PTS = 200
 const AS = collect(range(0.5, 1.5, N_PTS))
 const BS = collect(range(0.5, 1.5, N_PTS))
-const d(θs) = SimIntensiveInference.density(π, θs) * SimIntensiveInference.density(L, g(f(θs)))
+const d(θs) = SimIntensiveInference.density(π, θs) * SimIntensiveInference.density(L, h(f(θs)))
 const POST_JOINT, POST_MARG_A, POST_MARG_B = Plotting.density_grid(AS, BS, d)
 
 if abspath(PROGRAM_FILE) == @__FILE__
