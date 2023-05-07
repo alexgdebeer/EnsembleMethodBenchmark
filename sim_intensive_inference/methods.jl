@@ -680,22 +680,34 @@ end
 
 
 function run_hi_enkf(
-    H::Function,
+    a::Function,
+    b::Function,
     π::AbstractPrior,
     ts::AbstractVector,
     ys::AbstractMatrix,
     σ_ϵ::Real,
-    N_e::Int;
+    N_e::Int,
+    N_u::Int;
     verbose::Bool=true
 )
+
+    # Initialise a matrix to store the combined sets of states generated
+    us_e_c = Matrix(undef, N_e*N_u, 0)
 
     # Sample an ensemble of sets of parameters from the prior
     θs_e = reduce(hcat, sample(π, n=N_e))
 
     for (i, (t, y)) ∈ enumerate(zip(ts, eachcol(ys)))
 
-        # Generate the ensemble predictions for the current time
-        ys_e = reduce(hcat, [H(θ, t) for θ ∈ eachcol(θs_e)])
+        # Run the state model (from the beginning) for each ensemble member
+        us_e_l = [a(θ, t_1=t) for θ ∈ eachcol(θs_e)]
+        
+        # Update combined state vectors
+        us_e_c = hcat(us_e_c, reduce(vcat, us_e_l)[:, size(us_e_c, 2)+1:end])
+
+        # Form matrices containing the final states and modelled observations
+        us_e = reduce(hcat, [u[:, end] for u ∈ us_e_l])
+        ys_e = reduce(hcat, [b(θ, u) for (θ, u) ∈ zip(eachcol(θs_e), eachcol(us_e))])
 
         # Generate a set of perturbed data vectors 
         Γ_ϵϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(y), length(y))
@@ -715,7 +727,11 @@ function run_hi_enkf(
 
     end
 
-    return θs_e
+    # Run everything to the end with the final set of parameters
+    us_e_l = [a(θ) for θ ∈ eachcol(θs_e)]
+    us_e_c = hcat(us_e_c, reduce(vcat, us_e_l)[:, size(us_e_c, 2)+1:end])
+
+    return θs_e, us_e_c
 
 end
 
