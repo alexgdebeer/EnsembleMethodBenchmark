@@ -43,7 +43,7 @@ end
 
 
 """Returns a vector of the model outputs at a specified set of time indices."""
-function h(ys::AbstractMatrix; is::AbstractVector=IS_O)::AbstractVector
+function g(ys::AbstractMatrix; is::AbstractVector=IS_O)::AbstractVector
     return reduce(vcat, ys[:, is])
 end
 
@@ -81,7 +81,7 @@ const L = SimIntensiveInference.GaussianLikelihood(μ_L, Γ_ϵ)
 const N_PTS = 200
 const AS = collect(range(0.5, 1.5, N_PTS))
 const BS = collect(range(0.5, 1.5, N_PTS))
-const d(θs) = SimIntensiveInference.density(π, θs) * SimIntensiveInference.density(L, h(f(θs)))
+const d(θs) = SimIntensiveInference.density(π, θs) * SimIntensiveInference.density(L, g(f(θs)))
 const POST_JOINT, POST_MARG_A, POST_MARG_B = Plotting.density_grid(AS, BS, d)
 
 if abspath(PROGRAM_FILE) == @__FILE__
