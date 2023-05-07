@@ -798,7 +798,7 @@ function run_hi_enkf_mda(
 end
 
 
-function run_ensemble_smoother(
+function run_es(
     f::Function,
     g::Function,
     π::AbstractPrior,
@@ -812,8 +812,10 @@ function run_ensemble_smoother(
     θs_e = reduce(hcat, sample(π, n=N_e))
     θs_e = reduce(hcat, sample(π, n=N_e))
 
-    # Generate the ensemble predictions
-    ys_e = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_e)])
+    # Run the forward model for each ensemble member and generate the ensemble predictions 
+    ys_e_l = [f(θ) for θ ∈ eachcol(θs_e)]
+    ys_e_c = reduce(vcat, ys_e_l)
+    ys_e = reduce(hcat, [g(y) for y ∈ ys_e_l])
 
     # Generate a set of perturbed data vectors 
     Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys), length(ys))
@@ -829,7 +831,7 @@ function run_ensemble_smoother(
     # Update each ensemble member
     θs_e = θs_e + K*(ys_p-ys_e)
 
-    return θs_e
+    return θs_e, ys_e_c
 
 end
 
