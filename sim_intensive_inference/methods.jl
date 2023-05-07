@@ -629,7 +629,8 @@ end
 
 """Runs the EnKF algorithm, with the parameters augmented to the states."""
 function run_enkf(
-    f::Function,
+    a::Function,
+    b::Function,
     π::AbstractPrior,
     u_0::AbstractVector,
     ts::AbstractVector,
@@ -641,7 +642,10 @@ function run_enkf(
 
     prepend!(ts, 0.0)
 
-    n_us = length(u_0)
+    N_u = length(u_0)
+
+    # Initialise a matrix to store the combined sets of states generated
+    us_e_c = Matrix(undef, N_e*N_u, 0)
 
     # Generate an initial ensemble from the prior
     θs_e = reduce(hcat, sample(π, n=N_e))
@@ -649,11 +653,16 @@ function run_enkf(
 
     for (i, (t_0, t_1, y)) ∈ enumerate(zip(ts[1:(end-1)], ts[2:end], eachcol(ys)))
 
-        # Run each ensemble member forward in time and extract the final state 
-        us_e = reduce(hcat, [f(θ, u=u, t_0=t_0, t_1=t_1)[:, end] 
-                    for (u, θ) ∈ zip(eachcol(us_e), eachcol(θs_e))])
+        # Run each ensemble member forward to the current observation time 
+        us_e_l = [a(θ, u_0=u, t_0=t_0, t_1=t_1) 
+            for (θ, u) ∈ zip(eachcol(θs_e), eachcol(us_e))]
 
-        ys_e = copy(us_e)
+        # Update combined state vectors
+        us_e_c = hcat(us_e_c[:, 1:end-1], reduce(vcat, us_e_l))
+
+        # Form matrices containing the final states and modelled observations
+        us_e = reduce(hcat, [u[:, end] for u ∈ us_e_l])
+        ys_e = reduce(hcat, [b(θ, u) for (θ, u) ∈ zip(eachcol(θs_e), eachcol(us_e))])
 
         # Generate a set of perturbed data vectors 
         Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(y), length(y))
@@ -668,13 +677,20 @@ function run_enkf(
         
         # Update the ensemble
         uθs_e = vcat(us_e, θs_e) + K*(ys_p-ys_e)
-        us_e, θs_e = uθs_e[1:n_us, :], uθs_e[(n_us+1):end, :]
+        us_e, θs_e = uθs_e[1:N_u, :], uθs_e[(N_u+1):end, :]
 
         verbose && @info("Iteration $i complete.")
 
     end
 
-    return θs_e
+    # Run each ensemble member to the end of the time period of interest 
+    us_e_l = [a(θ, u_0=u, t_0=ts[end]) 
+        for (θ, u) ∈ zip(eachcol(θs_e), eachcol(us_e))]
+
+    # Update combined state vectors
+    us_e_c = hcat(us_e_c[:, 1:end-1], reduce(vcat, us_e_l))
+
+    return θs_e, us_e_c
 
 end
 

@@ -48,10 +48,10 @@ else
         caption="Ensemble size: $N_e."
     )
 
-    Plotting.plot_lv_posterior_predictions(
-        LVModel.TS, us, LVModel.TS_O, LVModel.YS_O,
-        "LV: HI-EnKF Posterior Predictions",
-        "$(LVModel.PLOTS_DIR)/enkf/hi_enkf_posterior_predictions.pdf"
+    Plotting.plot_lv_state_evolution(
+        us, LVModel.TS, LVModel.YS_T, LVModel.TS_O, LVModel.YS_O, 
+        "LV: HI-EnKF State Evolution",
+        "$(LVModel.PLOTS_DIR)/enkf/hi_enkf_state_evolution.pdf"
     )
 
 end
