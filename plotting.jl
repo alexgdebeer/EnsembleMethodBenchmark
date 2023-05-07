@@ -354,18 +354,29 @@ function plot_lv_posterior_predictions(
 
     # Extract the indices corresponding to the predator / prey predictions
     ns = vec(1:size(ys, 1))
+
     is_y1 = ns[ns .% 2 .== 1]
     is_y2 = ns[ns .% 2 .== 0]
+
+    ys_y1 = ys[is_y1, :]
+    ys_y2 = ys[is_y2, :]
+
+    qs_y1 = reduce(hcat, [quantile(c, [0.025, 0.975]) for c ∈ eachcol(ys_y1)])
+    qs_y2 = reduce(hcat, [quantile(c, [0.025, 0.975]) for c ∈ eachcol(ys_y2)])
 
     fig, ax = PyPlot.subplots(1, 2, figsize=(8, 4))
     
     # Plot the observations
-    ax[1].scatter(ts_o, ys_o[1, :], c="k", zorder=2)
-    ax[2].scatter(ts_o, ys_o[2, :], c="k", zorder=2)
+    ax[1].scatter(ts_o, ys_o[1, :], c="k", zorder=3)
+    ax[2].scatter(ts_o, ys_o[2, :], c="k", zorder=3)
     
     # Plot the model outputs
-    ax[1].plot(ts, ys[is_y1, :]', c="gray", alpha=0.8, zorder=1)
-    ax[2].plot(ts, ys[is_y2, :]', c="gray", alpha=0.8, zorder=1)
+    ax[1].plot(ts, ys_y1', c="gray", alpha=0.8, zorder=1)
+    ax[2].plot(ts, ys_y2', c="gray", alpha=0.8, zorder=1)
+
+    # Plot the central 95% of each set of outputs
+    ax[1].plot(ts, qs_y1', c="red", zorder=2)
+    ax[2].plot(ts, qs_y2', c="red", zorder=2)
 
     ax[1].set_ylim(-0.1, 5)
     ax[2].set_ylim(-0.1, 5)
