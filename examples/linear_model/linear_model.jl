@@ -19,24 +19,24 @@ const ΔT = 0.1
 const TS = T_0:ΔT:T_1
 const N_TS = length(TS)
 
+"""Mapping between parameters and all modelled outputs."""
 function f(θs)::AbstractVector
     return θs[1] .+ θs[2]*TS
 end
 
+"""Mapping that extracts modelled outputs corresponding to observations."""
 function g(ys::AbstractVector)::AbstractVector 
     return ys[IS_O]
 end
 
-function a(
-    θ;
-    t_0::Real=T_0, 
-    t_1::Real=T_1
-)::AbstractMatrix
+"""Mapping that extrapolates the line forward to a new state."""
+function a(θ; t_0::Real=T_0, t_1::Real=T_1)::AbstractMatrix
     return (θ[1] .+ (θ[2] .* vec(0.0:ΔT:(t_1-t_0))))[:, :]'
 end
 
+"""Mapping that extracts the modelled observations corresponding to a given state."""
 function b(θs::AbstractVector, us::AbstractVector)::AbstractVector 
-    return us[:, end]
+    return us
 end
 
 # Define true model parameters and outputs
@@ -48,7 +48,7 @@ const σ_ϵ = 1.0
 const N_IS_O = 8
 const IS_O = sort(randperm(N_TS)[1:N_IS_O])
 const TS_O = TS[IS_O]
-const YS_O = (YS_T[IS_O] + rand(Normal(0.0, σ_ϵ), N_IS_O))
+const YS_O = YS_T[IS_O] + rand(Normal(0.0, σ_ϵ), N_IS_O)
 
 # Define the prior
 const μ_π = [0.0, 0.0]
