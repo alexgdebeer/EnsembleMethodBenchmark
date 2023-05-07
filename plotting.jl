@@ -343,9 +343,10 @@ function plot_autocorrelations(θs, ks, title, save_name)
 end
 
 
-function plot_lv_posterior_predictions(
+function plot_lv_state_evolution(
+    ys::AbstractMatrix,
     ts::AbstractVector,
-    ys::AbstractMatrix, 
+    ys_t::AbstractMatrix, 
     ts_o::AbstractVector,
     ys_o::AbstractMatrix,
     title::AbstractString,
@@ -367,8 +368,12 @@ function plot_lv_posterior_predictions(
     fig, ax = PyPlot.subplots(1, 2, figsize=(8, 4))
     
     # Plot the observations
-    ax[1].scatter(ts_o, ys_o[1, :], c="k", zorder=3)
-    ax[2].scatter(ts_o, ys_o[2, :], c="k", zorder=3)
+    ax[1].scatter(ts_o, ys_o[1, :], c="k", marker="x", zorder=4)
+    ax[2].scatter(ts_o, ys_o[2, :], c="k", marker="x", zorder=4)
+
+    # Plot the true states 
+    ax[1].plot(ts, ys_t[1, :], c="k", ls="--", zorder=3)
+    ax[2].plot(ts, ys_t[2, :], c="k", ls="--", zorder=3)
     
     # Plot the model outputs
     ax[1].plot(ts, ys_y1', c="gray", alpha=0.8, zorder=1)
@@ -382,8 +387,10 @@ function plot_lv_posterior_predictions(
     ax[2].set_ylim(-0.1, 5)
 
     PyPlot.suptitle(title, fontsize=TITLE_SIZE)
-    ax[1].set_title(L"y_{1}", fontsize=LABEL_SIZE)
-    ax[2].set_title(L"y_{2}", fontsize=LABEL_SIZE) 
+    ax[1].set_xlabel(L"t", fontsize=LABEL_SIZE)
+    ax[2].set_xlabel(L"t", fontsize=LABEL_SIZE)
+    ax[1].set_ylabel(L"y_{1}", fontsize=LABEL_SIZE)
+    ax[2].set_ylabel(L"y_{2}", fontsize=LABEL_SIZE) 
 
     PyPlot.tight_layout()
     PyPlot.savefig(fname)
