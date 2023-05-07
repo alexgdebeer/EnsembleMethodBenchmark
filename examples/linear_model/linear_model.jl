@@ -19,16 +19,25 @@ const ΔT = 0.1
 const TS = T_0:ΔT:T_1
 const N_TS = length(TS)
 
-# Define the forward model and the mapping from its outputs to the observations
-# const f(θs; u=θs[1], t_0=T_0, t_1=T_1) = ((u.-t_0*θs[2]).+θs[2]*TS[t_0.≤TS.≤t_1])[:,:]'
+function f(θs)::AbstractVector
+    return θs[1] .+ θs[2]*TS
+end
 
-const f(θs; t_1=T_1) = (θs[1] .+ θs[2]*TS[TS.≤t_1])[:,:]'
-const g(ys) = ys[IS_O]
+function g(ys::AbstractVector)::AbstractVector 
+    return ys[IS_O]
+end
 
-const f(u, θ, t_0, t_1) = u .+ (θ * vec(0.0:ΔT:(t_1-t_0)))
+function a(
+    θ;
+    t_0::Real=T_0, 
+    t_1::Real=T_1
+)::AbstractMatrix
+    return (θ[1] .+ (θ[2] .* vec(0.0:ΔT:(t_1-t_0))))[:, :]'
+end
 
-# Define a function to output the results of the model at a given time 
-const H(θs, t) = f(θs, t_1=t)[end]
+function b(θs::AbstractVector, us::AbstractVector)::AbstractVector 
+    return us[:, end]
+end
 
 # Define true model parameters and outputs
 const θS_T = [1.0, 1.0]
