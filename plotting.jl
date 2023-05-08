@@ -403,7 +403,7 @@ end
 function plot_lm_state_evolution(
     ys::AbstractMatrix,
     ts::AbstractVector,
-    ys_t::AbstractVector, 
+    ys_t::AbstractMatrix, 
     ts_o::AbstractVector,
     ys_o::AbstractVector,
     title::AbstractString,
@@ -415,7 +415,7 @@ function plot_lm_state_evolution(
 
     # Plot the observations and true states
     PyPlot.scatter(ts_o, ys_o, c="k", marker="x", zorder=4)
-    PyPlot.plot(ts, ys_t, c="k", ls="--", zorder=3)
+    PyPlot.plot(ts, ys_t[1, :], c="k", ls="--", zorder=3)
 
     # Plot the modelled states
     PyPlot.plot(ts, ys', c="gray", alpha=0.8, zorder=1)
