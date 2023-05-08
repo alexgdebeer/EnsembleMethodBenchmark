@@ -20,13 +20,13 @@ const TS = T_0:ΔT:T_1
 const N_TS = length(TS)
 
 """Mapping between parameters and all modelled outputs."""
-function f(θs)::AbstractVector
-    return θs[1] .+ θs[2]*TS
+function f(θs)::AbstractMatrix
+    return (θs[1] .+ θs[2]*TS)[:, :]'
 end
 
 """Mapping that extracts modelled outputs corresponding to observations."""
-function g(ys::AbstractVector)::AbstractVector 
-    return ys[IS_O]
+function g(ys::AbstractMatrix)::AbstractVector 
+    return vec(ys[:, IS_O])
 end
 
 """Mapping that extrapolates the line forward to a new state."""

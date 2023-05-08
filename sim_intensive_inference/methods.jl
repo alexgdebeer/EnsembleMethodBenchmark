@@ -810,12 +810,9 @@ function run_es(
 
     # Sample an ensemble from the prior
     θs_e = reduce(hcat, sample(π, n=N_e))
-    θs_e = reduce(hcat, sample(π, n=N_e))
 
-    # Run the forward model for each ensemble member and generate the ensemble predictions 
-    ys_e_l = [f(θ) for θ ∈ eachcol(θs_e)]
-    ys_e_c = reduce(vcat, ys_e_l)
-    ys_e = reduce(hcat, [g(y) for y ∈ ys_e_l])
+    # Generate the ensemble predictions
+    ys_e = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_e)])
 
     # Generate a set of perturbed data vectors 
     Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys), length(ys))
@@ -831,7 +828,7 @@ function run_es(
     # Update each ensemble member
     θs_e = θs_e + K*(ys_p-ys_e)
 
-    return θs_e, ys_e_c
+    return θs_e
 
 end
 
@@ -854,15 +851,10 @@ function run_es_mda(
     # Sample an ensemble from the prior
     θs_e = reduce(hcat, sample(π, n=N_e))
 
-    ys_e_l = []
-
     for (i, α) ∈ enumerate(αs)
 
-        # Run the forward model for each ensemble member 
-        ys_e_l = [f(θ) for θ ∈ eachcol(θs_e)]
-
         # Generate the ensemble predictions 
-        ys_e = reduce(hcat, [g(y) for y ∈ ys_e_l])
+        ys_e = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_e)])
 
         # Generate a set of perturbed data vectors 
         Γ_ϵ = α * σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys), length(ys))
@@ -882,10 +874,7 @@ function run_es_mda(
         
     end
 
-    # Generate a matrix of the final ensemble of outputs
-    ys_e_c = reduce(vcat, ys_e_l)
-
-    return θs_e, ys_e_c
+    return θs_e
 
 end
 

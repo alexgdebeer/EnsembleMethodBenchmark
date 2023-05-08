@@ -10,17 +10,19 @@ const N_e = 100
 
 # Specify whether multiple data assimilation will occur, and if so, the α 
 # values to use
-const MDA = false
+const MDA = true
 #const αs = [9.333, 7.0, 4.0, 2.0]
 const αs = [57.017, 35.0, 25.0, 20.0, 18.0, 15.0, 12.0, 8.0, 5.0, 3.0]
 
 if MDA
 
-    θs, ys = SimIntensiveInference.run_es_mda(
+    θs = SimIntensiveInference.run_es_mda(
         LVModel.f, LVModel.g, π,  
         reduce(vcat, LVModel.YS_O), 
         LVModel.σ_ϵ, αs, N_e
     )
+
+    ys = reduce(vcat, [LVModel.f(θ) for θ ∈ eachcol(θs)])
 
     Plotting.plot_lv_state_evolution(
         ys, LVModel.TS, LVModel.YS_T, LVModel.TS_O, LVModel.YS_O, 
@@ -40,11 +42,13 @@ if MDA
 
 else
 
-    θs, ys = SimIntensiveInference.run_es(
+    θs = SimIntensiveInference.run_es(
         LVModel.f, LVModel.g, π,  
         reduce(vcat, LVModel.YS_O), 
         LVModel.σ_ϵ, N_e
     )
+
+    ys = reduce(vcat, [LVModel.f(θ) for θ ∈ eachcol(θs)])
 
     Plotting.plot_lv_state_evolution(
         ys, LVModel.TS, LVModel.YS_T, LVModel.TS_O, LVModel.YS_O, 
