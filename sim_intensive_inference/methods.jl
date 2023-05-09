@@ -880,7 +880,7 @@ end
 
 
 """Runs the batch ensemble randomised maximum likelihood algorithm as presented
-in Emerick and Reynolds (2012)."""
+in Emerick and Reynolds (2013)."""
 function run_batch_enrml(
     f::Function,
     g::Function,
@@ -926,7 +926,7 @@ function run_batch_enrml(
     
     n_it = 0; n_cuts = 0
     θs_l = copy(θs_f); θs_lp = copy(θs_f); 
-    ys_l = copy(ys_f); ys_lp = copy(ys_f); 
+    ys_l = copy(ys_f); ys_lp = copy(ys_f); ys_lp_l = []
     O_lp = O_l
     β_l = β_0
 
@@ -938,12 +938,17 @@ function run_batch_enrml(
         G_l = Y_c*LinearAlgebra.pinv(θ_c)
 
         while true
-            
+
             # Update the ensemble and run it forward in time
             θs_lp = β_l*θs_f + (1-β_l)*θs_l - 
                 β_l*Γ_θf*G_l'*inv(G_l*Γ_θf*G_l'+Γ_ϵ)*(ys_l-ys_p-G_l*(θs_l-θs_f))
 
-            ys_lp = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_lp)])
+            # println(θs_lp)
+            ys_lp_l = [f(θ) for θ ∈ eachcol(θs_lp)]
+            ys_lp = reduce(hcat, [g(y) for y ∈ ys_lp_l])
+
+            # display(Statistics.maximum(ys_lp, dims=2))
+            # display(Statistics.minimum(ys_lp, dims=2))
 
             O_lp = mean_misfit(ys_lp, ys_p)
 
@@ -953,7 +958,7 @@ function run_batch_enrml(
                 β_l = min(2β_l, β_0); n_cuts = 0;
                 n_it += 1; break
 
-            else 
+            else
 
                 verbose && @info("Step rejected. Decreasing step size.")
                 β_l *= 0.5; n_cuts += 1
@@ -970,6 +975,6 @@ function run_batch_enrml(
 
     end
 
-    return θs_l
+    return θs_l, reduce(vcat, ys_lp_l)
 
 end
