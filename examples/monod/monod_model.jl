@@ -3,16 +3,20 @@
 module MONODModel
 
 using LinearAlgebra
+using Random; Random.seed!(5)
 
 include("../../plotting.jl")
 include("../../sim_intensive_inference/sim_intensive_inference.jl")
 
 const PLOTS_DIR = "plots/monod"
 
+const XS = 1:400
+
 # Define the factor vector (x) and observations (y)
-const XS = [28, 55, 83, 110, 138, 225, 375]
+const XS_O = [28, 55, 83, 110, 138, 225, 375]
 const YS_O = [0.053, 0.060, 0.112, 0.105, 0.099, 0.122, 0.125]
-const N_IS = length(YS_O)
+const IS_O = indexin(XS_O, XS)
+const N_IS = length(IS_O)
 
 # Define the prior 
 const μ_π = [0.15, 50.0]
@@ -25,10 +29,9 @@ const σ_ϵ = 0.012
 const Γ_ϵ = σ_ϵ^2 * Matrix(I, N_IS, N_IS)
 const L = SimIntensiveInference.GaussianLikelihood(MONODModel.YS_O, MONODModel.Γ_ϵ)
 
-# Define the model, and the mapping between the outputs and observations (in 
-# this case, they are the same)
-const f(θs) = (θs[1]*XS) ./ (θs[2].+XS)
-const g(ys) = ys 
+# Define the model, and the mapping between the outputs and observations
+const f(θs) = ((θs[1]*XS) ./ (θs[2].+XS))[:,:]'
+const g(ys) = vec(ys[:, IS_O])
 
 # Define a function that returns the modelled y value corresponding to a given x 
 const H(θs, xs) = f(θs)[XS.==xs]
