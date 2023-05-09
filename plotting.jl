@@ -343,9 +343,9 @@ function plot_autocorrelations(θs, ks, title, save_name)
 end
 
 
-function plot_lv_state_evolution(
-    ys::AbstractMatrix,
+function plot_lv_posterior_predictions(
     ts::AbstractVector,
+    ys::AbstractMatrix,
     ys_t::AbstractMatrix, 
     ts_o::AbstractVector,
     ys_o::AbstractMatrix,
@@ -400,7 +400,7 @@ function plot_lv_state_evolution(
 end
 
 
-function plot_monod_state_evolution(
+function plot_monod_posterior_predictions(
     ts::AbstractVector,
     ys::AbstractMatrix,
     ts_o::AbstractVector,
@@ -425,15 +425,36 @@ function plot_monod_state_evolution(
 
     PyPlot.tight_layout()
     PyPlot.savefig(fname)
+    PyPlot.clf()
 
     return nothing
 
 end
 
 
-function plot_lm_state_evolution(
-    ys::AbstractMatrix,
+"""Debugging check."""
+function plot_monod_states(ys, title, fname)
+
+    # Extract the central 95% of the set of modelled outputs
+    qs = reduce(hcat, [quantile(c, [0.025, 0.975]) for c ∈ eachcol(ys)])
+
+    PyPlot.plot(ys', c="gray", alpha=0.8, zorder=1)
+    PyPlot.plot(qs', c="red", zorder=2)
+
+    PyPlot.title(title, fontsize=TITLE_SIZE)
+    PyPlot.xlabel(L"x", fontsize=LABEL_SIZE)
+    PyPlot.ylabel(L"y", fontsize=LABEL_SIZE)
+
+    PyPlot.tight_layout()
+    PyPlot.savefig(fname)
+    PyPlot.clf()
+
+end
+
+
+function plot_lm_posterior_predictions(
     ts::AbstractVector,
+    ys::AbstractMatrix,
     ys_t::AbstractMatrix, 
     ts_o::AbstractVector,
     ys_o::AbstractVector,
