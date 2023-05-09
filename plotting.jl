@@ -400,6 +400,37 @@ function plot_lv_state_evolution(
 end
 
 
+function plot_monod_state_evolution(
+    ts::AbstractVector,
+    ys::AbstractMatrix,
+    ts_o::AbstractVector,
+    ys_o::AbstractVector,
+    title::AbstractString,
+    fname::AbstractString
+)::Nothing 
+
+    # Extract the central 95% of the set of modelled outputs
+    qs = reduce(hcat, [quantile(c, [0.025, 0.975]) for c ∈ eachcol(ys)])
+
+    # Plot the observations and true states
+    PyPlot.scatter(ts_o, ys_o, c="k", marker="x", zorder=3)
+
+    # Plot the modelled states
+    PyPlot.plot(ts, ys', c="gray", alpha=0.8, zorder=1)
+    PyPlot.plot(ts, qs', c="red", zorder=2)
+
+    PyPlot.title(title, fontsize=TITLE_SIZE)
+    PyPlot.xlabel(L"x", fontsize=LABEL_SIZE)
+    PyPlot.ylabel(L"y", fontsize=LABEL_SIZE)
+
+    PyPlot.tight_layout()
+    PyPlot.savefig(fname)
+
+    return nothing
+
+end
+
+
 function plot_lm_state_evolution(
     ys::AbstractMatrix,
     ts::AbstractVector,
@@ -408,7 +439,7 @@ function plot_lm_state_evolution(
     ys_o::AbstractVector,
     title::AbstractString,
     fname::AbstractString
-)
+)::Nothing
 
     # Extract the central 95% of the set of modelled outputs
     qs = reduce(hcat, [quantile(c, [0.025, 0.975]) for c ∈ eachcol(ys)])
@@ -427,6 +458,8 @@ function plot_lm_state_evolution(
 
     PyPlot.tight_layout()
     PyPlot.savefig(fname)
+
+    return nothing
 
 end
 
