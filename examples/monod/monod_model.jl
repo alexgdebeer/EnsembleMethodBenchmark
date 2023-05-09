@@ -3,7 +3,7 @@
 module MONODModel
 
 using LinearAlgebra
-using Random; Random.seed!(5)
+using Random; Random.seed!(0)
 
 include("../../plotting.jl")
 include("../../sim_intensive_inference/sim_intensive_inference.jl")
