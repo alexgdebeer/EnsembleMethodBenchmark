@@ -1,4 +1,4 @@
-"""Defines a simple MONOD model, as used in Bardsley et al. (2014)."""
+"""Defines the MONOD model used in Bardsley et al. (2014)."""
 
 module MONODModel
 
@@ -10,7 +10,9 @@ include("../../sim_intensive_inference/sim_intensive_inference.jl")
 
 const PLOTS_DIR = "plots/monod"
 
-const XS = 1:400
+const X_0 = 1
+const X_1 = 400
+const XS = vec(X_0:X_1)
 
 # Define the factor vector (x) and observations (y)
 const XS_O = [28, 55, 83, 110, 138, 225, 375]
@@ -30,11 +32,14 @@ const Γ_ϵ = σ_ϵ^2 * Matrix(I, N_IS, N_IS)
 const L = SimIntensiveInference.GaussianLikelihood(MONODModel.YS_O, MONODModel.Γ_ϵ)
 
 # Define the model, and the mapping between the outputs and observations
-const f(θs) = ((θs[1]*XS) ./ (θs[2].+XS))[:,:]'
+const f(θs) = ((θs[1] * XS) ./ (θs[2] .+ XS))[:,:]'
 const g(ys) = vec(ys[:, IS_O])
 
+const a(θs; t_1=X_1) = ((θs[1] * XS) ./ (θs[2] .+ XS))[XS[XS .≤ t_1], :]'
+const b(θ, u) = u
+
 # Define a function that returns the modelled y value corresponding to a given x 
-const H(θs, xs) = f(θs)[XS.==xs]
+# const H(θs, xs) = f(θs)[XS.==xs]
 
 # Compute the true posterior on a grid
 const N_PTS = 500
