@@ -1008,18 +1008,27 @@ function run_lm_enrml(
     π::AbstractPrior,
     ys::AbstractVector, 
     σ_ϵ::Real, 
-    λ::Real, 
     γ::Real,
     l_max::Int,
     N_e::Int;
     verbose::Bool=true
 )
 
-    N_d = length(ys)
+    # TODO: define these properly 
+    C1 = 0
+    C2 = 0
+
+    """TODO: update to return standard deviation of S."""
+    function calculate_s(ys, ys_p, Γ_ϵ_i)
+        return Statistics.mean([(y-y_p)' * Γ_ϵ_i * (y-y_p) for (y, y_p) ∈ zip(eachcol(ys), eachcol(ys_p))])
+    end
+
+    N_ys = length(ys)
 
     # Generate the covariance of the observations
     Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys), length(ys))
-    Γ_ϵ_inv = inv(Γ_ϵ)
+    Γ_ϵ_i = inv(Γ_ϵ)
+    Γ_ϵ_isqrt = sqrt(Γ_ϵ_i)
 
     # Generate some pertubed observations
     ys_p = rand(Distributions.MvNormal(ys, Γ_ϵ), N_e)
@@ -1030,50 +1039,72 @@ function run_lm_enrml(
     # Calculate the prior scaling matrix, the scaled prior deviations, and the 
     # SVD of the scaled deviations
     Γ_sc = LinearAlgebra.Diagonal(sqrt.(LinearAlgebra.diag(π.Σ)))
-    Γ_sc_sqrt = sqrt.(Γ_sc)
-    Γ_sc_isqrt = 1 ./ Γ_sc_sqrt
+    Γ_sc_sqrt = sqrt(Γ_sc)
+    Γ_sc_isqrt = inv(Γ_sc_sqrt)
 
     Δθ_π = Γ_sc_isqrt * (θs_π .- Statistics.mean(θs_π, dims=2)) / sqrt(N_e-1)
-    U_θπ, Λ_θπ, V_θπt = LinearAlgebra.svd(Δθ_π)
+    U_θπ, Λ_θπ, V_θπ = LinearAlgebra.svd(Δθ_π) # TODO: truncate somewhere?
 
-    A_π = U_θπ * (1 ./ Λ_θπ)
+    A_π = U_θπ * inv(LinearAlgebra.Diagonal(Λ_θπ))
 
-    θs_l = copy(θs_p)
-    ys_l = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_p)])
+    θs = copy(θs_π)
+    ys = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_π)])
     
-    S = 1.0 # Calculate objective function
+    θs_prev = copy(θs)
+    ys_prev = copy(ys)
+    
+    S_prev = calculate_s(ys_prev, ys_p, Γ_ϵ_i)
 
     l = 1
-    λ_l = 10^floor(log10(S_l/2N_d))
+    λ = 10^floor(log10(S_prev/2N_ys))
 
     while l < l_max
-
-        a = λ_l + 1
         
+        # Construct matrices of normalised deviations
         Δθ = Γ_sc_isqrt * (θs_prev .- Statistics.mean(θs_prev, dims=2)) / sqrt(N_e-1)
-        Δy = Γ_y_isqrt  * (ys_prev .- Statistics.mean(ys_prev, dims=2)) / sqrt(N_e-1) # TODO: calculate the inverse square root prior to this
+        Δy = Γ_ϵ_isqrt  * (ys_prev .- Statistics.mean(ys_prev, dims=2)) / sqrt(N_e-1)
 
-        U_y, Λ_y, V_yt = LinearAlgebra.svd(Δy_l) # TODO: truncation somewhere?
+        U_y, Λ_y, V_y = LinearAlgebra.svd(Δy); 
+        Λ_y = LinearAlgebra.Diagonal(Λ_y) # TODO: truncate somewhere?
 
-        X1 = U_y' * Γ_y_isqrt * (ys_l - y_p)
-        X2 = inv((λ_l+1)LinearAlgebra.I * Λ_y.^2) * X1 
-        X3 = V_y * W_y * X2
+        X1 = U_y' * Γ_ϵ_isqrt * (ys_prev - ys_p)
+        X2 = inv((λ+1)LinearAlgebra.I * Λ_y.^2) * X1 
+        X3 = V_y * Λ_y * X2
         
-        δm_1 = -Γ_sc_sqrt * Δθ * X3 
-        δ_m2 = 0
+        δθ_1 = -Γ_sc_sqrt * Δθ * X3 
+        δθ_2 = 0
 
         if l > 1
-            X4 = A_π' * C_sc_isqrt * (θs_l - θs_π)
+            X4 = A_π' * Γ_sc_sqrt * (θs_prev - θs_π)
             X5 = A_π * X4 
             X6 = Δθ' * X5 
-            X7 = V_yt' * inv((1-λ)LinearAlgebra.I + W_y.^2) * V_yt * X6
-            δ_m2 = -Γ_sc_sqrt * Δm * X7
+            X7 = V_y * inv((λ+1)LinearAlgebra.I + Λ_y.^2) * V_y' * X6
+            δθ_2 = -Γ_sc_sqrt * Δθ * X7
         end
 
-        θs_l =
+        θs = θs_prev + δθ_1 .+ δθ_2
+        ys = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs)])
+        S = calculate_s(ys, ys_p, Γ_ϵ_i)
 
-        θs_prev = copy(θs_l)
+        if S ≤ S_prev
+            if 1-S/S_prev ≤ C1 || LinearAlgebra.norm(θs - θs_prev) ≤ C2
+                return θs
+            else
+                θs_prev = copy(θs)
+                ys_prev = copy(ys)
+                S_prev = S 
+                λ /= γ
+                l += 1
+                verbose && @info "Step accepted: reduced λ to $λ."
+            end 
+        else 
+            error("Step rejected.")
+            λ *= γ
+            verbose && @info "Step rejected: increased λ to $λ."
+        end
 
     end
+
+    return θs   
 
 end
