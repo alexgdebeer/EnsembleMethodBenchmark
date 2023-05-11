@@ -1011,6 +1011,7 @@ function run_lm_enrml(
     γ::Real,
     l_max::Int,
     N_e::Int;
+    λ_min::Real=0.001,
     verbose::Bool=true
 )
 
@@ -1093,7 +1094,7 @@ function run_lm_enrml(
                 θs_prev = copy(θs)
                 ys_prev = copy(ys)
                 S_prev = S 
-                λ /= γ
+                λ = max(λ/γ, λ_min)
                 l += 1
                 verbose && @info "Step accepted: reduced λ to $λ."
             end 
