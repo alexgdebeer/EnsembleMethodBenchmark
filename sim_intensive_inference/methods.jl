@@ -910,7 +910,27 @@ function run_batch_enrml(
 
     # Sample an ensemble from the prior and run it
     θs_f = reduce(hcat, sample(π, n=N_e))
-    ys_f = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_f)])
+    ys_f_l = [f(θ) for θ ∈ eachcol(θs_f)]
+    ys_f = reduce(hcat, [g(y) for y ∈ ys_f_l])
+
+    # Plotting.plot_monod_states(
+    #     reduce(vcat, ys_f_l),
+    #     "Test", "test.pdf"
+    # )
+
+    # # Calculate the misfit of each data point 
+    # ss = vec(sum((ys_f .- ys).^2, dims=1))
+    # println(sort(ss))
+
+    # while Statistics.maximum(ss) > 100
+    #     i_max = argmax(ss)
+    #     ss = ss[1:N_e .!= i_max]
+    #     θs_f = θs_f[:, 1:N_e .!= i_max]
+    #     ys_f = ys_f[:, 1:N_e .!= i_max]
+    #     N_e -= 1
+    # end
+
+    # println(N_e)
 
     # Form the covariance of the errors
     Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys), length(ys))
@@ -976,5 +996,84 @@ function run_batch_enrml(
     end
 
     return θs_l, reduce(vcat, ys_lp_l)
+
+end
+
+
+"""Runs the Levenberg-Marquardt iterative ensemble smoother, as described in 
+Chen (2013)."""
+function run_lm_enrml(
+    f::Function, 
+    g::Function,
+    π::AbstractPrior,
+    ys::AbstractVector, 
+    σ_ϵ::Real, 
+    λ::Real, 
+    γ::Real,
+    l_max::Int,
+    N_e::Int;
+    verbose::Bool=true
+)
+
+    N_d = length(ys)
+
+    # Generate the covariance of the observations
+    Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys), length(ys))
+    Γ_ϵ_inv = inv(Γ_ϵ)
+
+    # Generate some pertubed observations
+    ys_p = rand(Distributions.MvNormal(ys, Γ_ϵ), N_e)
+
+    # Sample a set of parameters from the prior
+    θs_π = reduce(hcat, sample(π, n=N_e))
+
+    # Calculate the prior scaling matrix, the scaled prior deviations, and the 
+    # SVD of the scaled deviations
+    Γ_sc = LinearAlgebra.Diagonal(sqrt.(LinearAlgebra.diag(π.Σ)))
+    Γ_sc_sqrt = sqrt.(Γ_sc)
+    Γ_sc_isqrt = 1 ./ Γ_sc_sqrt
+
+    Δθ_π = Γ_sc_isqrt * (θs_π .- Statistics.mean(θs_π, dims=2)) / sqrt(N_e-1)
+    U_θπ, Λ_θπ, V_θπt = LinearAlgebra.svd(Δθ_π)
+
+    A_π = U_θπ * (1 ./ Λ_θπ)
+
+    θs_l = copy(θs_p)
+    ys_l = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_p)])
+    
+    S = 1.0 # Calculate objective function
+
+    l = 1
+    λ_l = 10^floor(log10(S_l/2N_d))
+
+    while l < l_max
+
+        a = λ_l + 1
+        
+        Δθ = Γ_sc_isqrt * (θs_prev .- Statistics.mean(θs_prev, dims=2)) / sqrt(N_e-1)
+        Δy = Γ_y_isqrt  * (ys_prev .- Statistics.mean(ys_prev, dims=2)) / sqrt(N_e-1) # TODO: calculate the inverse square root prior to this
+
+        U_y, Λ_y, V_yt = LinearAlgebra.svd(Δy_l) # TODO: truncation somewhere?
+
+        X1 = U_y' * Γ_y_isqrt * (ys_l - y_p)
+        X2 = inv((λ_l+1)LinearAlgebra.I * Λ_y.^2) * X1 
+        X3 = V_y * W_y * X2
+        
+        δm_1 = -Γ_sc_sqrt * Δθ * X3 
+        δ_m2 = 0
+
+        if l > 1
+            X4 = A_π' * C_sc_isqrt * (θs_l - θs_π)
+            X5 = A_π * X4 
+            X6 = Δθ' * X5 
+            X7 = V_yt' * inv((1-λ)LinearAlgebra.I + W_y.^2) * V_yt * X6
+            δ_m2 = -Γ_sc_sqrt * Δm * X7
+        end
+
+        θs_l =
+
+        θs_prev = copy(θs_l)
+
+    end
 
 end
