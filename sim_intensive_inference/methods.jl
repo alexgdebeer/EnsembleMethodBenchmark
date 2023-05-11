@@ -1006,7 +1006,7 @@ function run_lm_enrml(
     f::Function, 
     g::Function,
     π::AbstractPrior,
-    ys::AbstractVector, 
+    ys_obs::AbstractVector, 
     σ_ϵ::Real, 
     γ::Real,
     l_max::Int,
@@ -1024,18 +1024,19 @@ function run_lm_enrml(
         return Statistics.mean([(y-y_p)' * Γ_ϵ_i * (y-y_p) for (y, y_p) ∈ zip(eachcol(ys), eachcol(ys_p))])
     end
 
-    N_ys = length(ys)
+    N_θ = length(π.μ)
+    N_y = length(ys_obs)
+
+    # Initialise some vectors
+    θs = [Matrix(undef, N_θ, N_e) for _ ∈ 1:l_max]
+    ys = [Matrix(undef, N_y, N_e) for _ ∈ 1:l_max]
+    Ss = Vector(undef, l_max)
+    λs = Vector(undef, l_max)
 
     # Generate the covariance of the observations
-    Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys), length(ys))
+    Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys_obs), length(ys_obs))
     Γ_ϵ_i = inv(Γ_ϵ)
     Γ_ϵ_isqrt = sqrt(Γ_ϵ_i)
-
-    # Generate some pertubed observations
-    ys_p = rand(Distributions.MvNormal(ys, Γ_ϵ), N_e)
-
-    # Sample a set of parameters from the prior
-    θs_π = reduce(hcat, sample(π, n=N_e))
 
     # Calculate the prior scaling matrix, the scaled prior deviations, and the 
     # SVD of the scaled deviations
@@ -1043,69 +1044,68 @@ function run_lm_enrml(
     Γ_sc_sqrt = sqrt(Γ_sc)
     Γ_sc_isqrt = inv(Γ_sc_sqrt)
 
+    # Sample a set of parameters from the prior
+    θs_π = reduce(hcat, sample(π, n=N_e))
+
+    # Generate some pertubed observations
+    ys_p = rand(Distributions.MvNormal(ys_obs, Γ_ϵ), N_e)
+
     Δθ_π = Γ_sc_isqrt * (θs_π .- Statistics.mean(θs_π, dims=2)) / sqrt(N_e-1)
-    U_θπ, Λ_θπ, V_θπ = LinearAlgebra.svd(Δθ_π) # TODO: truncate somewhere?
+    U_θπ, Λ_θπ, _ = LinearAlgebra.svd(Δθ_π) # TODO: truncate somewhere?
 
     A_π = U_θπ * inv(LinearAlgebra.Diagonal(Λ_θπ))
 
-    θs = copy(θs_π)
-    ys = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_π)])
-    
-    θs_prev = copy(θs)
-    ys_prev = copy(ys)
-    
-    S_prev = calculate_s(ys_prev, ys_p, Γ_ϵ_i)
+    θs[1] = copy(θs_π)
+    ys[1] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_π)])
+    Ss[1] = calculate_s(ys[1], ys_p, Γ_ϵ_i)
 
-    l = 1
-    λ = 10^floor(log10(S_prev/2N_ys))
+    l = 2
+    λs[l] = 10^floor(log10(Ss[1]/2N_y))
 
-    while l < l_max
+    while l < l_max+1
         
         # Construct matrices of normalised deviations
-        Δθ = Γ_sc_isqrt * (θs_prev .- Statistics.mean(θs_prev, dims=2)) / sqrt(N_e-1)
-        Δy = Γ_ϵ_isqrt  * (ys_prev .- Statistics.mean(ys_prev, dims=2)) / sqrt(N_e-1)
+        Δθ = Γ_sc_isqrt * (θs[l-1] .- Statistics.mean(θs[l-1], dims=2)) / √(N_e-1)
+        Δy = Γ_ϵ_isqrt  * (ys[l-1] .- Statistics.mean(ys[l-1], dims=2)) / √(N_e-1)
 
         U_y, Λ_y, V_y = LinearAlgebra.svd(Δy); 
         Λ_y = LinearAlgebra.Diagonal(Λ_y) # TODO: truncate somewhere?
 
-        X1 = U_y' * Γ_ϵ_isqrt * (ys_prev - ys_p)
-        X2 = inv((λ+1)LinearAlgebra.I * Λ_y.^2) * X1 
+        X1 = U_y' * Γ_ϵ_isqrt * (ys[l-1] - ys_p)
+        X2 = inv((λs[l]+1)LinearAlgebra.I * Λ_y^2) * X1 
         X3 = V_y * Λ_y * X2
         
         δθ_1 = -Γ_sc_sqrt * Δθ * X3 
         δθ_2 = 0
 
-        if l > 1
-            X4 = A_π' * Γ_sc_sqrt * (θs_prev - θs_π)
+        if l > 2
+            X4 = A_π' * Γ_sc_sqrt * (θs[l-1] - θs_π)
             X5 = A_π * X4 
             X6 = Δθ' * X5 
-            X7 = V_y * inv((λ+1)LinearAlgebra.I + Λ_y.^2) * V_y' * X6
+            X7 = V_y * inv((λs[l]+1)LinearAlgebra.I + Λ_y^2) * V_y' * X6
             δθ_2 = -Γ_sc_sqrt * Δθ * X7
         end
 
-        θs = θs_prev + δθ_1 .+ δθ_2
-        ys = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs)])
-        S = calculate_s(ys, ys_p, Γ_ϵ_i)
+        θs[l] = θs[l-1] + δθ_1 .+ δθ_2
+        ys[l] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs[l])])
+        Ss[l] = calculate_s(ys[l], ys_p, Γ_ϵ_i)
 
-        if S ≤ S_prev
-            if 1-S/S_prev ≤ C1 || LinearAlgebra.norm(θs - θs_prev) ≤ C2
-                return θs
+        if Ss[l] ≤ Ss[l-1]
+            if 1-Ss[l]/Ss[l-1] ≤ C1 || LinearAlgebra.norm(θs[l] - θs[l-1]) ≤ C2
+                return θs, ys, Ss, λs
             else
-                θs_prev = copy(θs)
-                ys_prev = copy(ys)
-                S_prev = S 
-                λ = max(λ/γ, λ_min)
                 l += 1
-                verbose && @info "Step accepted: reduced λ to $λ."
+                λs[l] = max(λs[l-1]/γ, λ_min)
+                verbose && @info "Step accepted: reduced λ to $(λs[l])."
             end 
         else 
             error("Step rejected.")
-            λ *= γ
-            verbose && @info "Step rejected: increased λ to $λ."
+            λs[l] *= γ
+            verbose && @info "Step rejected: increased λ to $(λs[l])."
         end
 
     end
 
-    return θs   
+    return θs, ys, Ss, λs
 
 end
