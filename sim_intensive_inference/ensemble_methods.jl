@@ -371,6 +371,25 @@ function run_batch_enrml(
 end
 
 
+"""Returns the truncated singular value decomposition of a matrix A, 
+under the requirement that the total energy retained is no less than a given 
+amount."""
+function tsvd(A; energy=0.99)
+
+    U, Λ, V = LinearAlgebra.svd(A)
+    total_energy = sum(Λ.^2)
+
+    for i ∈ 1:length(Λ)
+        if sum(Λ[1:i].^2) / total_energy ≥ energy 
+            return U[:, 1:i], Λ[1:i], V[:, 1:i]
+        end
+    end
+
+    error("There is an issue in the TSVD function.")
+
+end
+
+
 """Runs the Levenberg-Marquardt iterative ensemble smoother, as described in 
 Chen (2013)."""
 function run_lm_enrml(
@@ -423,9 +442,7 @@ function run_lm_enrml(
     ys_p = rand(Distributions.MvNormal(ys_obs, Γ_ϵ), N_e)
 
     Δθ_π = Γ_sc_isqrt * (θs_π .- Statistics.mean(θs_π, dims=2)) / sqrt(N_e-1)
-    U_θπ, Λ_θπ, _ = LinearAlgebra.svd(Δθ_π) # TODO: truncate somewhere?
-
-    println(Λ_θπ)
+    U_θπ, Λ_θπ, _ = tsvd(Δθ_π)
 
     A_π = U_θπ * inv(LinearAlgebra.Diagonal(Λ_θπ))
 
@@ -444,14 +461,8 @@ function run_lm_enrml(
         Δθ = Γ_sc_isqrt * (θs[l-1] .- Statistics.mean(θs[l-1], dims=2)) / √(N_e-1)
         Δy = Γ_ϵ_isqrt  * (ys[l-1] .- Statistics.mean(ys[l-1], dims=2)) / √(N_e-1)
 
-        U_y, Λ_y, V_y = LinearAlgebra.svd(Δy)
-
-        U_y = U_y[:,1:end-4]
-        Λ_y = Λ_y[1:end-4]
-        V_y = V_y[:,1:end-4]
-        #display(Λ_y)
-        Λ_y = LinearAlgebra.Diagonal(Λ_y) # TODO: truncate somewhere?
-        #display(inv((λs[l]+1)LinearAlgebra.I * Λ_y^2))
+        U_y, Λ_y, V_y = tsvd(Δy)
+        Λ_y = LinearAlgebra.Diagonal(Λ_y)
 
         # Calculate ensemble corrections based on misfit
         δθ_1 = -Γ_sc_sqrt * Δθ * V_y * Λ_y * 
