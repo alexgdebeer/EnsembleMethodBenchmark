@@ -1011,7 +1011,7 @@ function run_lm_enrml(
     γ::Real,
     l_max::Int,
     N_e::Int;
-    λ_min::Real=0.001,
+    λ_min::Real=0.01,
     verbose::Bool=true
 )
 
@@ -1028,10 +1028,10 @@ function run_lm_enrml(
     N_y = length(ys_obs)
 
     # Initialise some vectors
-    θs = [Matrix(undef, N_θ, N_e) for _ ∈ 1:l_max]
-    ys = [Matrix(undef, N_y, N_e) for _ ∈ 1:l_max]
-    Ss = Vector(undef, l_max)
-    λs = Vector(undef, l_max)
+    θs = [Matrix(undef, N_θ, N_e) for _ ∈ 1:l_max+1]
+    ys = [Matrix(undef, N_y, N_e) for _ ∈ 1:l_max+1]
+    Ss = Vector(undef, l_max+1)
+    λs = Vector(undef, l_max+1)
 
     # Generate the covariance of the observations
     Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys_obs), length(ys_obs))
@@ -1068,22 +1068,24 @@ function run_lm_enrml(
         Δθ = Γ_sc_isqrt * (θs[l-1] .- Statistics.mean(θs[l-1], dims=2)) / √(N_e-1)
         Δy = Γ_ϵ_isqrt  * (ys[l-1] .- Statistics.mean(ys[l-1], dims=2)) / √(N_e-1)
 
-        U_y, Λ_y, V_y = LinearAlgebra.svd(Δy); 
+        U_y, Λ_y, V_y = LinearAlgebra.svd(Δy)
+        display(Λ_y)
         Λ_y = LinearAlgebra.Diagonal(Λ_y) # TODO: truncate somewhere?
+        display(inv((λs[l]+1)LinearAlgebra.I * Λ_y^2))
 
-        X1 = U_y' * Γ_ϵ_isqrt * (ys[l-1] - ys_p)
-        X2 = inv((λs[l]+1)LinearAlgebra.I * Λ_y^2) * X1 
-        X3 = V_y * Λ_y * X2
+        # Calculate ensemble corrections based on misfit
+        δθ_1 = -Γ_sc_sqrt * Δθ * V_y * Λ_y * 
+                inv((λs[l]+1)LinearAlgebra.I * Λ_y^2) * 
+                U_y' * Γ_ϵ_isqrt * (ys[l-1] - ys_p) 
         
-        δθ_1 = -Γ_sc_sqrt * Δθ * X3 
         δθ_2 = 0
 
+        # Calculate ensemble corrections based on deviation from prior
         if l > 2
-            X4 = A_π' * Γ_sc_sqrt * (θs[l-1] - θs_π)
-            X5 = A_π * X4 
-            X6 = Δθ' * X5 
-            X7 = V_y * inv((λs[l]+1)LinearAlgebra.I + Λ_y^2) * V_y' * X6
-            δθ_2 = -Γ_sc_sqrt * Δθ * X7
+            δθ_2 = -Γ_sc_sqrt * Δθ * V_y * 
+                    inv((λs[l]+1)LinearAlgebra.I + Λ_y^2) * 
+                    V_y' * Δθ' * A_π * A_π' * 
+                    Γ_sc_sqrt * (θs[l-1] - θs_π)
         end
 
         θs[l] = θs[l-1] + δθ_1 .+ δθ_2
@@ -1092,20 +1094,19 @@ function run_lm_enrml(
 
         if Ss[l] ≤ Ss[l-1]
             if 1-Ss[l]/Ss[l-1] ≤ C1 || LinearAlgebra.norm(θs[l] - θs[l-1]) ≤ C2
-                return θs, ys, Ss, λs
+                return θs[1:l], ys[1:l], Ss[1:l], λs[1:l]
             else
                 l += 1
                 λs[l] = max(λs[l-1]/γ, λ_min)
                 verbose && @info "Step accepted: reduced λ to $(λs[l])."
             end 
         else 
-            error("Step rejected.")
             λs[l] *= γ
             verbose && @info "Step rejected: increased λ to $(λs[l])."
         end
 
     end
 
-    return θs, ys, Ss, λs
+    return θs[1:l-1], ys[1:l-1], Ss[1:l-1], λs[1:l-1]
 
 end
