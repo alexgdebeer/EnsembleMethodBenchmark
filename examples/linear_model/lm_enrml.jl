@@ -6,7 +6,7 @@ include("../../sim_intensive_inference/sim_intensive_inference.jl")
 
 # Define the prior and ensemble size
 const π = SimIntensiveInference.GaussianPrior(LinearModel.μ_π, LinearModel.Γ_π)
-const β_0 = 0.75
+const β_0 = 0.5
 const N_e = 10_000
 
 θs = SimIntensiveInference.run_batch_enrml(
