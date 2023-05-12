@@ -1030,6 +1030,7 @@ function run_lm_enrml(
     # Initialise some vectors
     θs = [Matrix(undef, N_θ, N_e) for _ ∈ 1:l_max+1]
     ys = [Matrix(undef, N_y, N_e) for _ ∈ 1:l_max+1]
+    ys_c = [Matrix(undef, 0, 0) for _ ∈ 1:l_max+1] # TODO: give this the correct dimensions?
     Ss = Vector(undef, l_max+1)
     λs = Vector(undef, l_max+1)
 
@@ -1056,7 +1057,9 @@ function run_lm_enrml(
     A_π = U_θπ * inv(LinearAlgebra.Diagonal(Λ_θπ))
 
     θs[1] = copy(θs_π)
-    ys[1] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_π)])
+    ys_l = [f(θ) for θ ∈ eachcol(θs_π)]
+    ys_c[1] = reduce(vcat, ys_l)
+    ys[1] = reduce(hcat, [g(y) for y ∈ ys_l])
     Ss[1] = calculate_s(ys[1], ys_p, Γ_ϵ_i)
 
     l = 2
@@ -1069,13 +1072,13 @@ function run_lm_enrml(
         Δy = Γ_ϵ_isqrt  * (ys[l-1] .- Statistics.mean(ys[l-1], dims=2)) / √(N_e-1)
 
         U_y, Λ_y, V_y = LinearAlgebra.svd(Δy)
-        display(Λ_y)
+        #display(Λ_y)
         Λ_y = LinearAlgebra.Diagonal(Λ_y) # TODO: truncate somewhere?
-        display(inv((λs[l]+1)LinearAlgebra.I * Λ_y^2))
+        #display(inv((λs[l]+1)LinearAlgebra.I * Λ_y^2))
 
         # Calculate ensemble corrections based on misfit
         δθ_1 = -Γ_sc_sqrt * Δθ * V_y * Λ_y * 
-                inv((λs[l]+1)LinearAlgebra.I * Λ_y^2) * 
+                inv((λs[l]+1)LinearAlgebra.I + Λ_y^2) * 
                 U_y' * Γ_ϵ_isqrt * (ys[l-1] - ys_p) 
         
         δθ_2 = 0
@@ -1089,12 +1092,14 @@ function run_lm_enrml(
         end
 
         θs[l] = θs[l-1] + δθ_1 .+ δθ_2
-        ys[l] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs[l])])
+        ys_l = [f(θ) for θ ∈ eachcol(θs[l])]
+        ys_c[l] = reduce(vcat, ys_l)
+        ys[l] = reduce(hcat, [g(y) for y ∈ ys_l])
         Ss[l] = calculate_s(ys[l], ys_p, Γ_ϵ_i)
 
         if Ss[l] ≤ Ss[l-1]
             if 1-Ss[l]/Ss[l-1] ≤ C1 || LinearAlgebra.norm(θs[l] - θs[l-1]) ≤ C2
-                return θs[1:l], ys[1:l], Ss[1:l], λs[1:l]
+                return θs[1:l], ys_c[1:l], Ss[1:l], λs[1:l]
             else
                 l += 1
                 λs[l] = max(λs[l-1]/γ, λ_min)
@@ -1107,6 +1112,6 @@ function run_lm_enrml(
 
     end
 
-    return θs[1:l-1], ys[1:l-1], Ss[1:l-1], λs[1:l-1]
+    return θs[1:l-1], ys_c[1:l-1], Ss[1:l-1], λs[1:l-1]
 
 end
