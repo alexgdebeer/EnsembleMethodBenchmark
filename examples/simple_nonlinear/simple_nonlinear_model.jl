@@ -45,18 +45,20 @@ const Γ_ϵ = σ_ϵ^2 * Matrix(I, 1, 1)
 const L = SimIntensiveInference.GaussianLikelihood(μ_L, Γ_ϵ)
 
 # Compute the properties of the true posterior 
-const θ_MIN, Δθ, θ_MAX = -5, 0.05, 8
+const θ_MIN, Δθ, θ_MAX = -6, 0.01, 8
 const θS = θ_MIN:Δθ:θ_MAX 
-const d(θs) = SimIntensiveInference.density(π, θs) * SimIntensiveInference.density(L, g(f(θs)))
-const θ_PRIOR= [SimIntensiveInference.density(π, [θ]) for θ ∈ θS]
-const θ_POST_UNNORMALISED = [d([θ]) for θ ∈ θS]
-const θ_POST = θ_POST_UNNORMALISED ./ (sum(θ_POST_UNNORMALISED)*Δθ)
+const PRIOR = [SimIntensiveInference.density(π, [θ]) for θ ∈ θS]
+const LIKELIHOOD = [SimIntensiveInference.density(L, g(f([θ]))) for θ ∈ θS]
+const POST_UNNORMALISED = PRIOR .* LIKELIHOOD
+const POST = POST_UNNORMALISED ./ (sum(POST_UNNORMALISED)*Δθ)
 
-import PyPlot 
-PyPlot.plot(θS, θ_PRIOR, c="tab:blue")
-PyPlot.plot(θS, θ_POST, c="tab:orange")
-PyPlot.axvline(μ_π[1], c="tab:blue", ls="--")
-PyPlot.axvline(θS_T[1], c="tab:orange", ls="--")
-PyPlot.savefig("test.pdf")
+if abspath(PROGRAM_FILE) == @__FILE__
+
+    Plotting.plot_simple_nonlinear_model(
+        θS, PRIOR, POST, θS_T[1],
+        "$(PLOTS_DIR)/prior_and_posterior.pdf"
+    )
+
+end
 
 end

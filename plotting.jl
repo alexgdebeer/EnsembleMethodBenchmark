@@ -12,6 +12,7 @@ PyPlot.rc("font", family="serif")
 
 const TITLE_SIZE = 20
 const LABEL_SIZE = 16
+const LEGEND_SIZE = 12
 const SMALL_SIZE = 8
 
 const DARK_BLUE = "#4358CB"
@@ -102,6 +103,32 @@ function plot_linear_model(
     PyPlot.xlabel(L"t", fontsize=LABEL_SIZE)
     PyPlot.ylabel(L"y(t)", fontsize=LABEL_SIZE)
 
+    PyPlot.savefig(fname)
+    PyPlot.clf()
+
+end
+
+
+function plot_simple_nonlinear_model(
+    θs::AbstractVector, 
+    prior::AbstractVector, 
+    posterior::AbstractVector,
+    θ_true::Real,
+    fname::AbstractString
+)
+
+    PyPlot.plot(θs, prior, c="tab:blue", label="Prior")
+    PyPlot.plot(θs, posterior, c="tab:orange", label="Posterior")
+
+    #PyPlot.axvline(prior_mean, label="Prior Mean", c="tab:blue", linestyle="--")
+    PyPlot.axvline(θ_true, label="True Value", c="k", linestyle="--")
+
+    PyPlot.title("Nonlinear System: Prior and Posterior", fontsize=TITLE_SIZE)
+    PyPlot.xlabel(L"\theta", fontsize=LABEL_SIZE)
+    PyPlot.ylabel("Density", fontsize=LABEL_SIZE)
+
+    PyPlot.legend(fontsize=LEGEND_SIZE)
+    PyPlot.tight_layout()
     PyPlot.savefig(fname)
     PyPlot.clf()
 
@@ -394,6 +421,7 @@ function plot_lv_posterior_predictions(
 
     PyPlot.tight_layout()
     PyPlot.savefig(fname)
+    PyPlot.clf()
 
     return nothing
 
@@ -432,26 +460,6 @@ function plot_monod_posterior_predictions(
 end
 
 
-"""Debugging check."""
-function plot_monod_states(ys, title, fname)
-
-    # Extract the central 95% of the set of modelled outputs
-    qs = reduce(hcat, [quantile(c, [0.025, 0.975]) for c ∈ eachcol(ys)])
-
-    PyPlot.plot(ys', c="gray", alpha=0.8, zorder=1)
-    PyPlot.plot(qs', c="red", zorder=2)
-
-    PyPlot.title(title, fontsize=TITLE_SIZE)
-    PyPlot.xlabel(L"x", fontsize=LABEL_SIZE)
-    PyPlot.ylabel(L"y", fontsize=LABEL_SIZE)
-
-    PyPlot.tight_layout()
-    PyPlot.savefig(fname)
-    PyPlot.clf()
-
-end
-
-
 function plot_lm_posterior_predictions(
     ts::AbstractVector,
     ys::AbstractMatrix,
@@ -463,7 +471,7 @@ function plot_lm_posterior_predictions(
 )::Nothing
 
     # Extract the central 95% of the set of modelled outputs
-    qs = reduce(hcat, [quantile(c, [0.025, 0.975]) for c ∈ eachcol(ys)])
+    qs = reduce(hcat, [quantile(c, [0.05, 0.95]) for c ∈ eachcol(ys)])
 
     # Plot the observations and true states
     PyPlot.scatter(ts_o, ys_o, c="k", marker="x", zorder=4)
@@ -479,6 +487,7 @@ function plot_lm_posterior_predictions(
 
     PyPlot.tight_layout()
     PyPlot.savefig(fname)
+    PyPlot.clf()
 
     return nothing
 
