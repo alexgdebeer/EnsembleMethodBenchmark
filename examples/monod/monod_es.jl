@@ -11,28 +11,30 @@ const N_e = 10_000
 # Specify whether multiple data assimilation will occur, and if so, the α 
 # values to use
 const MDA = true
-# const αs = [9.333, 7.0, 4.0, 2.0]
-const αs = [57.017, 35.0, 25.0, 20.0, 18.0, 15.0, 12.0, 8.0, 5.0, 3.0]
+const αs = [16.0 for _ ∈ 1:16]
 
 if MDA
 
-    θs = SimIntensiveInference.run_ensemble_smoother_mda(
-        MONODModel.f, 
-        MONODModel.g,
-        π,  
-        MONODModel.YS_O, 
-        MONODModel.σ_ϵ, 
-        αs,
-        N_e
+    θs, ys = SimIntensiveInference.run_es_mda(
+        MONODModel.f, MONODModel.g, π, 
+        MONODModel.YS_O, MONODModel.σ_ϵ, 
+        αs, N_e
     )
 
     Plotting.plot_approx_posterior(
-        eachcol(θs), 
+        eachcol(θs[end]), 
         MONODModel.θ1S, MONODModel.θ2S, 
         MONODModel.POST_MARG_θ1, MONODModel.POST_MARG_θ2,
-        "MONOD: ES MDA Posterior",
+        "MONOD: ES-MDA Posterior",
         "$(MONODModel.PLOTS_DIR)/es/es_mda_posterior.pdf";
         caption="Ensemble size: $N_e."
+    )
+
+    Plotting.plot_monod_posterior_predictions(
+        MONODModel.XS, ys[end], 
+        MONODModel.XS_O, MONODModel.YS_O, 
+        "MONOD: ES-MDA Posterior Predictions",
+        "$(MONODModel.PLOTS_DIR)/es/es_mda_posterior_predictions.pdf"
     )
 
 else
