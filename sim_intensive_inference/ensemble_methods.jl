@@ -21,6 +21,8 @@ end
 truncated singular value decomposition."""
 function inv_tsvd(A::AbstractMatrix; energy=0.999)
 
+    size(A, 1) != size(A, 2) && error("Matrix is not square.")
+
     # Scale the matrix
     vars = LinearAlgebra.diag(A)
     stds_i = LinearAlgebra.Diagonal(1 ./ sqrt.(vars))
@@ -30,8 +32,8 @@ function inv_tsvd(A::AbstractMatrix; energy=0.999)
     U, Λ, V = tsvd(A, energy=energy)
 
     # Form the inverse of the matrix
-    A_i = stds_i * V * (1 ./ LinearAlgebra.Diagonal(Λ)) * U' * stds_i 
-    
+    A_i = stds_i * V * LinearAlgebra.Diagonal(1.0 ./ Λ) * U' * stds_i 
+
     return A_i
 
 end
@@ -276,7 +278,7 @@ function run_es_mda(
     # Generate the ensemble predictions
     ys_l = [f(θ) for θ ∈ eachcol(θs[1])]
     ys_c[1] = reduce(vcat, ys_l)
-    ys[1] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs[1])])
+    ys[1] = reduce(hcat, [g(y) for y ∈ ys_l])
 
     for (i, α) ∈ enumerate(αs)
 
