@@ -29,7 +29,7 @@ const θS_T = [6]
 const YS_T = f(θS_T)
 
 # Generate the observation
-const σ_ϵ = 4.0
+const σ_ϵ = 1.0
 const YS_O = YS_T + rand(Normal(0.0, σ_ϵ), 1)
 
 # Define the prior 
@@ -45,7 +45,7 @@ const Γ_ϵ = σ_ϵ^2 * Matrix(I, 1, 1)
 const L = SimIntensiveInference.GaussianLikelihood(μ_L, Γ_ϵ)
 
 # Compute the properties of the true posterior 
-const θ_MIN, Δθ, θ_MAX = -6, 0.01, 8
+const θ_MIN, Δθ, θ_MAX = -6, 0.001, 8
 const θS = θ_MIN:Δθ:θ_MAX 
 const PRIOR = [SimIntensiveInference.density(π, [θ]) for θ ∈ θS]
 const LIKELIHOOD = [SimIntensiveInference.density(L, g(f([θ]))) for θ ∈ θS]

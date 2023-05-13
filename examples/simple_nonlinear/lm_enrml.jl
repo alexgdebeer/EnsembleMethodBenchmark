@@ -1,5 +1,7 @@
 """Runs the Levenberg-Marquardt iterative ensemble smoother."""
 
+using LaTeXStrings
+
 include("simple_nonlinear_model.jl")
 include("../../plotting.jl")
 include("../../sim_intensive_inference/sim_intensive_inference.jl")
@@ -21,6 +23,7 @@ Plotting.plot_nonlinear_approx_posterior(
     SimpleNonlinear.POST, 
     SimpleNonlinear.θS_T[1],
     "LM-EnRML Posterior",
-    "$(SimpleNonlinear.PLOTS_DIR)/enrml/posterior.pdf",
-    caption="Ensemble size: $N_e. Iterations: $l_max."
+    "$(SimpleNonlinear.PLOTS_DIR)/enrml/lm_enrml_posterior.pdf",
+    lims=(0.5, 8.0),
+    caption="Ensemble size: $N_e. Iterations: $l_max. "*L"\sigma_\epsilon"*": $(SimpleNonlinear.σ_ϵ)."
 )
