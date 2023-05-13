@@ -12,30 +12,28 @@ const N_e = 100
 # values to use
 const MDA = true
 # const αs = [9.333, 7.0, 4.0, 2.0]
-const αs = [57.017, 35.0, 25.0, 20.0, 18.0, 15.0, 12.0, 8.0, 5.0, 3.0]
+const αs = [16.0 for _ ∈ 1:16]
 
 if MDA
 
-    θs = SimIntensiveInference.run_es_mda(
+    θs, ys = SimIntensiveInference.run_es_mda(
         LVModel.f, LVModel.g, π,  
-        reduce(vcat, LVModel.YS_O), 
-        LVModel.σ_ϵ, αs, N_e
+        reduce(vcat, LVModel.YS_O), LVModel.σ_ϵ, 
+        αs, N_e
     )
 
-    ys = reduce(vcat, [LVModel.f(θ) for θ ∈ eachcol(θs)])
-
     Plotting.plot_approx_posterior(
-        eachcol(θs), 
+        eachcol(θs[end]), 
         LVModel.AS, LVModel.BS, 
         LVModel.POST_MARG_A, LVModel.POST_MARG_B,
         "LV: ES-MDA Posterior",
         "$(LVModel.PLOTS_DIR)/es/es_mda_posterior.pdf";
         θs_t=LVModel.θS_T,
-        caption="Ensemble size: $N_e."
+        caption="Ensemble size: $N_e. Iterations: $(length(αs))."
     )
 
     Plotting.plot_lv_posterior_predictions(
-        LVModel.TS, ys, LVModel.YS_T, LVModel.TS_O, LVModel.YS_O, 
+        LVModel.TS, ys[end], LVModel.YS_T, LVModel.TS_O, LVModel.YS_O, 
         "LV: ES-MDA Posterior Predictions", 
         "$(LVModel.PLOTS_DIR)/es/es_mda_posterior_predictions.pdf"
     )

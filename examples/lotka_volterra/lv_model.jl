@@ -78,7 +78,7 @@ const Γ_ϵ = σ_ϵ^2 * Matrix(I, 2N_IS_O, 2N_IS_O)
 const L = SimIntensiveInference.GaussianLikelihood(μ_L, Γ_ϵ)
 
 # Compute the properties of the true posterior 
-const N_PTS = 200
+const N_PTS = 50
 const AS = collect(range(0.5, 1.5, N_PTS))
 const BS = collect(range(0.5, 1.5, N_PTS))
 const d(θs) = SimIntensiveInference.density(π, θs) * SimIntensiveInference.density(L, g(f(θs)))
