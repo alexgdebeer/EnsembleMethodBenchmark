@@ -109,7 +109,9 @@ function plot_linear_model(
 end
 
 
-function plot_simple_nonlinear_model(
+"""Plots the prior and posterior of the nonlinear model from Chen and Oliver 
+(2013)."""
+function plot_nonlinear_model(
     θs::AbstractVector, 
     prior::AbstractVector, 
     posterior::AbstractVector,
@@ -117,15 +119,48 @@ function plot_simple_nonlinear_model(
     fname::AbstractString
 )
 
-    PyPlot.plot(θs, prior, c="tab:blue", label="Prior")
-    PyPlot.plot(θs, posterior, c="tab:orange", label="Posterior")
-
-    #PyPlot.axvline(prior_mean, label="Prior Mean", c="tab:blue", linestyle="--")
+    PyPlot.plot(θs, prior, c="tab:orange", label="Prior")
+    PyPlot.plot(θs, posterior, c="tab:blue", label="Posterior")
     PyPlot.axvline(θ_true, label="True Value", c="k", linestyle="--")
 
     PyPlot.title("Nonlinear System: Prior and Posterior", fontsize=TITLE_SIZE)
     PyPlot.xlabel(L"\theta", fontsize=LABEL_SIZE)
     PyPlot.ylabel("Density", fontsize=LABEL_SIZE)
+
+    PyPlot.legend(fontsize=LEGEND_SIZE)
+    PyPlot.tight_layout()
+    PyPlot.savefig(fname)
+    PyPlot.clf()
+
+end
+
+
+function plot_nonlinear_approx_posterior(
+    θs_s::AbstractVector,
+    θs::AbstractVector, 
+    posterior::AbstractVector,
+    θ_true::Real,
+    title::AbstractString,
+    fname::AbstractString;
+    lims::Union{Nothing,Tuple}=nothing,
+    caption::Union{Nothing,AbstractString}=nothing
+)
+
+    PyPlot.plot(θs, posterior, c="tab:blue", label="Posterior", zorder=2)
+    PyPlot.axvline(θ_true, c="k", linestyle="--", label="True Value", zorder=3)
+    PyPlot.hist(θs_s, color="lightskyblue", bins=20, label="Samples", density=true, zorder=1)
+
+    if lims !== nothing
+        PyPlot.xlim(lims)
+    end
+
+    PyPlot.title(title, fontsize=TITLE_SIZE)
+    PyPlot.xlabel(L"\theta", fontsize=LABEL_SIZE)
+    PyPlot.ylabel("Density", fontsize=LABEL_SIZE)
+
+    if caption !== nothing 
+        PyPlot.gcf().supxlabel(caption, x=0.01, ha="left", fontsize=SMALL_SIZE)
+    end
 
     PyPlot.legend(fontsize=LEGEND_SIZE)
     PyPlot.tight_layout()
