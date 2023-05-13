@@ -1,3 +1,42 @@
+"""Returns the truncated singular value decomposition of a matrix A, 
+under the requirement that the total energy retained is no less than a given 
+amount."""
+function tsvd(A::AbstractMatrix; energy=0.999)
+
+    U, Λ, V = LinearAlgebra.svd(A)
+    total_energy = sum(Λ.^2)
+
+    for i ∈ 1:length(Λ)
+        if sum(Λ[1:i].^2) / total_energy ≥ energy 
+            return U[:, 1:i], Λ[1:i], V[:, 1:i]
+        end
+    end
+
+    error("There is an issue in the TSVD function.")
+
+end
+
+
+"""Returns the inverse of a matrix, rescaled and then inverted using a 
+truncated singular value decomposition."""
+function inv_tsvd(A::AbstractMatrix; energy=0.999)
+
+    # Scale the matrix
+    vars = LinearAlgebra.diag(A)
+    stds_i = LinearAlgebra.Diagonal(1 ./ sqrt.(vars))
+    A = stds_i * A * stds_i
+
+    # Compute the TSVD of the scaled matrix 
+    U, Λ, V = tsvd(A, energy=energy)
+
+    # Form the inverse of the matrix
+    A_i = stds_i * V * (1 ./ LinearAlgebra.Diagonal(Λ)) * U' * stds_i 
+    
+    return A_i
+
+end
+
+
 """Runs the EnKF algorithm, with the parameters augmented to the states."""
 function run_enkf(
     a::Function,
@@ -249,7 +288,7 @@ function run_es_mda(
         Δy = ys[i] .- Statistics.mean(ys[i], dims=2)
         Γ_θy = 1/(N_e-1)*Δθ*Δy'
         Γ_y = 1/(N_e-1)*Δy*Δy'
-        K = Γ_θy * inv(Γ_y + α*Γ_ϵ)
+        K = Γ_θy * inv_tsvd(Γ_y + α*Γ_ϵ)
 
         # Update each ensemble member
         θs[i+1] = θs[i] + K*(ys_p-ys[i])
@@ -385,25 +424,6 @@ function run_batch_enrml(
     end
 
     return θs_l, reduce(vcat, ys_lp_l)
-
-end
-
-
-"""Returns the truncated singular value decomposition of a matrix A, 
-under the requirement that the total energy retained is no less than a given 
-amount."""
-function tsvd(A::AbstractMatrix; energy=0.99)
-
-    U, Λ, V = LinearAlgebra.svd(A)
-    total_energy = sum(Λ.^2)
-
-    for i ∈ 1:length(Λ)
-        if sum(Λ[1:i].^2) / total_energy ≥ energy 
-            return U[:, 1:i], Λ[1:i], V[:, 1:i]
-        end
-    end
-
-    error("There is an issue in the TSVD function.")
 
 end
 
