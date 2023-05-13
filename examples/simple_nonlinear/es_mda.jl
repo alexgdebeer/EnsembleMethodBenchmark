@@ -10,14 +10,14 @@ const π = SimIntensiveInference.GaussianPrior(SimpleNonlinear.μ_π, SimpleNonl
 const αs = [16.0 for _ ∈ 1:16]
 const N_e = 10_000
 
-θs = SimIntensiveInference.run_es_mda(
+θs, ys = SimIntensiveInference.run_es_mda(
     SimpleNonlinear.f, SimpleNonlinear.g, π, 
     vec(SimpleNonlinear.YS_O), SimpleNonlinear.σ_ϵ, 
     αs, N_e
 )
 
 Plotting.plot_nonlinear_approx_posterior(
-    vec(θs), 
+    vec(θs[end]), 
     SimpleNonlinear.θS, 
     SimpleNonlinear.POST, 
     SimpleNonlinear.θS_T[1],

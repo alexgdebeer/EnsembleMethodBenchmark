@@ -29,7 +29,7 @@ const θS_T = [6]
 const YS_T = f(θS_T)
 
 # Generate the observation
-const σ_ϵ = 1.0
+const σ_ϵ = 4.0
 const YS_O = YS_T + rand(Normal(0.0, σ_ϵ), 1)
 
 # Define the prior 
