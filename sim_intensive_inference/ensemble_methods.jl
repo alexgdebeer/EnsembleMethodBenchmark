@@ -40,10 +40,10 @@ function run_enkf(
         ys_p = rand(Distributions.MvNormal(y, Γ_ϵ), N_e)
 
         # Compute the Kalman gain
-        U_c = vcat(us_e, θs_e) * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
-        Y_c = ys_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
-        Γ_uy_e = 1/(N_e-1)*U_c*Y_c'
-        Γ_y_e = 1/(N_e-1)*Y_c*Y_c'
+        Δu = vcat(us_e, θs_e) .- Statistics.mean(vcat(us_e, θs_e), dims=2)
+        Δy = ys_e .- Statistics.mean(ys_e, dims=2)
+        Γ_uy_e = 1/(N_e-1)*Δu*Δy'
+        Γ_y_e = 1/(N_e-1)*Δy*Δy'
         K = Γ_uy_e * inv(Γ_y_e + Γ_ϵ)
         
         # Update the ensemble
@@ -97,15 +97,15 @@ function run_hi_enkf(
         ys_e = reduce(hcat, [b(θ, u) for (θ, u) ∈ zip(eachcol(θs_e), eachcol(us_e))])
 
         # Generate a set of perturbed data vectors 
-        Γ_ϵϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(y), length(y))
-        ys_p = rand(Distributions.MvNormal(y, Γ_ϵϵ), N_e)
+        Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(y), length(y))
+        ys_p = rand(Distributions.MvNormal(y, Γ_ϵ), N_e)
 
         # Compute the Kalman gain
-        θ_c = θs_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
-        Y_c = ys_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
-        Γ_θy_e = 1/(N_e-1)*θ_c*Y_c'
-        Γ_yy_e = 1/(N_e-1)*Y_c*Y_c'
-        K = Γ_θy_e * inv(Γ_yy_e + Γ_ϵϵ)
+        Δθ = θs_e .- Statistics.mean(θs_e, dims=2)
+        Δy = ys_e .- Statistics.mean(ys_e, dims=2)
+        Γ_θy_e = 1/(N_e-1)*Δθ*Δy'
+        Γ_y_e = 1/(N_e-1)*Δy*Δy'
+        K = Γ_θy_e * inv(Γ_y_e + Γ_ϵ)
 
         # Update each ensemble member
         θs_e = θs_e + K*(ys_p-ys_e)
@@ -145,15 +145,15 @@ function run_hi_enkf_mda(
             ys_e = reduce(hcat, [H(θ, t) for θ ∈ eachcol(θs_e)])
 
             # Generate a set of perturbed data vectors 
-            Γ_ϵϵ = α * σ_ϵ^2 * Matrix(LinearAlgebra.I, length(y), length(y))
-            ys_p = rand(Distributions.MvNormal(y, Γ_ϵϵ), N_e)
+            Γ_ϵ = α * σ_ϵ^2 * Matrix(LinearAlgebra.I, length(y), length(y))
+            ys_p = rand(Distributions.MvNormal(y, Γ_ϵ), N_e)
 
             # Compute the Kalman gain
-            θ_c = θs_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
-            Y_c = ys_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
-            Γ_θy_e = 1/(N_e-1)*θ_c*Y_c'
-            Γ_yy_e = 1/(N_e-1)*Y_c*Y_c'
-            K = Γ_θy_e * inv(Γ_yy_e + Γ_ϵϵ)
+            Δθ = θs_e .- Statistics.mean(θs_e, dims=2)
+            Δy = ys_e .- Statistics.mean(ys_e, dims=2)
+            Γ_θy_e = 1/(N_e-1)*Δθ*Δy'
+            Γ_y_e = 1/(N_e-1)*Δy*Δy'
+            K = Γ_θy_e * inv(Γ_y_e + Γ_ϵ)
 
             # Update each ensemble member
             θs_e = θs_e + K*(ys_p-ys_e)
@@ -190,10 +190,10 @@ function run_es(
     ys_p = rand(Distributions.MvNormal(ys, Γ_ϵ), N_e)
 
     # Compute the gain
-    θ_c = θs_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
-    Y_c = ys_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
-    Γ_θy_e = 1/(N_e-1)*θ_c*Y_c'
-    Γ_y_e = 1/(N_e-1)*Y_c*Y_c'
+    Δθ = θs_e .- Statistics.mean(θs_e, dims=2)
+    Δy = ys_e .- Statistics.mean(ys_e, dims=2)
+    Γ_θy_e = 1/(N_e-1)*Δθ*Δy'
+    Γ_y_e = 1/(N_e-1)*Δy*Δy'
     K = Γ_θy_e * inv(Γ_y_e + Γ_ϵ)
 
     # Update each ensemble member
@@ -232,10 +232,10 @@ function run_es_mda(
         ys_p = rand(Distributions.MvNormal(ys, Γ_ϵ), N_e)
 
         # Compute the gain
-        θ_c = θs_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
-        Y_c = ys_e * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
-        Γ_θy_e = 1/(N_e-1)*θ_c*Y_c'
-        Γ_y_e = 1/(N_e-1)*Y_c*Y_c'
+        Δθ = θs_e .- Statistics.mean(θs_e, dims=2)
+        Δy = ys_e .- Statistics.mean(ys_e, dims=2)
+        Γ_θy_e = 1/(N_e-1)*Δθ*Δy'
+        Γ_y_e = 1/(N_e-1)*Δy*Δy'
         K = Γ_θy_e * inv(Γ_y_e + Γ_ϵ)
 
         # Update each ensemble member
@@ -374,7 +374,7 @@ end
 """Returns the truncated singular value decomposition of a matrix A, 
 under the requirement that the total energy retained is no less than a given 
 amount."""
-function tsvd(A; energy=0.99)
+function tsvd(A::AbstractMatrix; energy=0.99)
 
     U, Λ, V = LinearAlgebra.svd(A)
     total_energy = sum(Λ.^2)
