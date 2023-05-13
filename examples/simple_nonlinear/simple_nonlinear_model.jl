@@ -54,7 +54,7 @@ const POST = POST_UNNORMALISED ./ (sum(POST_UNNORMALISED)*Δθ)
 
 if abspath(PROGRAM_FILE) == @__FILE__
 
-    Plotting.plot_simple_nonlinear_model(
+    Plotting.plot_nonlinear_model(
         θS, PRIOR, POST, θS_T[1],
         "$(PLOTS_DIR)/prior_and_posterior.pdf"
     )
