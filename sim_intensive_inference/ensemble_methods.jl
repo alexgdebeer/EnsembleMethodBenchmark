@@ -439,7 +439,7 @@ function run_lm_enrml(
     ys_obs::AbstractVector, 
     σ_ϵ::Real, 
     γ::Real,
-    l_max::Int,
+    i_max::Int,
     N_e::Int;
     λ_min::Real=0.01,
     verbose::Bool=true
@@ -458,11 +458,11 @@ function run_lm_enrml(
     N_y = length(ys_obs)
 
     # Initialise some vectors
-    θs = [Matrix(undef, N_θ, N_e) for _ ∈ 1:l_max+1]
-    ys = [Matrix(undef, N_y, N_e) for _ ∈ 1:l_max+1]
-    ys_c = [Matrix(undef, 0, 0) for _ ∈ 1:l_max+1] # TODO: give this the correct dimensions?
-    Ss = Vector(undef, l_max+1)
-    λs = Vector(undef, l_max+1)
+    θs = [Matrix(undef, N_θ, N_e) for _ ∈ 1:i_max+1]
+    ys = [Matrix(undef, N_y, N_e) for _ ∈ 1:i_max+1]
+    ys_c = [Matrix(undef, 0, 0) for _ ∈ 1:i_max+1] # TODO: give this the correct dimensions?
+    Ss = Vector(undef, i_max+1)
+    λs = Vector(undef, i_max+1)
 
     # Generate the covariance of the observations
     Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys_obs), length(ys_obs))
@@ -492,53 +492,50 @@ function run_lm_enrml(
     ys[1] = reduce(hcat, [g(y) for y ∈ ys_l])
     Ss[1] = calculate_s(ys[1], ys_p, Γ_ϵ_i)
 
-    l = 2
-    λs[l] = 10^floor(log10(Ss[1]/2N_y))
+    i = 2
+    λs[i] = 10^floor(log10(Ss[1]/2N_y))
 
-    while l < l_max+1
+    while i < i_max+1
         
         # Construct matrices of normalised deviations
-        Δθ = Γ_sc_isqrt * (θs[l-1] .- Statistics.mean(θs[l-1], dims=2)) / √(N_e-1)
-        Δy = Γ_ϵ_isqrt  * (ys[l-1] .- Statistics.mean(ys[l-1], dims=2)) / √(N_e-1)
+        Δθ = Γ_sc_isqrt * (θs[i-1] .- Statistics.mean(θs[i-1], dims=2)) / √(N_e-1)
+        Δy = Γ_ϵ_isqrt  * (ys[i-1] .- Statistics.mean(ys[i-1], dims=2)) / √(N_e-1)
 
         U_y, Λ_y, V_y = tsvd(Δy)
         Λ_y = LinearAlgebra.Diagonal(Λ_y)
 
         # Calculate ensemble corrections based on misfit
         δθ_1 = -Γ_sc_sqrt * Δθ * V_y * Λ_y * 
-                inv((λs[l]+1)LinearAlgebra.I + Λ_y^2) * 
-                U_y' * Γ_ϵ_isqrt * (ys[l-1] - ys_p) 
+                inv((λs[i]+1)LinearAlgebra.I + Λ_y^2) * 
+                U_y' * Γ_ϵ_isqrt * (ys[i-1] - ys_p) 
 
         # Calculate ensemble corrections based on deviation from prior
-        δθ_2 = 0
-        if l > 2
-            δθ_2 = -Γ_sc_sqrt * Δθ * V_y * 
-                    inv((λs[l]+1)LinearAlgebra.I + Λ_y^2) * 
-                    V_y' * Δθ' * A_π * A_π' * 
-                    Γ_sc_sqrt * (θs[l-1] - θs_π)
-        end
+        δθ_2 = -Γ_sc_sqrt * Δθ * V_y * 
+                inv((λs[i]+1)LinearAlgebra.I + Λ_y^2) * 
+                V_y' * Δθ' * A_π * A_π' * 
+                Γ_sc_sqrt * (θs[i-1] - θs_π)
 
-        θs[l] = θs[l-1] + δθ_1 .+ δθ_2
-        ys_l = [f(θ) for θ ∈ eachcol(θs[l])]
-        ys_c[l] = reduce(vcat, ys_l)
-        ys[l] = reduce(hcat, [g(y) for y ∈ ys_l])
-        Ss[l] = calculate_s(ys[l], ys_p, Γ_ϵ_i)
+        θs[i] = θs[i-1] + δθ_1 + δθ_2
+        ys_l = [f(θ) for θ ∈ eachcol(θs[i])]
+        ys_c[i] = reduce(vcat, ys_l)
+        ys[i] = reduce(hcat, [g(y) for y ∈ ys_l])
+        Ss[i] = calculate_s(ys[i], ys_p, Γ_ϵ_i)
 
-        if Ss[l] ≤ Ss[l-1]
-            if 1-Ss[l]/Ss[l-1] ≤ C1 || LinearAlgebra.norm(θs[l] - θs[l-1]) ≤ C2
-                return θs[1:l], ys_c[1:l], Ss[1:l], λs[1:l]
+        if Ss[i] ≤ Ss[i-1]
+            if 1-Ss[i]/Ss[i-1] ≤ C1 || LinearAlgebra.norm(θs[i] - θs[i-1]) ≤ C2
+                return θs[1:i], ys_c[1:i], Ss[1:i], λs[1:i]
             else
-                l += 1
-                λs[l] = max(λs[l-1]/γ, λ_min)
-                verbose && @info "Step accepted: reduced λ to $(λs[l])."
+                i += 1
+                λs[i] = max(λs[i-1]/γ, λ_min)
+                verbose && @info "Step accepted: λ is now $(λs[i])."
             end 
         else 
-            λs[l] *= γ
-            verbose && @info "Step rejected: increased λ to $(λs[l])."
+            λs[i] *= γ
+            verbose && @info "Step rejected: λ is now $(λs[i])."
         end
 
     end
 
-    return θs[1:l-1], ys_c[1:l-1], Ss[1:l-1], λs[1:l-1]
+    return θs[1:i-1], ys_c[1:i-1], Ss[1:i-1], λs[1:i-1]
 
 end
