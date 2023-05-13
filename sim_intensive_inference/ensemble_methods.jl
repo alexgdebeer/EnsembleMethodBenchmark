@@ -208,7 +208,7 @@ function run_es_mda(
     f::Function,
     g::Function,
     π::AbstractPrior,
-    ys::AbstractVector,
+    ys_obs::AbstractVector,
     σ_ϵ::Real, 
     αs::AbstractVector,
     N_e::Int;
@@ -219,33 +219,51 @@ function run_es_mda(
         error("Reciprocals of α values do not sum to 1.")
     end
 
-    # Sample an ensemble from the prior
-    θs_e = reduce(hcat, sample(π, n=N_e))
+    N_i = length(αs)
+    N_θ = length(π.μ)
+    N_y = length(ys_obs)
+
+    # Generate the covariance of the errors
+    Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, N_y, N_y)
+
+    # Initialise some vectors
+    θs = [Matrix(undef, N_θ, N_e) for _ ∈ 1:N_i+1]
+    ys = [Matrix(undef, N_y, N_e) for _ ∈ 1:N_i+1]
+    ys_c = [Matrix(undef, 0, 0) for _ ∈ 1:N_i+1] # TODO: fix dimensions?
+
+    # Sample an initial ensemble
+    θs[1] = reduce(hcat, sample(π, n=N_e))
+    
+    # Generate the ensemble predictions
+    ys_l = [f(θ) for θ ∈ eachcol(θs[1])]
+    ys_c[1] = reduce(vcat, ys_l)
+    ys[1] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs[1])])
 
     for (i, α) ∈ enumerate(αs)
 
-        # Generate the ensemble predictions 
-        ys_e = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_e)])
-
         # Generate a set of perturbed data vectors 
-        Γ_ϵ = α * σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys), length(ys))
-        ys_p = rand(Distributions.MvNormal(ys, Γ_ϵ), N_e)
+        ys_p = rand(Distributions.MvNormal(ys_obs, α*Γ_ϵ), N_e)
 
         # Compute the gain
-        Δθ = θs_e .- Statistics.mean(θs_e, dims=2)
-        Δy = ys_e .- Statistics.mean(ys_e, dims=2)
-        Γ_θy_e = 1/(N_e-1)*Δθ*Δy'
-        Γ_y_e = 1/(N_e-1)*Δy*Δy'
-        K = Γ_θy_e * inv(Γ_y_e + Γ_ϵ)
+        Δθ = θs[i] .- Statistics.mean(θs[i], dims=2)
+        Δy = ys[i] .- Statistics.mean(ys[i], dims=2)
+        Γ_θy = 1/(N_e-1)*Δθ*Δy'
+        Γ_y = 1/(N_e-1)*Δy*Δy'
+        K = Γ_θy * inv(Γ_y + α*Γ_ϵ)
 
         # Update each ensemble member
-        θs_e = θs_e + K*(ys_p-ys_e)
+        θs[i+1] = θs[i] + K*(ys_p-ys[i])
+        
+        # Update the ensemble predictions
+        ys_l = [f(θ) for θ ∈ eachcol(θs[i+1])]
+        ys_c[i+1] = reduce(vcat, ys_l)
+        ys[i+1] = reduce(hcat, [g(y) for y ∈ ys_l])
 
         verbose && @info("Iteration $i complete.")
         
     end
 
-    return θs_e
+    return θs, ys_c
 
 end
 
