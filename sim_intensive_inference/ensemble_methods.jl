@@ -315,117 +315,104 @@ function run_batch_enrml(
     f::Function,
     g::Function,
     π::AbstractPrior,
-    ys::AbstractVector,
+    ys_obs::AbstractVector,
     σ_ϵ::Real,
     β_0::Real,
+    i_max::Int,
     N_e::Int;
     verbose::Bool=true
 )
 
-    function mean_misfit(ys_lp::AbstractMatrix, ys_p::AbstractMatrix)::Float64
-        return Statistics.mean(0.5(y_lp-y_p)'*inv(Γ_ϵ)*(y_lp-y_p) 
-            for (y_lp, y_p) ∈ zip(eachcol(ys_lp), eachcol(ys_p)))
+    function mean_misfit(ys::AbstractMatrix, ys_p::AbstractMatrix)::Float64
+        return Statistics.mean(0.5(y-y_p)'*inv(Γ_ϵ)*(y-y_p) 
+            for (y, y_p) ∈ zip(eachcol(ys), eachcol(ys_p)))
     end
 
-    function converged(θs_lp, θs_l, O_lp, O_l, n_it, n_cuts)
+    function converged(θs, θs_p, S, S_p, i, n_cuts)
 
-        maximum(abs.(θs_lp-θs_l)) < 1e-3 && return true
-        abs((O_lp-O_l)/O_l) < 1e-2 && return true
-        n_it == 10 && return true
+        maximum(abs.(θs-θs_p)) < 1e-3 && return true
+        abs((S-S_p)/S_p) < 1e-2 && return true
+        i == i_max+1 && return true
         n_cuts == 5 && return true
 
         return false
 
     end
 
-    # Sample an ensemble from the prior and run it
-    θs_f = reduce(hcat, sample(π, n=N_e))
-    ys_f_l = [f(θ) for θ ∈ eachcol(θs_f)]
-    ys_f = reduce(hcat, [g(y) for y ∈ ys_f_l])
+    N_θ = length(π.μ)
+    N_y = length(ys_obs)
 
-    # Plotting.plot_monod_states(
-    #     reduce(vcat, ys_f_l),
-    #     "Test", "test.pdf"
-    # )
+    # Initialise some vectors
+    θs = [Matrix(undef, N_θ, N_e) for _ ∈ 1:i_max+1]
+    ys = [Matrix(undef, N_y, N_e) for _ ∈ 1:i_max+1]
+    ys_c = [Matrix(undef, 0, 0) for _ ∈ 1:i_max+1] # TODO: give this the correct dimensions?
+    Ss = Vector(undef, i_max+1)
+    βs = Vector(undef, i_max+1)
 
-    # # Calculate the misfit of each data point 
-    # ss = vec(sum((ys_f .- ys).^2, dims=1))
-    # println(sort(ss))
+    # Sample an ensemble from the prior and run it forward in time
+    θs[1] = reduce(hcat, sample(π, n=N_e))
+    ys_l = [f(θ) for θ ∈ eachcol(θs[1])]
+    ys_c[1] = reduce(vcat, ys_l)
+    ys[1] = reduce(hcat, [g(y) for y ∈ ys_l])
 
-    # while Statistics.maximum(ss) > 100
-    #     i_max = argmax(ss)
-    #     ss = ss[1:N_e .!= i_max]
-    #     θs_f = θs_f[:, 1:N_e .!= i_max]
-    #     ys_f = ys_f[:, 1:N_e .!= i_max]
-    #     N_e -= 1
-    # end
-
-    # println(N_e)
-
-    # Form the covariance of the errors
-    Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys), length(ys))
-
-    # Calculate the prior covariance of the simulated values
-    θ_c = θs_f * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
-    Γ_θf = 1/(N_e-1)*θ_c*θ_c'
+    # Extract the covariances of the parameters and errors
+    Γ_θ = π.Σ
+    Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, N_y, N_y)
 
     # Sample an ensemble of perturbed observations
-    ys_p = rand(Distributions.MvNormal(ys, Γ_ϵ), N_e)
-
-    O_l = mean_misfit(ys_f, ys_p)
+    ys_p = rand(Distributions.MvNormal(ys_obs, Γ_ϵ), N_e)
     
-    n_it = 0; n_cuts = 0
-    θs_l = copy(θs_f); θs_lp = copy(θs_f); 
-    ys_l = copy(ys_f); ys_lp = copy(ys_f); ys_lp_l = []
-    O_lp = O_l
-    β_l = β_0
+    Ss[1] = mean_misfit(ys[1], ys_p)
+    βs[1] = β_0
+
+    n_cuts = 0
+    i = 1
 
     while true
 
         # Calculate the ensemble sensitivity
-        θ_c = θs_l * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
-        Y_c = ys_l * (LinearAlgebra.I - ones(N_e, N_e)/N_e)
-        G_l = Y_c*LinearAlgebra.pinv(θ_c)
+        Δθ = θs[i] .- Statistics.mean(θs[i], dims=2)
+        Δy = ys[i] .- Statistics.mean(ys[i], dims=2)
+        G = Δy * LinearAlgebra.pinv(Δθ)
 
         while true
 
             # Update the ensemble and run it forward in time
-            θs_lp = β_l*θs_f + (1-β_l)*θs_l - 
-                β_l*Γ_θf*G_l'*inv(G_l*Γ_θf*G_l'+Γ_ϵ)*(ys_l-ys_p-G_l*(θs_l-θs_f))
+            θs[i+1] = βs[i]*θs[1] + (1-βs[i])*θs[i] - 
+                βs[i]*Γ_θ*G'*inv(G*Γ_θ*G'+Γ_ϵ)*(ys[i]-ys_p-G*(θs[i]-θs[1]))
+            
+            ys_l = [f(θ) for θ ∈ eachcol(θs[i+1])]
+            ys_c[i+1] = reduce(vcat, ys_l)
+            ys[i+1] = reduce(hcat, [g(y) for y ∈ ys_l])
 
-            # println(θs_lp)
-            ys_lp_l = [f(θ) for θ ∈ eachcol(θs_lp)]
-            ys_lp = reduce(hcat, [g(y) for y ∈ ys_lp_l])
+            Ss[i+1] = mean_misfit(ys[i+1], ys_p)
 
-            # display(Statistics.maximum(ys_lp, dims=2))
-            # display(Statistics.minimum(ys_lp, dims=2))
+            if Ss[i+1] < Ss[i] 
 
-            O_lp = mean_misfit(ys_lp, ys_p)
+                βs[i+1] = min(2βs[i], β_0); n_cuts = 0;
+                verbose && @info "Step accepted. Step size: $(βs[i+1])."
+                
+                if converged(θs[i+1], θs[i], Ss[i+1], Ss[i], i, n_cuts) 
+                    return θs[1:i+1], ys_c[1:i+1], Ss[1:i+1], βs[1:i+1]
+                end
 
-            if O_lp < O_l 
-
-                verbose && @info("Step accepted. Increasing step size.")
-                β_l = min(2β_l, β_0); n_cuts = 0;
-                n_it += 1; break
+                i += 1; break
 
             else
 
-                verbose && @info("Step rejected. Decreasing step size.")
-                β_l *= 0.5; n_cuts += 1
-                n_cuts == 5 && break
+                n_cuts += 1
+                βs[i] *= 0.5
+                verbose && @info "Step rejected. Step size: $(βs[i])."
+
+                if n_cuts == 5 
+                    return θs[1:i], ys_c[1:i], Ss[1:i], βs[1:i]
+                end
 
             end
 
         end
 
-        # Check for convergence
-        converged(θs_lp, θs_l, O_lp, O_l, n_it, n_cuts) && break
-        θs_l = copy(θs_lp); ys_l = copy(ys_lp)
-        O_l = O_lp
-
     end
-
-    return θs_l, reduce(vcat, ys_lp_l)
 
 end
 
@@ -493,7 +480,7 @@ function run_lm_enrml(
     Ss[1] = calculate_s(ys[1], ys_p, Γ_ϵ_i)
 
     i = 2
-    λs[i] = 10^floor(log10(Ss[1]/2N_y))
+    λs[i] = 10000 # 10^floor(log10(Ss[1]/2N_y))
 
     while i < i_max+1
         
