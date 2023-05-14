@@ -24,5 +24,5 @@ Plotting.plot_nonlinear_approx_posterior(
     "ES-MDA Posterior",
     "$(SimpleNonlinear.PLOTS_DIR)/es/es_mda_posterior.pdf",
     lims=(0.5, 7.0),
-    caption="Ensemble size: $N_e. Iterations: $(length(αs)). "*L"\sigma_\epsilon"*": $(SimpleNonlinear.σ_ϵ)."
+    caption="Ensemble size: $N_e. "*L"\sigma_\epsilon"*": $(SimpleNonlinear.σ_ϵ)."
 )
