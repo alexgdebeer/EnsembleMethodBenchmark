@@ -424,26 +424,26 @@ function plot_lv_posterior_predictions(
     ys_y1 = ys[is_y1, :]
     ys_y2 = ys[is_y2, :]
 
-    qs_y1 = reduce(hcat, [quantile(c, [0.025, 0.975]) for c ∈ eachcol(ys_y1)])
-    qs_y2 = reduce(hcat, [quantile(c, [0.025, 0.975]) for c ∈ eachcol(ys_y2)])
+    qs_y1 = reduce(hcat, [quantile(c, [0.05, 0.5, 0.95]) for c ∈ eachcol(ys_y1)])
+    qs_y2 = reduce(hcat, [quantile(c, [0.05, 0.5, 0.95]) for c ∈ eachcol(ys_y2)])
 
     fig, ax = PyPlot.subplots(1, 2, figsize=(8, 4))
     
     # Plot the observations
-    ax[1].scatter(ts_o, ys_o[1, :], c="k", marker="x", zorder=4)
-    ax[2].scatter(ts_o, ys_o[2, :], c="k", marker="x", zorder=4)
+    ax[1].scatter(ts_o, ys_o[1, :], c="r", marker="x", zorder=4)
+    ax[2].scatter(ts_o, ys_o[2, :], c="r", marker="x", zorder=4)
 
     # Plot the true states 
-    ax[1].plot(ts, ys_t[1, :], c="k", ls="--", zorder=3)
-    ax[2].plot(ts, ys_t[2, :], c="k", ls="--", zorder=3)
+    ax[1].plot(ts, ys_t[1, :], c="r", zorder=3)
+    ax[2].plot(ts, ys_t[2, :], c="r", zorder=3)
     
     # Plot the model outputs
-    ax[1].plot(ts, ys_y1', c="gray", alpha=0.8, zorder=1)
-    ax[2].plot(ts, ys_y2', c="gray", alpha=0.8, zorder=1)
+    ax[1].plot(ts, ys_y1', c="gray", alpha=0.5, zorder=1)
+    ax[2].plot(ts, ys_y2', c="gray", alpha=0.5, zorder=1)
 
     # Plot the central 95% of each set of outputs
-    ax[1].plot(ts, qs_y1', c="red", zorder=2)
-    ax[2].plot(ts, qs_y2', c="red", zorder=2)
+    ax[1].plot(ts, qs_y1', c="k", zorder=2)
+    ax[2].plot(ts, qs_y2', c="k", zorder=2)
 
     ax[1].set_ylim(-0.1, 5)
     ax[2].set_ylim(-0.1, 5)
@@ -453,6 +453,13 @@ function plot_lv_posterior_predictions(
     ax[2].set_xlabel(L"t", fontsize=LABEL_SIZE)
     ax[1].set_ylabel(L"y_{1}", fontsize=LABEL_SIZE)
     ax[2].set_ylabel(L"y_{2}", fontsize=LABEL_SIZE) 
+
+    # Add legend
+    PyPlot.plot([], [], c="red", label="True State")
+    PyPlot.scatter([], [], c="red", marker="x", label="Observations")
+    PyPlot.plot([], [], c="gray", label="Model Outputs")
+    PyPlot.plot([], [], c="k", label="5\\%, 50\\%, 95\\% Quantiles")
+    PyPlot.legend(fontsize=SMALL_SIZE, loc="upper right")
 
     PyPlot.tight_layout()
     PyPlot.savefig(fname)
@@ -472,19 +479,27 @@ function plot_monod_posterior_predictions(
     fname::AbstractString
 )::Nothing 
 
-    # Extract the central 95% of the set of modelled outputs
-    qs = reduce(hcat, [quantile(c, [0.025, 0.975]) for c ∈ eachcol(ys)])
+    # Extract the central 90% of the set of modelled outputs
+    qs = reduce(hcat, [quantile(c, [0.05, 0.5, 0.95]) for c ∈ eachcol(ys)])
 
-    # Plot the observations and true states
-    PyPlot.scatter(ts_o, ys_o, c="k", marker="x", zorder=3)
+    # Plot the observations
+    PyPlot.scatter(ts_o, ys_o, c="r", marker="x", zorder=3)
 
     # Plot the modelled states
     PyPlot.plot(ts, ys', c="gray", alpha=0.8, zorder=1)
-    PyPlot.plot(ts, qs', c="red", zorder=2)
+    PyPlot.plot(ts, qs', c="k", zorder=2)
+
+    PyPlot.ylim(0.0, 0.25)
 
     PyPlot.title(title, fontsize=TITLE_SIZE)
     PyPlot.xlabel(L"x", fontsize=LABEL_SIZE)
     PyPlot.ylabel(L"y", fontsize=LABEL_SIZE)
+
+    # Add legend
+    PyPlot.scatter([], [], c="red", marker="x", label="Observations")
+    PyPlot.plot([], [], c="gray", label="Model Outputs")
+    PyPlot.plot([], [], c="k", label="5\\%, 50\\%, 95\\% Quantiles")
+    PyPlot.legend(fontsize=SMALL_SIZE, loc="upper right")
 
     PyPlot.tight_layout()
     PyPlot.savefig(fname)
@@ -506,19 +521,26 @@ function plot_lm_posterior_predictions(
 )::Nothing
 
     # Extract the central 95% of the set of modelled outputs
-    qs = reduce(hcat, [quantile(c, [0.05, 0.95]) for c ∈ eachcol(ys)])
+    qs = reduce(hcat, [quantile(c, [0.05, 0.5, 0.95]) for c ∈ eachcol(ys)])
 
     # Plot the observations and true states
-    PyPlot.scatter(ts_o, ys_o, c="k", marker="x", zorder=4)
-    PyPlot.plot(ts, ys_t[1, :], c="k", ls="--", zorder=3)
+    PyPlot.scatter(ts_o, ys_o, c="r", marker="x", zorder=4)
+    PyPlot.plot(ts, ys_t[1, :], c="r", ls="--", zorder=3)
 
     # Plot the modelled states
     PyPlot.plot(ts, ys', c="gray", alpha=0.8, zorder=1)
-    PyPlot.plot(ts, qs', c="red", zorder=2)
+    PyPlot.plot(ts, qs', c="k", zorder=2)
 
     PyPlot.title(title, fontsize=TITLE_SIZE)
     PyPlot.xlabel(L"x", fontsize=LABEL_SIZE)
     PyPlot.ylabel(L"y", fontsize=LABEL_SIZE)
+
+    # Add legend
+    PyPlot.plot([], [], c="red", label="True State")
+    PyPlot.scatter([], [], c="red", marker="x", label="Observations")
+    PyPlot.plot([], [], c="gray", label="Model Outputs")
+    PyPlot.plot([], [], c="k", label="5\\%, 50\\%, 95\\% Quantiles")
+    PyPlot.legend(fontsize=SMALL_SIZE, loc="upper right")
 
     PyPlot.tight_layout()
     PyPlot.savefig(fname)
