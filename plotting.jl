@@ -529,7 +529,7 @@ function plot_lm_posterior_predictions(
 
     # Plot the observations and true states
     PyPlot.scatter(ts_o, ys_o, c="r", marker="x", zorder=4)
-    PyPlot.plot(ts, ys_t[1, :], c="r", ls="--", zorder=3)
+    PyPlot.plot(ts, ys_t[1, :], c="r", zorder=3)
 
     # Plot the modelled states
     PyPlot.plot(ts, ys', c="gray", alpha=0.8, zorder=1)
