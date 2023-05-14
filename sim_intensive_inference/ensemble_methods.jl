@@ -244,13 +244,13 @@ function run_es(
     # Compute the gain
     Δθ = θs[1] .- Statistics.mean(θs[1], dims=2)
     Δy = ys .- Statistics.mean(ys, dims=2)
-    Γ_θy_e = 1/(N_e-1)*Δθ*Δy'
-    Γ_y_e = 1/(N_e-1)*Δy*Δy'
-    K = Γ_θy_e * inv(Γ_y_e + Γ_ϵ)
+    Γ_θy = 1/(N_e-1)*Δθ*Δy'
+    Γ_y = 1/(N_e-1)*Δy*Δy'
+    K = Γ_θy * inv(Γ_y + Γ_ϵ)
 
     # Form the updated ensemble and generate the updated ensemble predictions
     θs[2] = θs[1] + K*(ys_p-ys)
-    ys_c[2] = reduce(vcat, [f(θ) for θ ∈ eachcol(θs[1])])
+    ys_c[2] = reduce(vcat, [f(θ) for θ ∈ eachcol(θs[2])])
 
     return θs, ys_c
 
