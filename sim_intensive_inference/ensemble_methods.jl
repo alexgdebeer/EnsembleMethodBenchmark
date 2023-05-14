@@ -214,33 +214,45 @@ function run_es(
     f::Function,
     g::Function,
     π::AbstractPrior,
-    ys::AbstractVector,
+    ys_obs::AbstractVector,
     σ_ϵ::Real, 
     N_e::Int;
     verbose::Bool=true
 )
 
+    N_θ = length(π.μ)
+    N_y = length(ys_obs)
+
+    # Generate the covariance of the errors
+    Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, N_y, N_y)
+
+    # Initialise vectors to store the results of each iteration
+    θs = [Matrix(undef, N_θ, N_e), Matrix(undef, N_θ, N_e)]
+    ys_c = [Matrix(undef, 0, 0), Matrix(undef, 0, 0)]
+
     # Sample an ensemble from the prior
-    θs_e = reduce(hcat, sample(π, n=N_e))
+    θs[1] = reduce(hcat, sample(π, n=N_e))
 
     # Generate the ensemble predictions
-    ys_e = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs_e)])
+    ys_l = [f(θ) for θ ∈ eachcol(θs[1])]
+    ys_c[1] = reduce(vcat, ys_l)
+    ys = reduce(hcat, [g(y) for y ∈ ys_l])
 
     # Generate a set of perturbed data vectors 
-    Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(ys), length(ys))
-    ys_p = rand(Distributions.MvNormal(ys, Γ_ϵ), N_e)
+    ys_p = rand(Distributions.MvNormal(ys_obs, Γ_ϵ), N_e)
 
     # Compute the gain
-    Δθ = θs_e .- Statistics.mean(θs_e, dims=2)
-    Δy = ys_e .- Statistics.mean(ys_e, dims=2)
+    Δθ = θs[1] .- Statistics.mean(θs[1], dims=2)
+    Δy = ys .- Statistics.mean(ys, dims=2)
     Γ_θy_e = 1/(N_e-1)*Δθ*Δy'
     Γ_y_e = 1/(N_e-1)*Δy*Δy'
     K = Γ_θy_e * inv(Γ_y_e + Γ_ϵ)
 
-    # Update each ensemble member
-    θs_e = θs_e + K*(ys_p-ys_e)
+    # Form the updated ensemble and generate the updated ensemble predictions
+    θs[2] = θs[1] + K*(ys_p-ys)
+    ys_c[2] = reduce(vcat, [f(θ) for θ ∈ eachcol(θs[1])])
 
-    return θs_e
+    return θs, ys_c
 
 end
 
