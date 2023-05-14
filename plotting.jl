@@ -479,6 +479,8 @@ function plot_monod_posterior_predictions(
     fname::AbstractString
 )::Nothing 
 
+    PyPlot.figure(figsize=(7, 5))
+
     # Extract the central 90% of the set of modelled outputs
     qs = reduce(hcat, [quantile(c, [0.05, 0.5, 0.95]) for c ∈ eachcol(ys)])
 
@@ -519,6 +521,8 @@ function plot_lm_posterior_predictions(
     title::AbstractString,
     fname::AbstractString
 )::Nothing
+
+    PyPlot.figure(figsize=(7, 5))
 
     # Extract the central 95% of the set of modelled outputs
     qs = reduce(hcat, [quantile(c, [0.05, 0.5, 0.95]) for c ∈ eachcol(ys)])
