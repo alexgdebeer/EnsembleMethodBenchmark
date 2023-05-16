@@ -8,8 +8,8 @@ using NonlinearSolve
 
 using Distributions 
 using LinearAlgebra
+using Random; Random.seed!(0)
 
-using LaTeXStrings
 using Plots
 
 Plots.gr()
@@ -20,32 +20,15 @@ const PLOTS_DIR = "plots/darcy_flow"
 const TITLE_SIZE = 20
 const LABEL_SIZE = 16
 
-const Δx = 0.05
-const Δy = 0.05
-
-const xmin, xmax = 0.0, 1.0
-const ymin, ymax = 0.0, 1.0
-
-const xs = xmin:Δx:xmax
-const ys = ymin:Δy:ymax
-
-const pxs = 0.0:0.01:1.0
-const pys = 0.0:0.01:1.0
-
-
 function exp_squared_cov(σ, γ)
 
-    # Generate lists of x and y coordinates
+    # Generate vectors of x and y coordinates
     cxs = vec([x for _ ∈ pys, x ∈ pxs])
     cys = vec([y for y ∈ pys, _ ∈ pxs])
 
     # Generate a matrix of distances between each set of coordinates
-    dxs = cxs .- cxs'
-    dys = cys .- cys'
-    ds = dxs.^2 + dys.^2
+    ds = (cxs .- cxs').^2 + (cys .- cys').^2
 
-    # Add a small perturbation to the covariance matrix to ensure it is 
-    # positive definite
     Γ = σ^2 * exp.(-(1/2γ^2).*ds) + 1e-6I
 
     return Γ
@@ -53,10 +36,21 @@ function exp_squared_cov(σ, γ)
 end
 
 function sample_logperms(d)
-
     return reshape(rand(d), length(pxs), length(pxs))
-
 end
+
+Δx = 0.10
+Δy = 0.10
+
+xmin, xmax = 0.0, 1.0
+ymin, ymax = 0.0, 1.0
+tmin, tmax = 0.0, 1.0
+
+xs = xmin:Δx:xmax
+ys = ymin:Δy:ymax
+
+pxs = xmin:0.01:xmax
+pys = ymin:0.01:ymax
 
 # Generate some permeability parameters
 Γ = exp_squared_cov(1.0, 0.1)
@@ -65,24 +59,17 @@ d = MvNormal(Γ)
 ModelingToolkit.@register_symbolic k(x,y)
 ModelingToolkit.@register_symbolic v(x)
 
-ModelingToolkit.@parameters x y
+ModelingToolkit.@parameters x y t
 ModelingToolkit.@variables u(..)
 
 ∂x = ModelingToolkit.Differential(x)
 ∂y = ModelingToolkit.Differential(y)
+∂t = ModelingToolkit.Differential(t)
+
+eq = ∂x(k(x, y)*∂x(u(x, y, t))) + ∂y(k(x, y)*∂y(u(x, y, t))) ~ ∂t(u(x, y, t))
 
 # Define flux on top boundary 
 v(x) = 2.0
-
-eqs = [-∂x(k(x,y)*∂x(u(x, y))) - ∂y(k(x,y)*∂y(u(x, y))) ~ 0]
-
-# Constant pressure on the top, Neumann conditions on all other sides
-bcs = [
-    ∂x(u(xmin, y)) ~ 0.0, 
-    ∂x(u(xmax, y)) ~ 0.0, 
-    ∂y(u(x, ymax)) ~ v(x), 
-    ∂y(u(x, ymin)) ~ 0.0
-]
 
 # Define function to return permeability at a given point
 function k(x, y)
@@ -90,47 +77,32 @@ function k(x, y)
     return ks[i, j]
 end
 
-domains = [
-    x ∈ DomainSets.Interval(xmin, xmax), 
-    y ∈ DomainSets.Interval(ymin, ymax)
+# Constant pressure on the bottom, Neumann conditions on all other sides
+bcs = [
+    u(x, y, tmin) ~ 0.0,
+    ∂x(u(xmin, y, t)) ~ 0.0, 
+    ∂x(u(xmax, y, t)) ~ 0.0, 
+    ∂y(u(x, ymax, t)) ~ v(x), 
+    u(x, ymin, t) ~ 0.0
 ]
 
-@named pde_sys = ModelingToolkit.PDESystem(
-    eqs, bcs, domains, 
-    [x, y], [u(x, y)]
+domains = [
+    x ∈ DomainSets.Interval(xmin, xmax), 
+    y ∈ DomainSets.Interval(ymin, ymax),
+    t ∈ DomainSets.Interval(tmin, tmax)
+]
+
+@named darcy_pde = ModelingToolkit.PDESystem(
+    [eq], bcs, domains, 
+    [x, y, t], [u(x, y, t)]
 )
 
-ks = sample_logperms(d)
+discretization = MethodOfLines.MOLFiniteDifference([x => Δx, y => Δy], t)
 
-Plots.heatmap(pxs, pys, ks)
-Plots.savefig("$PLOTS_DIR/permeabilities.pdf")
-ks = exp.(ks)
+ks = exp.(sample_logperms(d))
+prob = @time MethodOfLines.discretize(darcy_pde, discretization)
+steadystateprob = SteadyStateProblem(prob)
+state = @time solve(steadystateprob, DynamicSS(Rodas5()))
 
-# bcs = [
-#     u(xmin, y) ~ 0.0, 
-#     u(xmax, y) ~ 0.0, 
-#     u(x, ymax) ~ 0.0,
-#     u(x, ymin) ~ 0.0
-# ]
-
-discretization = MethodOfLines.MOLFiniteDifference(
-    [x => Δx, y => Δy], nothing, 
-    approx_order=2
-)
-
-@info "Discretising..."
-prob = @time MethodOfLines.discretize(pde_sys, discretization)
-
-println(prob.u0)
-
-@info "Solving..."
-sol = @time NonlinearSolve.solve(prob, NewtonRaphson())
-
-solu = sol[u(x,y)]
-contourf(xs, ys, solu)
-savefig("$PLOTS_DIR/pressures.pdf")
-
-println(solu)
-
-# newprob = @time remake(prob, p=[0.8])
-# sol = @time NonlinearSolve.solve(newprob, NewtonRaphson(), progress=true, progress_steps=1)
+heatmap(pxs, pys, logperms, cmap=:viridis)
+heatmap(reshape(state, (9, 9)))
