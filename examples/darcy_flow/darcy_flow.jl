@@ -6,10 +6,11 @@ using MethodOfLines
 using ModelingToolkit
 using NonlinearSolve
 
-using Distributions 
+using Distributions
+using Interpolations
 using LinearAlgebra
 using Statistics
-using Random; Random.seed!(1)
+using Random; Random.seed!(0)
 
 import PyPlot
 
@@ -25,6 +26,22 @@ const PLOTS_DIR = "plots/darcy_flow"
 
 const TITLE_SIZE = 20
 const LABEL_SIZE = 14
+
+xmin, Δx, xmax = 0.0, 0.05, 1.0
+ymin, Δy, ymax = 0.0, 0.05, 1.0
+tmin, tmax = 0.0, 1.0
+
+xs = xmin:Δx:xmax
+ys = ymin:Δy:ymax
+
+pxs = xmin:0.01:xmax
+pys = ymin:0.01:ymax
+
+n_xs = length(xs)
+n_ys = length(ys)
+
+n_pxs = length(pxs)
+n_pys = length(pys)
 
 global ks
 
@@ -45,41 +62,17 @@ function exp_squared_cov(σ, γ)
 
 end
 
-"""Samples a set of log-normally distributed permeabilities."""
-function sample_perms(d)
-    return exp.(reshape(rand(d), length(pxs), length(pxs)))
-end
+# Define function to sample a set of permeabilities
+sample_perms(d) = exp.(reshape(rand(d), length(pxs), length(pxs)))
 
-"""Returns the value of the permeability field at a given point."""
-function k(x, y)
-    i, j = findmin(abs.(pxs.-x))[2], findmin(abs.(pys.-y))[2]
-    return ks[i, j]
-end
-
-# Returns the flux on the top boundary 
+# Define the permeability field and the flux through the top boundary
+k(x, y) = ks(x, y)
 v(x) = 2.0
 
-xmin, Δx, xmax = 0.0, 0.05, 1.0
-ymin, Δy, ymax = 0.0, 0.05, 1.0
-tmin, tmax = 0.0, 1.0
+ModelingToolkit.@register_symbolic k(x, y)
 
-xs = xmin:Δx:xmax
-ys = ymin:Δy:ymax
-
-pxs = xmin:0.01:xmax
-pys = ymin:0.01:ymax
-
-n_xs = length(xs)
-n_ys = length(ys)
-
-n_pxs = length(pxs)
-n_pys = length(pys)
-
-ModelingToolkit.@register_symbolic k(x,y)
-ModelingToolkit.@register_symbolic v(x)
-
-# Generate some permeability parameters
-Γ = exp_squared_cov(0.5, 0.1)
+# Generate a permeability distribution
+Γ = exp_squared_cov(0.8, 0.1)
 d = MvNormal(Γ)
 
 ModelingToolkit.@parameters x y t
@@ -106,25 +99,27 @@ bcs = [
     u(x, ymin, t) ~ 0.0
 ]
 
+discretization = MOLFiniteDifference([x => Δx, y => Δy], t)
+
 function solve_darcy_pde()
 
-    global ks = sample_perms(d)
+    # Sample a set of permeabilities and form an interpolation object
+    global ks = interpolate((pxs, pys), sample_perms(d), Gridded(Linear()))
 
-    @named darcy_pde = ModelingToolkit.PDESystem(
+    darcy_pde = ModelingToolkit.PDESystem(
         [eq], bcs, domains, 
-        [x, y, t], [u(x, y, t)]
+        [x, y, t], [u(x, y, t)],
+        name=:darcy_pde
     )
 
-    discretization = MOLFiniteDifference([x => Δx, y => Δy], t)
     prob = @time discretize(darcy_pde, discretization)
     steadystateprob = SteadyStateProblem(prob)
     state = @time solve(steadystateprob, DynamicSS(Rodas5()))
 
     state.retcode != ReturnCode.Success && error("$(state.retcode)")
+    ps = reshape(state.u, (n_xs-2, n_ys-2))
 
-    ps = reshape(state.u, (length(xs)-2, length(ys)-2))
-
-    return ks, ps
+    return ks.coefs, ps
 
 end
 
@@ -166,8 +161,8 @@ for col ∈ 1:3
 
 end
 
-ax[1, 1].set_ylabel("ln(Permeability) Fields", fontsize=LABEL_SIZE)
-ax[2, 1].set_ylabel("Pressure Fields", fontsize=LABEL_SIZE)
+ax[1, 1].set_ylabel("ln(Permeability)", fontsize=LABEL_SIZE)
+ax[2, 1].set_ylabel("Pressure", fontsize=LABEL_SIZE)
 
 PyPlot.suptitle("ln(Permeability) and Pressure Fields", fontsize=TITLE_SIZE)
 PyPlot.tight_layout()
