@@ -20,6 +20,10 @@ const PLOTS_DIR = "plots/darcy_flow"
 const TITLE_SIZE = 20
 const LABEL_SIZE = 16
 
+global ks
+
+"""Generates an exponential-squared covariance matrix with a given standard 
+deviation and length-scale."""
 function exp_squared_cov(σ, γ)
 
     # Generate vectors of x and y coordinates
@@ -35,74 +39,89 @@ function exp_squared_cov(σ, γ)
 
 end
 
-function sample_logperms(d)
-    return reshape(rand(d), length(pxs), length(pxs))
+"""Samples a set of log-normally distributed permeabilities."""
+function sample_perms(d)
+    return exp.(reshape(rand(d), length(pxs), length(pxs)))
 end
 
-Δx = 0.10
-Δy = 0.10
-
-xmin, xmax = 0.0, 1.0
-ymin, ymax = 0.0, 1.0
-tmin, tmax = 0.0, 1.0
-
-xs = xmin:Δx:xmax
-ys = ymin:Δy:ymax
-
-pxs = xmin:0.01:xmax
-pys = ymin:0.01:ymax
-
-# Generate some permeability parameters
-Γ = exp_squared_cov(1.0, 0.1)
-d = MvNormal(Γ)
-
-ModelingToolkit.@register_symbolic k(x,y)
-ModelingToolkit.@register_symbolic v(x)
-
-ModelingToolkit.@parameters x y t
-ModelingToolkit.@variables u(..)
-
-∂x = ModelingToolkit.Differential(x)
-∂y = ModelingToolkit.Differential(y)
-∂t = ModelingToolkit.Differential(t)
-
-eq = ∂x(k(x, y)*∂x(u(x, y, t))) + ∂y(k(x, y)*∂y(u(x, y, t))) ~ ∂t(u(x, y, t))
-
-# Define flux on top boundary 
-v(x) = 2.0
-
-# Define function to return permeability at a given point
+"""Returns the value of the permeability field at a given point."""
 function k(x, y)
     i, j = findmin(abs.(pxs.-x))[2], findmin(abs.(pys.-y))[2]
     return ks[i, j]
 end
 
-# Constant pressure on the bottom, Neumann conditions on all other sides
-bcs = [
-    u(x, y, tmin) ~ 0.0,
-    ∂x(u(xmin, y, t)) ~ 0.0, 
-    ∂x(u(xmax, y, t)) ~ 0.0, 
-    ∂y(u(x, ymax, t)) ~ v(x), 
-    u(x, ymin, t) ~ 0.0
-]
+xmin, Δx, xmax = 0.0, 0.05, 1.0
+ymin, Δy, ymax = 0.0, 0.05, 1.0
+tmin, tmax = 0.0, 1.0
 
-domains = [
-    x ∈ DomainSets.Interval(xmin, xmax), 
-    y ∈ DomainSets.Interval(ymin, ymax),
-    t ∈ DomainSets.Interval(tmin, tmax)
-]
+xs = xmin:Δx:xmax
+ys = ymin:Δy:ymax
 
-@named darcy_pde = ModelingToolkit.PDESystem(
-    [eq], bcs, domains, 
-    [x, y, t], [u(x, y, t)]
-)
+n_xs = length(xs)
+n_ys = length(ys)
 
-discretization = MethodOfLines.MOLFiniteDifference([x => Δx, y => Δy], t)
+pxs = xmin:0.01:xmax
+pys = ymin:0.01:ymax
 
-ks = exp.(sample_logperms(d))
-prob = @time MethodOfLines.discretize(darcy_pde, discretization)
-steadystateprob = SteadyStateProblem(prob)
-state = @time solve(steadystateprob, DynamicSS(Rodas5()))
+ModelingToolkit.@register_symbolic k(x,y)
+ModelingToolkit.@register_symbolic v(x)
 
-heatmap(pxs, pys, logperms, cmap=:viridis)
-heatmap(reshape(state, (9, 9)))
+function solve_darcy_pde()
+
+    ModelingToolkit.@parameters x y t
+    ModelingToolkit.@variables u(..)
+
+    ∂x = ModelingToolkit.Differential(x)
+    ∂y = ModelingToolkit.Differential(y)
+    ∂t = ModelingToolkit.Differential(t)
+
+    # Generate some permeability parameters
+    Γ = exp_squared_cov(1.0, 0.1)
+    d = MvNormal(Γ)
+
+    # Define flux on top boundary 
+    v(x) = 2.0
+
+    eq = ∂x(k(x, y)*∂x(u(x, y, t))) + ∂y(k(x, y)*∂y(u(x, y, t))) ~ ∂t(u(x, y, t))
+
+    # Constant pressure on the bottom, Neumann conditions on all other sides
+    bcs = [
+        u(x, y, tmin) ~ 0.0,
+        ∂x(u(xmin, y, t)) ~ 0.0, 
+        ∂x(u(xmax, y, t)) ~ 0.0, 
+        ∂y(u(x, ymax, t)) ~ v(x), 
+        u(x, ymin, t) ~ 0.0
+    ]
+
+    domains = [
+        x ∈ DomainSets.Interval(xmin, xmax), 
+        y ∈ DomainSets.Interval(ymin, ymax),
+        t ∈ DomainSets.Interval(tmin, tmax)
+    ]
+
+    global ks = sample_perms(d)
+
+    @named darcy_pde = ModelingToolkit.PDESystem(
+        [eq], bcs, domains, 
+        [x, y, t], [u(x, y, t)]
+    )
+
+    discretization = MOLFiniteDifference([x => Δx, y => Δy], t)
+    prob = @time discretize(darcy_pde, discretization)
+    steadystateprob = SteadyStateProblem(prob)
+    state = @time solve(steadystateprob, DynamicSS(Rodas5()))
+
+    state.retcode != ReturnCode.Success && error("$(state.retcode)")
+
+    ps = reshape(state.u, (length(xs)-2, length(ys)-2))
+
+    return ps
+
+end
+
+ps_1 = solve_darcy_pde()
+ps_2 = solve_darcy_pde()
+ps_3 = solve_darcy_pde()
+
+heatmap(pxs, pys, log.(ks), cmap=:viridis)
+heatmap(xs[2:end-1], ys[2:end-1], ps_3)
