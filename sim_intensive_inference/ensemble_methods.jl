@@ -553,6 +553,12 @@ function resample_ws_inds(ws)
 end
 
 
+# TODO: move into utilities.jl?
+function ess(ws)
+    return 1 ./ sum(ws.^2)
+end
+
+
 """Runs the weighted ES-MDA algorithm, as described in Stordal (2015)."""
 function run_wes_mda(
     f::Function,
@@ -638,13 +644,104 @@ function run_wes_mda(
         # Normalise the set of weights
         ws ./= sum(ws)
 
+        println(ess(ws))
+
         # Resample everything
         inds = resample_ws_inds(ws)
         θs[:,:,i] = θs[:,inds,i]
         ys[:,:,i] = ys[:,inds,i]
         ws = ones(N_e)./N_e
 
-        println(length(unique(inds)))
+        # TODO: resample
+        verbose && @info("Iteration $i complete.")
+        
+    end
+
+    # TODO: return full set of ys and set of weights at each iteration?
+    return θs, ys, ws
+    
+end
+
+
+"""Runs the weighted ES-MDA algorithm (my verison)."""
+function run_wes_mda_alt(
+    f::Function,
+    g::Function,
+    π::Distribution,
+    L::Distribution,
+    ys_obs::AbstractVector,
+    σ_ϵ::Real,
+    αs::AbstractVector,
+    N_e::Int,
+    verbose::Bool=true
+)
+
+    if abs(sum(1 ./ αs) - 1.0) > 1e-4 
+        error("Reciprocals of α values do not sum to 1.")
+    end
+
+    N_i = length(αs)
+    N_θ = length(π.μ)
+    N_y = length(ys_obs)
+
+    prepend!(αs, 0.0)
+
+    # Generate the covariance of the errors
+    Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, N_y, N_y)
+
+    # Initialise some vectors
+    θs = zeros(N_θ, N_e, N_i+1)
+    ys = zeros(N_y, N_e, N_i+1)
+
+    # Initialise the set of weights
+    ws = ones(N_e) ./ N_e
+
+    # Sample an initial ensemble and predictions
+    θs[:,:,1] = rand(π, N_e)
+    ys[:,:,1] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs[:,:,1])])
+
+    for i ∈ 2:N_i+1
+
+        # Compute the gain
+        Δθ = θs[:,:,i-1] .- Statistics.mean(θs[:,:,i-1], dims=2)
+        Δy = ys[:,:,i-1] .- Statistics.mean(ys[:,:,i-1], dims=2)
+        Γ_θy = 1/(N_e-1)*Δθ*Δy'
+        Γ_y = 1/(N_e-1)*Δy*Δy'
+        K = Γ_θy * inv_tsvd(Γ_y + αs[i]*Γ_ϵ)
+
+        # Generate a set of perturbed data vectors 
+        ys_p = rand(MvNormal(ys_obs, αs[i]*Γ_ϵ), N_e)
+
+        # Calculate the kernel means and (common) covariance
+        μ_K = θs[:,:,i-1] + K * (ys_obs .- ys[:,:,i-1])
+        Γ_K = αs[i] * K * Γ_ϵ * K' + 1e-8I
+
+        # Generate the new set of particles and associated predictions
+        θs[:,:,i] = θs[:,:,i-1] + K * (ys_p .- ys[:,:,i-1])
+        ys[:,:,i] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs[:,:,i])])
+
+        # Generate the importance distribution
+        K = MixtureModel(MvNormal, [(μ, Γ_K) for μ ∈ eachcol(μ_K)])
+        
+        for j ∈ 1:N_e
+
+            logd_t = logpdf(π, θs[:,j,i]) + sum(1 ./ αs[2:i]) * logpdf(L, ys[:,j,i])
+            logd_k = logpdf(K, θs[:,j,i])
+
+            ws[j] *= exp(logd_t-logd_k)
+
+        end
+
+        # Normalise the set of weights
+        ws ./= sum(ws)
+
+        println(ess(ws))
+
+        # Resample everything
+        inds = resample_ws_inds(ws)
+        θs[:,:,i] = θs[:,inds,i]
+        ys[:,:,i] = ys[:,inds,i]
+        ws = ones(N_e)./N_e
 
         # TODO: resample
         verbose && @info("Iteration $i complete.")
