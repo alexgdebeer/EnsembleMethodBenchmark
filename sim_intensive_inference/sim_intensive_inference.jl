@@ -1,10 +1,11 @@
 module SimIntensiveInference
 
-import Distributions
-import ForwardDiff
-import LinearAlgebra
-import Optim
-import Statistics
+using Distributions
+using ForwardDiff
+using LinearAlgebra
+using Optim
+using Random
+using Statistics
 
 include("distributions.jl")
 
