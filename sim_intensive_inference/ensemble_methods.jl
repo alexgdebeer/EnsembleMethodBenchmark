@@ -172,46 +172,31 @@ end
 function run_es(
     f::Function,
     g::Function,
-    π::AbstractPrior,
-    ys_obs::AbstractVector,
-    σ_ϵ::Real, 
+    π::Distribution,
+    L::Distribution,
     N_e::Int;
     verbose::Bool=true
 )
 
     N_θ = length(π.μ)
-    N_y = length(ys_obs)
+    N_y = length(L.μ)
 
-    # Generate the covariance of the errors
-    Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, N_y, N_y)
+    θs = zeros(N_θ, N_e, 2)
+    ys = zeros(N_y, N_e, 2)
 
-    # Initialise vectors to store the results of each iteration
-    θs = [Matrix(undef, N_θ, N_e), Matrix(undef, N_θ, N_e)]
-    ys_c = [Matrix(undef, 0, 0), Matrix(undef, 0, 0)]
+    # Sample an initial ensemble and predictions
+    θs[:,:,1] = rand(π, N_e)
+    ys[:,:,1] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs[:,:,1])])
 
-    # Sample an ensemble from the prior
-    θs[1] = reduce(hcat, sample(π, n=N_e))
-
-    # Generate the ensemble predictions
-    ys_l = [f(θ) for θ ∈ eachcol(θs[1])]
-    ys_c[1] = reduce(vcat, ys_l)
-    ys = reduce(hcat, [g(y) for y ∈ ys_l])
-
-    # Generate a set of perturbed data vectors 
-    ys_p = rand(Distributions.MvNormal(ys_obs, Γ_ϵ), N_e)
-
-    # Compute the gain
-    Δθ = θs[1] .- Statistics.mean(θs[1], dims=2)
-    Δy = ys .- Statistics.mean(ys, dims=2)
-    Γ_θy = 1/(N_e-1)*Δθ*Δy'
-    Γ_y = 1/(N_e-1)*Δy*Δy'
-    K = Γ_θy * inv(Γ_y + Γ_ϵ)
+    # Generate a set of perturbations
+    ϵs = rand(Distributions.MvNormal(zeros(N_θ), Γ_ϵ), N_e)
 
     # Form the updated ensemble and generate the updated ensemble predictions
-    θs[2] = θs[1] + K*(ys_p-ys)
-    ys_c[2] = reduce(vcat, [f(θ) for θ ∈ eachcol(θs[2])])
+    K = kalman_gain(θs[:,:,1], ys[:,:,1], L.Σ)
+    θs[:,:,2] = θs[:,:,1] + K * (L.μ .+ ϵs .- ys[:,:,1])
+    ys[:,:,2] = reduce(vcat, [f(θ) for θ ∈ eachcol(θs[:,:,2])])
 
-    return θs, ys_c
+    return θs, ys
 
 end
 
@@ -219,63 +204,41 @@ end
 function run_es_mda(
     f::Function,
     g::Function,
-    π::AbstractPrior,
-    ys_obs::AbstractVector,
-    σ_ϵ::Real, 
+    π::Distribution,
+    L::Distribution,
     αs::AbstractVector,
     N_e::Int;
     verbose::Bool=true
 )
 
-    if abs(sum(1 ./ αs) - 1.0) > 1e-4 
-        error("Reciprocals of α values do not sum to 1.")
-    end
+    sum(1 ./ αs) ≉ 1.0 && error("Reciprocals of α values do not sum to 1.")
 
     N_i = length(αs)
     N_θ = length(π.μ)
-    N_y = length(ys_obs)
+    N_y = length(L.μ)
 
-    # Generate the covariance of the errors
-    Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, N_y, N_y)
+    θs = zeros(N_θ, N_e, N_i+1)
+    ys = zeros(N_y, N_e, N_i+1)
 
-    # Initialise some vectors
-    θs = [Matrix(undef, N_θ, N_e) for _ ∈ 1:N_i+1]
-    ys = [Matrix(undef, N_y, N_e) for _ ∈ 1:N_i+1]
-    ys_c = [Matrix(undef, 0, 0) for _ ∈ 1:N_i+1] # TODO: fix dimensions?
+    # Sample an initial ensemble and predictions
+    θs[:,:,1] = rand(π, N_e)
+    ys[:,:,1] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs[:,:,1])])
 
-    # Sample an initial ensemble
-    θs[1] = reduce(hcat, sample(π, n=N_e))
-    
-    # Generate the ensemble predictions
-    ys_l = [f(θ) for θ ∈ eachcol(θs[1])]
-    ys_c[1] = reduce(vcat, ys_l)
-    ys[1] = reduce(hcat, [g(y) for y ∈ ys_l])
+    for i ∈ 2:N_i+1
 
-    for (i, α) ∈ enumerate(αs)
+        # Generate a set of perturbations
+        ϵs = rand(MvNormal(zeros(N_θ), αs[i-1]*L.Σ), N_e)
 
-        # Generate a set of perturbed data vectors 
-        ys_p = rand(Distributions.MvNormal(ys_obs, α*Γ_ϵ), N_e)
+        # Generate the new ensemble and associated predictions
+        K = kalman_gain(θs[:,:,i-1], ys[:,:,i-1], αs[i-1]*L.Σ)
+        θs[:,:,i] = θs[:,:,i-1] + K * (L.μ .+ ϵs .- ys[:,:,i-1])
+        ys[:,:,i] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs[:,:,i])])
 
-        # Compute the gain
-        Δθ = θs[i] .- Statistics.mean(θs[i], dims=2)
-        Δy = ys[i] .- Statistics.mean(ys[i], dims=2)
-        Γ_θy = 1/(N_e-1)*Δθ*Δy'
-        Γ_y = 1/(N_e-1)*Δy*Δy'
-        K = Γ_θy * inv_tsvd(Γ_y + α*Γ_ϵ)
-
-        # Update each ensemble member
-        θs[i+1] = θs[i] + K*(ys_p-ys[i])
-        
-        # Update the ensemble predictions
-        ys_l = [f(θ) for θ ∈ eachcol(θs[i+1])]
-        ys_c[i+1] = reduce(vcat, ys_l)
-        ys[i+1] = reduce(hcat, [g(y) for y ∈ ys_l])
-
-        verbose && @info("Iteration $i complete.")
+        verbose && @info "Iteration $(i-1) complete."
         
     end
 
-    return θs, ys_c
+    return θs, ys
 
 end
 
@@ -505,99 +468,77 @@ function run_wes_mda(
     g::Function,
     π::Distribution,
     L::Distribution,
-    ys_obs::AbstractVector,
-    σ_ϵ::Real,
     αs::AbstractVector,
-    N_e::Int,
+    N_e::Int;
+    min_ess::Real=N_e/2,
     verbose::Bool=true
 )
 
-    if abs(sum(1 ./ αs) - 1.0) > 1e-4 
-        error("Reciprocals of α values do not sum to 1.")
-    end
+    βs = cumsum(1 ./ αs)
+    βs[end] ≉ 1.0 && error("Reciprocals of α values do not sum to 1.")
 
     N_i = length(αs)
     N_θ = length(π.μ)
-    N_y = length(ys_obs)
+    N_y = length(L.μ)
 
-    prepend!(αs, 0.0)
-
-    # Generate the covariance of the errors
-    Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, N_y, N_y)
-
-    # Initialise some vectors
     θs = zeros(N_θ, N_e, N_i+1)
     ys = zeros(N_y, N_e, N_i+1)
-
-    # Initialise the set of weights
-    ws = ones(N_e) ./ N_e
+    ws = zeros(N_i+1, N_e)
 
     # Sample an initial ensemble and predictions
     θs[:,:,1] = rand(π, N_e)
     ys[:,:,1] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs[:,:,1])])
+    ws[1,:] = ones(N_e)/N_e; logws = zeros(N_e)
 
     for i ∈ 2:N_i+1
 
-        # Compute the gain
-        Δθ = θs[:,:,i-1] .- Statistics.mean(θs[:,:,i-1], dims=2)
-        Δy = ys[:,:,i-1] .- Statistics.mean(ys[:,:,i-1], dims=2)
-        Γ_θy = 1/(N_e-1)*Δθ*Δy'
-        Γ_y = 1/(N_e-1)*Δy*Δy'
-        K = Γ_θy * inv_tsvd(Γ_y + αs[i]*Γ_ϵ)
+        # Generate a set of perturbations
+        ϵs = rand(MvNormal(zeros(N_y), αs[i-1]*L.Σ), N_e)
 
-        # Generate a set of perturbed data vectors 
-        ys_p = rand(MvNormal(ys_obs, αs[i]*Γ_ϵ), N_e)
-
-        # Calculate the kernel means and (common) covariance
-        μ_K = θs[:,:,i-1] + K * (ys_obs .- ys[:,:,i-1])
-        Γ_K = αs[i] * K * Γ_ϵ * K' + 1e-8I
-
-        # Generate the new set of particles and associated predictions
-        θs[:,:,i] = θs[:,:,i-1] + K * (ys_p .- ys[:,:,i-1])
+        # Generate the new ensemble and associated predictions
+        K = kalman_gain(θs[:,:,i-1], ys[:,:,i-1], αs[i-1]*L.Σ)
+        θs[:,:,i] = θs[:,:,i-1] + K * (L.μ .+ ϵs .- ys[:,:,i-1])
         ys[:,:,i] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs[:,:,i])])
 
-        # Generate forward and backward kernels with appropriate covariances
+        # Generate forward and backwards kernels
+        μ_Ks = θs[:,:,i-1] + K * (L.μ .- ys[:,:,i-1])
+        Γ_K = Hermitian(K * αs[i-1]*L.Σ * K' + 1e-8I)
         K = MvNormal(zeros(N_θ), Γ_K)
         T = MvNormal(zeros(N_θ), Γ_K)
-        
-        for j ∈ 1:N_e
 
-            θ = θs[:,j,i]
-            μ = μ_K[:,j]
-            θ_p = θs[:,j,i-1]
+        # Calculate the weights
+        β_p = i ≤ 2 ? 0.0 : βs[i-2]
+        logws .+= [
+            logpdf(π, θs[:,j,i]) + βs[i-1] * logpdf(L, ys[:,j,i]) - 
+            logpdf(π, θs[:,j,i-1]) - β_p * logpdf(L, ys[:,j,i-1]) + 
+            logpdf(T, θs[:,j,i-1]-θs[:,j,i]) -
+            logpdf(K, θs[:,j,i]-μ_Ks[:,j])
+                for j ∈ 1:N_e]
 
-            y = ys[:,j,i]
-            y_p = ys[:,j,i-1]
+        # Re-scale, exponentiate and normalise weights
+        logws = rescale_logws(logws)
+        ws[i,:] = normalise_ws(exp.(logws))
+
+        if i != N_i+1 && ess(ws[i,:]) < min_ess
+
+            @info "ESS below acceptable threshold ($(ess(ws[i,:]))). Resampling."
             
-            # Evaluate the density of forward and backward kernels
-            K_θ = logpdf(K, θ-μ)
-            T_θ = logpdf(T, θ_p-θ)
+            # Resample
+            is = resample_ws(ws[i,:])
+            θs[:,:,i] = θs[:,is,i]
+            ys[:,:,i] = ys[:,is,i]
             
-            # Evaluate the density of the likelihood at the previous estimate
-            p_θ = logpdf(π, θ) + sum(1 ./ αs[2:i]) * logpdf(L, y)
-            p_θp = logpdf(π, θ_p) + sum(1 ./ αs[2:i-1]) * logpdf(L, y_p)
-
-            ws[j] *= exp((p_θ + T_θ) - (p_θp + K_θ))
+            # Reset the weights
+            ws[i,:] = ones(N_e)/N_e
+            logws = zeros(N_e)
 
         end
 
-        # Normalise the set of weights
-        ws ./= sum(ws)
-
-        println(ess(ws))
-
-        # Resample everything
-        inds = resample_ws_inds(ws)
-        θs[:,:,i] = θs[:,inds,i]
-        ys[:,:,i] = ys[:,inds,i]
-        ws = ones(N_e)./N_e
-
-        # TODO: resample
-        verbose && @info("Iteration $i complete.")
+        verbose && @info "Iteration $(i-1) complete."
         
     end
 
-    # TODO: return full set of ys and set of weights at each iteration?
+    # TODO: return full set of ys?
     return θs, ys, ws
     
 end
@@ -633,26 +574,25 @@ function run_wes_mda_alt(
 
     for i ∈ 2:N_i+1
 
-        # Compute the gain
-        K = kalman_gain(θs[:,:,i-1], ys[:,:,i-1], αs[i-1]*L.Σ)
-
-        # Generate a set of perturbed data vectors 
-        ys_p = rand(MvNormal(L.μ, αs[i-1]*L.Σ), N_e)
+        # Generate a set of perturbations
+        ϵs = rand(MvNormal(zeros(N_y), αs[i-1]*L.Σ), N_e)
 
         # Generate the new set of particles and associated predictions
-        θs[:,:,i] = θs[:,:,i-1] + K * (ys_p .- ys[:,:,i-1])
+        K = kalman_gain(θs[:,:,i-1], ys[:,:,i-1], αs[i-1]*L.Σ)
+        θs[:,:,i] = θs[:,:,i-1] + K * (L.μ .+ ϵs .- ys[:,:,i-1])
         ys[:,:,i] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs[:,:,i])])
 
         # Generate the importance distribution
-        μ_K = θs[:,:,i-1] + K * (L.μ .- ys[:,:,i-1])
-        Γ_K = αs[i-1] * K * L.Σ * K' + 1e-8I
-        K = MixtureModel(MvNormal, [(μ, Γ_K) for μ ∈ eachcol(μ_K)], ws[i-1,:])
+        μ_Ks = θs[:,:,i-1] + K * (L.μ .- ys[:,:,i-1])
+        Γ_K = Hermitian(K * αs[i-1]*L.Σ * K' + 1e-8I)
+        K = MixtureModel(MvNormal, [(μ, Γ_K) for μ ∈ eachcol(μ_Ks)], ws[i-1,:])
 
         # Increment the weights
-        logws .+= [logpdf(π, θs[:,j,i]) + 
-                    βs[i-1] * logpdf(L, ys[:,j,i]) - 
-                    logpdf(K, θs[:,j,i]) 
-                    for j ∈ 1:N_e]
+        logws .+= [
+            logpdf(π, θs[:,j,i]) + 
+            βs[i-1] * logpdf(L, ys[:,j,i]) - 
+            logpdf(K, θs[:,j,i]) 
+                for j ∈ 1:N_e]
 
         # Re-scale, exponentiate and normalise weights
         logws = rescale_logws(logws)
@@ -663,12 +603,12 @@ function run_wes_mda_alt(
             @info "ESS below acceptable threshold ($(ess(ws[i,:]))). Resampling."
             
             # Resample
-            inds = resample_ws(ws[i,:])
-            θs[:,:,i] = θs[:,inds,i]
-            ys[:,:,i] = ys[:,inds,i]
+            is = resample_ws(ws[i,:])
+            θs[:,:,i] = θs[:,is,i]
+            ys[:,:,i] = ys[:,is,i]
             
             # Reset the weights
-            ws[i,:] = ones(N_e) ./ N_e
+            ws[i,:] = ones(N_e)/N_e
             logws = zeros(N_e)
 
         end

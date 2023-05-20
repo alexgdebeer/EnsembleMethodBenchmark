@@ -68,6 +68,8 @@ function kalman_gain(
     Γ_ϵ::AbstractMatrix
 )::AbstractMatrix
 
+    N_e = size(θs, 2)
+
     Δθ = θs .- mean(θs, dims=2)
     Δy = ys .- mean(ys, dims=2)
     
