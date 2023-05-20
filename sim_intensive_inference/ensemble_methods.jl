@@ -634,14 +634,10 @@ function run_wes_mda_alt(
     for i ∈ 2:N_i+1
 
         # Compute the gain
-        Δθ = θs[:,:,i-1] .- Statistics.mean(θs[:,:,i-1], dims=2)
-        Δy = ys[:,:,i-1] .- Statistics.mean(ys[:,:,i-1], dims=2)
-        Γ_θy = 1/(N_e-1)*Δθ*Δy'
-        Γ_y = 1/(N_e-1)*Δy*Δy'
-        K = Γ_θy * inv_tsvd(Γ_y + αs[i-1]*L.Σ)
+        K = kalman_gain(θs[:,:,i-1], ys[:,:,i-1], αs[i-1]*L.Σ)
 
         # Generate a set of perturbed data vectors 
-        ys_p = rand(MvNormal(L.μ, αs[i-1] * L.Σ), N_e)
+        ys_p = rand(MvNormal(L.μ, αs[i-1]*L.Σ), N_e)
 
         # Generate the new set of particles and associated predictions
         θs[:,:,i] = θs[:,:,i-1] + K * (ys_p .- ys[:,:,i-1])
@@ -664,7 +660,7 @@ function run_wes_mda_alt(
 
         if i != N_i+1 && ess(ws[i,:]) < min_ess
 
-            @info "ESS below acceptable threshold ($(ess(ws[i,:]))). Resampling..."
+            @info "ESS below acceptable threshold ($(ess(ws[i,:]))). Resampling."
             
             # Resample
             inds = resample_ws(ws[i,:])

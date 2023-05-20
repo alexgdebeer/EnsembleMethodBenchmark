@@ -61,3 +61,19 @@ function inv_tsvd(A::AbstractMatrix; energy=0.999)
     return A_i
 
 end
+
+function kalman_gain(
+    θs::AbstractMatrix, 
+    ys::AbstractMatrix,
+    Γ_ϵ::AbstractMatrix
+)::AbstractMatrix
+
+    Δθ = θs .- mean(θs, dims=2)
+    Δy = ys .- mean(ys, dims=2)
+    
+    Γ_θy = Δθ*Δy'/(N_e-1)
+    Γ_y  = Δy*Δy'/(N_e-1)
+
+    return Γ_θy * inv_tsvd(Γ_y + Γ_ϵ)
+
+end
