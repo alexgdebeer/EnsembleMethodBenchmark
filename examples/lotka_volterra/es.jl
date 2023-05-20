@@ -27,7 +27,7 @@ if es
         LVModel.AS, LVModel.BS, 
         LVModel.POST_MARG_A, LVModel.POST_MARG_B,
         "LV: ES Posterior",
-        "$(LVModel.PLOTS_DIR)/es/es_posterior.pdf";
+        "$(LVModel.PLOTS_DIR)/es/es_posterior_modified_prior.pdf";
         θs_t=LVModel.θS_T,
         caption="Ensemble size: $N_e."
     )
@@ -35,7 +35,7 @@ if es
     Plotting.plot_lv_posterior_predictions(
         LVModel.TS, ys[end], LVModel.YS_T, LVModel.TS_O, LVModel.YS_O, 
         "LV: ES Posterior Predictions", 
-        "$(LVModel.PLOTS_DIR)/es/es_posterior_predictions.pdf"
+        "$(LVModel.PLOTS_DIR)/es/es_posterior_predictions_modified_prior.pdf"
     )
 
 end
@@ -53,7 +53,7 @@ if es_mda
         LVModel.AS, LVModel.BS, 
         LVModel.POST_MARG_A, LVModel.POST_MARG_B,
         "LV: ES-MDA Posterior",
-        "$(LVModel.PLOTS_DIR)/es/es_mda_posterior.pdf";
+        "$(LVModel.PLOTS_DIR)/es/es_mda_posterior_modified_prior.pdf";
         θs_t=LVModel.θS_T,
         caption="Ensemble size: $N_e. Iterations: $(length(αs))."
     )
@@ -61,7 +61,7 @@ if es_mda
     Plotting.plot_lv_posterior_predictions(
         LVModel.TS, ys[end], LVModel.YS_T, LVModel.TS_O, LVModel.YS_O, 
         "LV: ES-MDA Posterior Predictions", 
-        "$(LVModel.PLOTS_DIR)/es/es_mda_posterior_predictions.pdf"
+        "$(LVModel.PLOTS_DIR)/es/es_mda_posterior_predictions_modified_prior.pdf"
     )
 
 end

@@ -69,19 +69,19 @@ const YS_O = YS_T[:, IS_O] + rand(Normal(0.0, σ_ϵ), size(YS_T[:, IS_O]))
 const μ_π = [0.0, 0.0]
 const σ_π = 3.0
 const Γ_π = σ_π^2 * Matrix(I, 2, 2)
-const π = SimIntensiveInference.GaussianPrior(μ_π, Γ_π)
+const π = MvNormal(μ_π, Γ_π)
 
 # Define the likelihood
 const μ_ϵ = zeros(2N_IS_O)
 const μ_L = reduce(vcat, YS_O)
 const Γ_ϵ = σ_ϵ^2 * Matrix(I, 2N_IS_O, 2N_IS_O)
-const L = SimIntensiveInference.GaussianLikelihood(μ_L, Γ_ϵ)
+const L = MvNormal(μ_L, Γ_ϵ)
 
 # Compute the properties of the true posterior 
 const N_PTS = 50
 const AS = collect(range(0.5, 1.5, N_PTS))
 const BS = collect(range(0.5, 1.5, N_PTS))
-const d(θs) = SimIntensiveInference.density(π, θs) * SimIntensiveInference.density(L, g(f(θs)))
+const d(θs) = pdf(π, θs) * pdf(L, g(f(θs)))
 const POST_JOINT, POST_MARG_A, POST_MARG_B = Plotting.density_grid(AS, BS, d)
 
 if abspath(PROGRAM_FILE) == @__FILE__
