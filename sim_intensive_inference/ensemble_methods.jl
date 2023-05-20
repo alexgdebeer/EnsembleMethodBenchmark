@@ -91,17 +91,15 @@ function run_hi_enkf(
 
     for (i, t, y) ∈ zip(2:N_i+1, ts, eachcol(ys_obs))
 
-        Γ_ϵ = σ_ϵ^2 * Matrix(I, length(y), length(y))
-
         # Generate the states and observations at the current time of interest
         us[:,:,i-1] = reduce(hcat, [a(θs[:,j,i-1], t_1=t)[:,end] for j ∈ 1:N_e])
         ys[:,:,i-1] = reduce(hcat, [b(θs[:,j,i-1], us[:,j,i-1]) for j ∈ 1:N_e])
 
         # Generate a set of perturbations
-        ϵs = rand(MvNormal(zeros(length(y)), Γ_ϵ), N_e)
+        ϵs = rand(MvNormal(zeros(length(y)), σ_ϵ^2 * I), N_e)
 
         # Update each ensemble member
-        K = kalman_gain(θs[:,:,i-1], ys[:,:,i-1], Γ_ϵ)
+        K = kalman_gain(θs[:,:,i-1], ys[:,:,i-1], σ_ϵ^2 * I)
         θs[:,:,i] = θs[:,:,i-1] + K * (y .+ ϵs .- ys[:,:,i-1])
 
         verbose && @info "Iteration $(i-1) complete."
