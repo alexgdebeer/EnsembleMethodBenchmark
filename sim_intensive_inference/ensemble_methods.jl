@@ -1,44 +1,3 @@
-"""Returns the truncated singular value decomposition of a matrix A, 
-under the requirement that the total energy retained is no less than a given 
-amount."""
-function tsvd(A::AbstractMatrix; energy=0.999)
-
-    U, Λ, V = LinearAlgebra.svd(A)
-    total_energy = sum(Λ.^2)
-
-    for i ∈ 1:length(Λ)
-        if sum(Λ[1:i].^2) / total_energy ≥ energy 
-            return U[:, 1:i], Λ[1:i], V[:, 1:i]
-        end
-    end
-
-    error("There is an issue in the TSVD function.")
-
-end
-
-
-"""Returns the inverse of a matrix, rescaled and then inverted using a 
-truncated singular value decomposition."""
-function inv_tsvd(A::AbstractMatrix; energy=0.999)
-
-    size(A, 1) != size(A, 2) && error("Matrix is not square.")
-
-    # Scale the matrix
-    vars = LinearAlgebra.diag(A)
-    stds_i = LinearAlgebra.Diagonal(1 ./ sqrt.(vars))
-    A = stds_i * A * stds_i
-
-    # Compute the TSVD of the scaled matrix 
-    U, Λ, V = tsvd(A, energy=energy)
-
-    # Form the inverse of the matrix
-    A_i = stds_i * V * LinearAlgebra.Diagonal(1.0 ./ Λ) * U' * stds_i 
-
-    return A_i
-
-end
-
-
 """Runs the EnKF algorithm, with the parameters augmented to the states."""
 function run_enkf(
     a::Function,
@@ -540,25 +499,6 @@ function run_lm_enrml(
 end
 
 
-# TODO: move into utilities.jl?
-function resample_ws_inds(ws)
-    
-    n = length(ws)
-    cum_ws = cumsum(ws)
-    r = rand()/n
-
-    inds = [findfirst(cum_ws .≥ r+(i-1)/n) for i ∈ 1:n]
-    return inds
-
-end
-
-
-# TODO: move into utilities.jl?
-function ess(ws)
-    return 1 ./ sum(ws.^2)
-end
-
-
 """Runs the weighted ES-MDA algorithm, as described in Stordal (2015)."""
 function run_wes_mda(
     f::Function,
@@ -669,36 +609,27 @@ function run_wes_mda_alt(
     g::Function,
     π::Distribution,
     L::Distribution,
-    ys_obs::AbstractVector,
-    σ_ϵ::Real,
     αs::AbstractVector,
-    N_e::Int,
+    N_e::Int;
+    min_ess::Real=N_e/2,
     verbose::Bool=true
 )
 
-    if abs(sum(1 ./ αs) - 1.0) > 1e-4 
-        error("Reciprocals of α values do not sum to 1.")
-    end
+    βs = cumsum(1 ./ αs)
+    βs[end] ≉ 1.0 && error("Reciprocals of α values do not sum to 1.")
 
     N_i = length(αs)
     N_θ = length(π.μ)
-    N_y = length(ys_obs)
+    N_y = length(L.μ)
 
-    prepend!(αs, 0.0)
-
-    # Generate the covariance of the errors
-    Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, N_y, N_y)
-
-    # Initialise some vectors
     θs = zeros(N_θ, N_e, N_i+1)
     ys = zeros(N_y, N_e, N_i+1)
-
-    # Initialise the set of weights
-    ws = ones(N_e) ./ N_e
+    ws = zeros(N_i+1, N_e)
 
     # Sample an initial ensemble and predictions
     θs[:,:,1] = rand(π, N_e)
     ys[:,:,1] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs[:,:,1])])
+    ws[1,:] = ones(N_e)/N_e; logws = zeros(N_e)
 
     for i ∈ 2:N_i+1
 
@@ -707,48 +638,49 @@ function run_wes_mda_alt(
         Δy = ys[:,:,i-1] .- Statistics.mean(ys[:,:,i-1], dims=2)
         Γ_θy = 1/(N_e-1)*Δθ*Δy'
         Γ_y = 1/(N_e-1)*Δy*Δy'
-        K = Γ_θy * inv_tsvd(Γ_y + αs[i]*Γ_ϵ)
+        K = Γ_θy * inv_tsvd(Γ_y + αs[i-1]*L.Σ)
 
         # Generate a set of perturbed data vectors 
-        ys_p = rand(MvNormal(ys_obs, αs[i]*Γ_ϵ), N_e)
-
-        # Calculate the kernel means and (common) covariance
-        μ_K = θs[:,:,i-1] + K * (ys_obs .- ys[:,:,i-1])
-        Γ_K = αs[i] * K * Γ_ϵ * K' + 1e-8I
+        ys_p = rand(MvNormal(L.μ, αs[i-1] * L.Σ), N_e)
 
         # Generate the new set of particles and associated predictions
         θs[:,:,i] = θs[:,:,i-1] + K * (ys_p .- ys[:,:,i-1])
         ys[:,:,i] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs[:,:,i])])
 
         # Generate the importance distribution
-        K = MixtureModel(MvNormal, [(μ, Γ_K) for μ ∈ eachcol(μ_K)])
-        
-        for j ∈ 1:N_e
+        μ_K = θs[:,:,i-1] + K * (L.μ .- ys[:,:,i-1])
+        Γ_K = αs[i-1] * K * L.Σ * K' + 1e-8I
+        K = MixtureModel(MvNormal, [(μ, Γ_K) for μ ∈ eachcol(μ_K)], ws[i-1,:])
 
-            logd_t = logpdf(π, θs[:,j,i]) + sum(1 ./ αs[2:i]) * logpdf(L, ys[:,j,i])
-            logd_k = logpdf(K, θs[:,j,i])
+        # Increment the weights
+        logws .+= [logpdf(π, θs[:,j,i]) + 
+                    βs[i-1] * logpdf(L, ys[:,j,i]) - 
+                    logpdf(K, θs[:,j,i]) 
+                    for j ∈ 1:N_e]
 
-            ws[j] *= exp(logd_t-logd_k)
+        # Re-scale, exponentiate and normalise weights
+        logws = rescale_logws(logws)
+        ws[i,:] = normalise_ws(exp.(logws))
+
+        if i != N_i+1 && ess(ws[i,:]) < min_ess
+
+            @info "ESS below acceptable threshold ($(ess(ws[i,:]))). Resampling..."
+            
+            # Resample
+            inds = resample_ws(ws[i,:])
+            θs[:,:,i] = θs[:,inds,i]
+            ys[:,:,i] = ys[:,inds,i]
+            
+            # Reset the weights
+            ws[i,:] = ones(N_e) ./ N_e
+            logws = zeros(N_e)
 
         end
 
-        # Normalise the set of weights
-        ws ./= sum(ws)
-
-        println(ess(ws))
-
-        # Resample everything
-        inds = resample_ws_inds(ws)
-        θs[:,:,i] = θs[:,inds,i]
-        ys[:,:,i] = ys[:,inds,i]
-        ws = ones(N_e)./N_e
-
-        # TODO: resample
-        verbose && @info("Iteration $i complete.")
+        verbose && @info "Iteration $(i-1) complete."
         
     end
 
-    # TODO: return full set of ys and set of weights at each iteration?
     return θs, ys, ws
     
 end

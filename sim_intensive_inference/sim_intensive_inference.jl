@@ -8,6 +8,7 @@ using Random
 using Statistics
 
 include("distributions.jl")
+include("utilities.jl")
 
 include("methods.jl")
 include("ensemble_methods.jl")
