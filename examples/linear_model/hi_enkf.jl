@@ -5,12 +5,12 @@ include("../../plotting.jl")
 include("../../sim_intensive_inference/sim_intensive_inference.jl")
 
 # Define the prior, ensemble size and number of states
-const π = SimIntensiveInference.GaussianPrior(LinearModel.μ_π, LinearModel.Γ_π)
-const N_e = 10_000
-const N_u = 1
+π = SimIntensiveInference.GaussianPrior(LinearModel.μ_π, LinearModel.Γ_π)
+N_e = 10_000
+N_u = 1
 
-const MDA = false
-const αs = [9.333, 7.0, 4.0, 2.0]
+MDA = false
+αs = [9.333, 7.0, 4.0, 2.0]
 
 if MDA 
 
@@ -32,20 +32,20 @@ if MDA
 
 else
 
-    θs, us = SimIntensiveInference.run_hi_enkf(
-        LinearModel.a, LinearModel.b, π, 
+    θs, us, ys = SimIntensiveInference.run_hi_enkf(
+        LinearModel.a, LinearModel.b, LinearModel.π, 
         LinearModel.TS_O, LinearModel.YS_O[:,:]', 
         LinearModel.σ_ϵ, N_e, N_u
     )
 
-    Plotting.plot_lm_state_evolution(
-        us, LinearModel.TS, LinearModel.YS_T, LinearModel.TS_O, LinearModel.YS_O, 
-        "Linear Model: HI-EnKF State Evolution",
-        "$(LinearModel.PLOTS_DIR)/enkf/hi_enkf_state_evolution.pdf"
-    )
+    # Plotting.plot_lm_state_evolution(
+    #     us, LinearModel.TS, LinearModel.YS_T, LinearModel.TS_O, LinearModel.YS_O, 
+    #     "Linear Model: HI-EnKF State Evolution",
+    #     "$(LinearModel.PLOTS_DIR)/enkf/hi_enkf_state_evolution.pdf"
+    # )
 
     Plotting.plot_approx_posterior(
-        eachcol(θs), 
+        eachcol(θs[:,:,end]), 
         LinearModel.θ1S, LinearModel.θ2S, 
         LinearModel.POST_MARG_θ1, LinearModel.POST_MARG_θ2,
         "Linear Model: Final HI-EnKF Posterior",
