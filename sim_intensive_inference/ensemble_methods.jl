@@ -66,59 +66,52 @@ function run_enkf(
 end
 
 
+"""Runs the half-iteration EnKF algorithm."""
 function run_hi_enkf(
     a::Function,
     b::Function,
-    π::AbstractPrior,
+    π::Distribution,
     ts::AbstractVector,
-    ys::AbstractMatrix,
+    ys_obs::AbstractMatrix,
     σ_ϵ::Real,
     N_e::Int,
     N_u::Int;
     verbose::Bool=true
 )
 
-    # Initialise a matrix to store the combined sets of states generated
-    us_e_c = Matrix(undef, N_e*N_u, 0)
+    N_i = length(ts)
+    N_θ = length(π.μ)
+    N_y = size(ys_obs, 1)
 
-    # Sample an ensemble of sets of parameters from the prior
-    θs_e = reduce(hcat, sample(π, n=N_e))
+    us = zeros(N_u, N_e, N_i+1)
+    θs = zeros(N_θ, N_e, N_i+1)
+    ys = zeros(N_y, N_e, N_i+1)
 
-    for (i, (t, y)) ∈ enumerate(zip(ts, eachcol(ys)))
+    θs[:,:,1] = rand(π, N_e)
 
-        # Run the state model (from the beginning) for each ensemble member
-        us_e_l = [a(θ, t_1=t) for θ ∈ eachcol(θs_e)]
-        
-        # Update combined state vectors
-        us_e_c = hcat(us_e_c, reduce(vcat, us_e_l)[:, size(us_e_c, 2)+1:end])
+    for (i, t, y) ∈ zip(2:N_i+1, ts, eachcol(ys_obs))
 
-        # Form matrices containing the final states and modelled observations
-        us_e = reduce(hcat, [u[:, end] for u ∈ us_e_l])
-        ys_e = reduce(hcat, [b(θ, u) for (θ, u) ∈ zip(eachcol(θs_e), eachcol(us_e))])
+        Γ_ϵ = σ_ϵ^2 * Matrix(I, length(y), length(y))
 
-        # Generate a set of perturbed data vectors 
-        Γ_ϵ = σ_ϵ^2 * Matrix(LinearAlgebra.I, length(y), length(y))
-        ys_p = rand(Distributions.MvNormal(y, Γ_ϵ), N_e)
+        # Generate the states and observations at the current time of interest
+        us[:,:,i-1] = reduce(hcat, [a(θs[:,j,i-1], t_1=t)[:,end] for j ∈ 1:N_e])
+        ys[:,:,i-1] = reduce(hcat, [b(θs[:,j,i-1], us[:,j,i-1]) for j ∈ 1:N_e])
 
-        # Compute the Kalman gain
-        Δθ = θs_e .- Statistics.mean(θs_e, dims=2)
-        Δy = ys_e .- Statistics.mean(ys_e, dims=2)
-        Γ_θy_e = 1/(N_e-1)*Δθ*Δy'
-        Γ_y_e = 1/(N_e-1)*Δy*Δy'
-        K = Γ_θy_e * inv(Γ_y_e + Γ_ϵ)
+        # Generate a set of perturbations
+        ϵs = rand(MvNormal(zeros(length(y)), Γ_ϵ), N_e)
 
         # Update each ensemble member
-        θs_e = θs_e + K*(ys_p-ys_e)
+        K = kalman_gain(θs[:,:,i-1], ys[:,:,i-1], Γ_ϵ)
+        θs[:,:,i] = θs[:,:,i-1] + K * (y .+ ϵs .- ys[:,:,i-1])
 
-        verbose && @info "Iteration $i complete."
+        verbose && @info "Iteration $(i-1) complete."
 
     end
 
-    # Run everything to the end with the final set of parameters
-    us_e_l = [a(θ) for θ ∈ eachcol(θs_e)]
-    us_e_c = hcat(us_e_c, reduce(vcat, us_e_l)[:, size(us_e_c, 2)+1:end])
+    us[:,:,end] = reduce(hcat, [a(θs[:,j,end], t_1=ts[end])[:,end] for j ∈ 1:N_e])
+    ys[:,:,end] = reduce(hcat, [b(θs[:,j,end], us[:,j,end]) for j ∈ 1:N_e])
 
-    return θs_e, us_e_c
+    return θs, us, ys
 
 end
 

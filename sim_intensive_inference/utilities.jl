@@ -65,7 +65,7 @@ end
 function kalman_gain(
     θs::AbstractMatrix, 
     ys::AbstractMatrix,
-    Γ_ϵ::AbstractMatrix
+    Γ_ϵ
 )::AbstractMatrix
 
     N_e = size(θs, 2)
