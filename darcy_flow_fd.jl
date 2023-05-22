@@ -33,7 +33,7 @@ p(x, y) = 2.0
 x0 = BC(:neumann, (x, y) -> 0.0)
 x1 = BC(:neumann, (x, y) -> 0.0)
 y0 = BC(:dirichlet, (x, y) -> 0.0)
-y1 = BC(:neumann, (x, y) -> -2.0)
+y1 = BC(:neumann, (x, y) -> 2.0)
 
 function generate_grid(xs, ys, Δx, Δy, p, x0, x1, y0, y1)
 
@@ -72,7 +72,7 @@ function generate_grid(xs, ys, Δx, Δy, p, x0, x1, y0, y1)
 
                 elseif y0.type == :neumann 
                     
-                    b[i] = ((p(x, y+Δy) - p(x, y)) * y0.func(x, y) - 2p(x, y) * y0.func(x, y)) / Δy
+                    b[i] = -((p(x, y+Δy) - p(x, y)) * y0.func(x, y) - 2p(x, y) * y0.func(x, y)) / Δy
 
                     push!(rows, i, i, i, i)
                     push!(cols, i, i+1, i-1, i+n_xs)
@@ -99,7 +99,7 @@ function generate_grid(xs, ys, Δx, Δy, p, x0, x1, y0, y1)
 
                 elseif y1.type == :neumann 
 
-                    b[i] = ((p(x, y) - p(x, y-Δy)) * y1.func(x, y) + 2p(x, y) * y1.func(x, y)) / Δy
+                    b[i] = -((p(x, y) - p(x, y-Δy)) * y1.func(x, y) + 2p(x, y) * y1.func(x, y)) / Δy
 
                     push!(rows, i, i, i, i)
                     push!(cols, i, i+1, i-1, i-n_xs)
@@ -126,7 +126,7 @@ function generate_grid(xs, ys, Δx, Δy, p, x0, x1, y0, y1)
 
                 elseif x0.type == :neumann 
                     
-                    b[i] = ((p(x+Δx, y) - p(x, y)) * x0.func(x, y) - 2p(x, y) * x0.func(x, y)) / Δx
+                    b[i] = -((p(x+Δx, y) - p(x, y)) * x0.func(x, y) - 2p(x, y) * x0.func(x, y)) / Δx
 
                     push!(rows, i, i, i, i)
                     push!(cols, i, i+1, i+n_xs, i-n_xs)
@@ -153,7 +153,7 @@ function generate_grid(xs, ys, Δx, Δy, p, x0, x1, y0, y1)
 
                 elseif x1.type == :neumann 
 
-                    b[i] = ((p(x, y) - p(x-Δx, y)) * x1.func(x, y) + 2p(x, y) * x1.func(x, y)) / Δx
+                    b[i] = -((p(x, y) - p(x-Δx, y)) * x1.func(x, y) + 2p(x, y) * x1.func(x, y)) / Δx
 
                     push!(rows, i, i, i, i)
                     push!(cols, i, i-1, i+n_xs, i-n_xs)
