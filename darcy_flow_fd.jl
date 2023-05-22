@@ -4,9 +4,10 @@ using Plots
 using Random
 using SparseArrays
 
-Random.seed!(16)
+#Random.seed!(16)
 
-struct BC
+struct BoundaryCondition
+    name::Symbol
     type::Symbol
     func::Function
 end
@@ -23,26 +24,136 @@ n_ys = length(ys)
 n_us = n_xs*n_ys
 
 # TODO: define permeability interpolation object
-p(x, y) = 2.0
+p(x, y) = 2.0+0.01rand()
 
 # Set up boundary conditions
-# x0 = BC(:dirichlet, (x, y) -> y/100.0)
-# x1 = BC(:dirichlet, (x, y) -> y/100.0)
-# y0 = BC(:dirichlet, (x, y) -> 0.0)
-# y1 = BC(:dirichlet, (x, y) -> 1.0)
-x0 = BC(:neumann, (x, y) -> 0.0)
-x1 = BC(:neumann, (x, y) -> 0.0)
-y0 = BC(:dirichlet, (x, y) -> 0.0)
-y1 = BC(:neumann, (x, y) -> 2.0)
+x0 = BoundaryCondition(:x0, :neumann, (x, y) -> 0.0)
+x1 = BoundaryCondition(:x1, :neumann, (x, y) -> 0.0)
+y0 = BoundaryCondition(:y0, :dirichlet, (x, y) -> 0.0)
+y1 = BoundaryCondition(:y1, :neumann, (x, y) -> 2.0)
 
-function generate_grid(xs, ys, Δx, Δy, p, x0, x1, y0, y1)
+# Define a mapping between boundary condition names and objects
+bcs = Dict(:y0 => y0, :y1 => y1, :x0 => x0, :x1 => x1)
+
+function on_boundary(x, y, xmin, xmax, ymin, ymax)
+    return x ∈ [xmin, xmax] || y ∈ [ymin, ymax]
+end
+
+function get_boundary(x, y, xmin, xmax, ymin, ymax, bcs)
+    
+    if x == xmin
+        return bcs[:x0]
+    elseif x == xmax
+        return bcs[:x1]
+    elseif y == ymin
+        return bcs[:y0]
+    elseif y == ymax
+        return bcs[:y1]
+    end
+
+end
+
+function update_boundary!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
+
+    if bc.type == :dirichlet 
+        update_dirichlet!(b, rs, cs, vs, bc, i, x, y)
+    elseif bc.type == :neumann 
+        update_neumann!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
+    end
+
+end
+
+function update_dirichlet!(b, rs, cs, vs, bc, i, x, y)
+
+    b[i] = bc.func(x, y)
+    push!(rs, i)
+    push!(cs, i)
+    push!(vs, 1.0)
+
+end
+
+function update_neumann!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
+
+    # Add the constant part of the equation
+    if bc.name == :y0
+        b[i] = -((p(x, y+Δy) - p(x, y)) * y0.func(x, y) - 2p(x, y) * y0.func(x, y)) / Δy
+    elseif bc.name == :y1
+        b[i] = -((p(x, y) - p(x, y-Δy)) * y1.func(x, y) + 2p(x, y) * y1.func(x, y)) / Δy
+    elseif bc.name == :x0 
+        b[i] = -((p(x+Δx, y) - p(x, y)) * x0.func(x, y) - 2p(x, y) * x0.func(x, y)) / Δx
+    elseif bc.name == :x1 
+        b[i] = -((p(x, y) - p(x-Δx, y)) * x1.func(x, y) + 2p(x, y) * x1.func(x, y)) / Δx
+    end
+
+    push!(rs, i, i, i, i)
+
+    push!(cs, i)
+    push!(vs, -2p(x, y)/Δx^2 - 2p(x, y)/Δy^2)
+
+    # Add the coefficents of components along the x direction
+    if bc.name == :x0 
+        push!(cs, i+1)
+        push!(vs, 2p(x+Δx, y)/Δx^2)
+    elseif bc.name == :x1 
+        push!(cs, i-1)
+        push!(vs, 2p(x-Δx, y)/Δx^2)
+    else 
+        push!(cs, i+1, i-1)
+        push!(
+            vs, 
+            (0.25p(x+Δx, y) - 0.25p(x-Δx, y) + p(x, y))/Δx^2,
+            (0.25p(x-Δx, y) - 0.25p(x+Δx, y) + p(x, y))/Δx^2
+        )
+    end
+
+    # Add the coefficents of components along the y direction
+    if bc.name == :y0 
+        push!(cs, i+n_xs)
+        push!(vs, 2p(x, y+Δy)/Δy^2)
+    elseif bc.name == :y1 
+        push!(cs, i-n_xs)
+        push!(vs, 2p(x, y-Δy)/Δy^2)
+    else 
+        push!(cs, i+n_xs, i-n_xs)
+        push!(
+            vs, 
+            (0.25p(x, y+Δy) - 0.25p(x, y-Δy) + p(x, y))/Δy^2,
+            (0.25p(x, y-Δy) - 0.25p(x, y+Δy) + p(x, y))/Δy^2
+        )
+    end
+
+end
+
+function update_interior_point!(rs, cs, vs, i, x, y, Δx, Δy, p)
+
+    push!(rs, i, i, i, i, i)
+    push!(cs, i, i+1, i-1, i+n_xs, i-n_xs)
+    
+    push!(
+        vs,
+        -(2p(x,y))/(Δx^2) - (2p(x,y))/(Δy^2),
+        (0.25p(x+Δx, y) - 0.25p(x-Δx, y) + p(x, y))/(Δx^2),
+        (0.25p(x-Δx, y) - 0.25p(x+Δx, y) + p(x, y))/(Δx^2),
+        (0.25p(x, y+Δy) - 0.25p(x, y-Δy) + p(x, y))/(Δy^2),
+        (0.25p(x, y-Δy) - 0.25p(x, y+Δy) + p(x, y))/(Δy^2)
+    )
+
+end
+
+function generate_grid(xs, ys, Δx, Δy, p, bcs)
+
+    xmin, xmax = extrema(xs)
+    ymin, ymax = extrema(ys)
+
+    corner_points = Set([(xmin, ymin), (xmin, ymax), (xmax, ymin), (xmax, ymax)])
+
+    # Initalise components of A
+    rs = Int64[]
+    cs = Int64[]
+    vs = Float64[]
 
     # TODO: make b sparse?
     b = zeros(n_us)
-
-    rows = Int64[]
-    cols = Int64[]
-    vals = Float64[]
 
     for i ∈ 1:n_us 
 
@@ -50,151 +161,33 @@ function generate_grid(xs, ys, Δx, Δy, p, x0, x1, y0, y1)
         x = xs[(i-1)%n_xs+1] 
         y = ys[Int(ceil(i/n_xs))]
 
-        # Check for corner point
-        if [x, y] ∈ [[xs[1], ys[1]], [xs[1], ys[end]], [xs[end], ys[1]], [xs[end], ys[end]]]
+        if (x, y) ∈ corner_points
 
-            push!(rows, i)
-            push!(cols, i)
-            push!(vals, 1.0)
+            # TODO: fix this up
+            push!(rs, i)
+            push!(cs, i)
+            push!(vs, 1.0)
 
-        elseif x ∈ [xs[1], xs[end]] || y ∈ [ys[1], ys[end]]
+        elseif on_boundary(x, y, xmin, xmax, ymin, ymax)
 
-            # Bottom boundary
-            if y == ys[1]
-                
-                if y0.type == :dirichlet
-
-                    b[i] = y0.func(x, y)
-
-                    push!(rows, i)
-                    push!(cols, i)
-                    push!(vals, 1.0)
-
-                elseif y0.type == :neumann 
-                    
-                    b[i] = -((p(x, y+Δy) - p(x, y)) * y0.func(x, y) - 2p(x, y) * y0.func(x, y)) / Δy
-
-                    push!(rows, i, i, i, i)
-                    push!(cols, i, i+1, i-1, i+n_xs)
-                    push!(
-                        vals,
-                        -2p(x, y)/Δx^2 - 2p(x, y)/Δy^2,
-                        (0.25p(x+Δx, y) - 0.25p(x-Δx, y) + p(x, y))/(Δx^2),
-                        (0.25p(x-Δx, y) - 0.25p(x+Δx, y) + p(x, y))/(Δx^2),
-                        2p(x, y+Δy)/(Δy^2)
-                    )
-
-                end
-
-            # Top boundary
-            elseif y == ys[end]
-
-                if y1.type == :dirichlet
-
-                    b[i] = y1.func(x, y)
-
-                    push!(rows, i)
-                    push!(cols, i)
-                    push!(vals, 1.0)
-
-                elseif y1.type == :neumann 
-
-                    b[i] = -((p(x, y) - p(x, y-Δy)) * y1.func(x, y) + 2p(x, y) * y1.func(x, y)) / Δy
-
-                    push!(rows, i, i, i, i)
-                    push!(cols, i, i+1, i-1, i-n_xs)
-                    push!(
-                        vals,
-                        -2p(x, y)/Δx^2 - 2p(x, y)/Δy^2,
-                        (0.25p(x+Δx, y) - 0.25p(x-Δx, y) + p(x, y))/(Δx^2),
-                        (0.25p(x-Δx, y) - 0.25p(x+Δx, y) + p(x, y))/(Δx^2),
-                        2p(x, y-Δy)/(Δy^2)
-                    )
-
-                end
-
-            # Left hand boundary 
-            elseif x == xs[1] 
-                
-                if x0.type == :dirichlet
-
-                    b[i] = x0.func(x, y)
-
-                    push!(rows, i)
-                    push!(cols, i)
-                    push!(vals, 1.0)
-
-                elseif x0.type == :neumann 
-                    
-                    b[i] = -((p(x+Δx, y) - p(x, y)) * x0.func(x, y) - 2p(x, y) * x0.func(x, y)) / Δx
-
-                    push!(rows, i, i, i, i)
-                    push!(cols, i, i+1, i+n_xs, i-n_xs)
-                    push!(
-                        vals,
-                        -2p(x, y)/Δx^2 - 2p(x, y)/Δy^2,
-                        2p(x+Δx, y)/(Δx^2),
-                        (0.25p(x, y+Δy) - 0.25p(x, y-Δy) + p(x, y))/(Δy^2),
-                        (0.25p(x, y-Δy) - 0.25p(x, y+Δy) + p(x, y))/(Δy^2)
-                    )
-
-                end
-
-            # Right hand boundary
-            elseif x == xs[end]
-                
-                if x1.type == :dirichlet
-
-                    b[i] = x1.func(x, y)
-
-                    push!(rows, i)
-                    push!(cols, i)
-                    push!(vals, 1.0)
-
-                elseif x1.type == :neumann 
-
-                    b[i] = -((p(x, y) - p(x-Δx, y)) * x1.func(x, y) + 2p(x, y) * x1.func(x, y)) / Δx
-
-                    push!(rows, i, i, i, i)
-                    push!(cols, i, i-1, i+n_xs, i-n_xs)
-                    push!(
-                        vals,
-                        -2p(x, y)/Δx^2 - 2p(x, y)/Δy^2,
-                        2p(x-Δx, y)/(Δx^2),
-                        (0.25p(x, y+Δy) - 0.25p(x, y-Δy) + p(x, y))/(Δy^2),
-                        (0.25p(x, y-Δy) - 0.25p(x, y+Δy) + p(x, y))/(Δy^2)
-                    )
-
-                    # error("Not implemented yet.")
-                end
-
-            end
-
+            bc = get_boundary(x, y, xmin, xmax, ymin, ymax, bcs)
+            update_boundary!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
+        
         else
-
-            # Interior point
-            push!(rows, i, i, i, i, i)
-            push!(cols, i, i+1, i-1, i+n_xs, i-n_xs)
-            push!(
-                vals,
-                -(2p(x,y))/(Δx^2) - (2p(x,y))/(Δy^2),
-                (0.25p(x+Δx, y) - 0.25p(x-Δx, y) + p(x, y))/(Δx^2),
-                (0.25p(x-Δx, y) - 0.25p(x+Δx, y) + p(x, y))/(Δx^2),
-                (0.25p(x, y+Δy) - 0.25p(x, y-Δy) + p(x, y))/(Δy^2),
-                (0.25p(x, y-Δy) - 0.25p(x, y+Δy) + p(x, y))/(Δy^2)
-            )
-
+        
+            update_interior_point!(rs, cs, vs, i, x, y, Δx, Δy, p)
+        
         end
 
     end
 
-    A = sparse(rows, cols, vals, n_us, n_us)
+    A = sparse(rs, cs, vs, n_us, n_us)
 
     return A, b
 
 end
 
-A, b = @time generate_grid(xs, ys, Δx, Δy, p, x0, x1, y0, y1)
+A, b = @time generate_grid(xs, ys, Δx, Δy, p, bcs)
 
 prob = LinearProblem(A, b)
 sol = solve(prob)
