@@ -24,7 +24,7 @@ n_ys = length(ys)
 n_us = n_xs*n_ys
 
 # TODO: define permeability interpolation object
-p(x, y) = 2.0+0.01rand()
+p(x, y) = 2.0 #+ 0.01rand()
 
 # Set up boundary conditions
 x0 = BoundaryCondition(:x0, :neumann, (x, y) -> 0.0)
@@ -53,17 +53,17 @@ function get_boundary(x, y, xmin, xmax, ymin, ymax, bcs)
 
 end
 
-function update_boundary!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
+function add_boundary_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
 
     if bc.type == :dirichlet 
-        update_dirichlet!(b, rs, cs, vs, bc, i, x, y)
+        add_dirichlet_point!(b, rs, cs, vs, bc, i, x, y)
     elseif bc.type == :neumann 
-        update_neumann!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
+        add_neumann_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
     end
 
 end
 
-function update_dirichlet!(b, rs, cs, vs, bc, i, x, y)
+function add_dirichlet_point!(b, rs, cs, vs, bc, i, x, y)
 
     b[i] = bc.func(x, y)
     push!(rs, i)
@@ -72,17 +72,17 @@ function update_dirichlet!(b, rs, cs, vs, bc, i, x, y)
 
 end
 
-function update_neumann!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
+function add_neumann_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
 
     # Add the constant part of the equation
     if bc.name == :y0
-        b[i] = -((p(x, y+Δy) - p(x, y)) * y0.func(x, y) - 2p(x, y) * y0.func(x, y)) / Δy
+        b[i] = -(p(x, y+Δy) - 3p(x, y)) * bc.func(x, y) / Δy
     elseif bc.name == :y1
-        b[i] = -((p(x, y) - p(x, y-Δy)) * y1.func(x, y) + 2p(x, y) * y1.func(x, y)) / Δy
+        b[i] = -(3p(x, y) - p(x, y-Δy)) * bc.func(x, y) / Δy
     elseif bc.name == :x0 
-        b[i] = -((p(x+Δx, y) - p(x, y)) * x0.func(x, y) - 2p(x, y) * x0.func(x, y)) / Δx
+        b[i] = -(p(x+Δx, y) - 3p(x, y)) * bc.func(x, y) / Δx
     elseif bc.name == :x1 
-        b[i] = -((p(x, y) - p(x-Δx, y)) * x1.func(x, y) + 2p(x, y) * x1.func(x, y)) / Δx
+        b[i] = -(3p(x, y) - p(x-Δx, y)) * bc.func(x, y) / Δx
     end
 
     push!(rs, i, i, i, i)
@@ -99,32 +99,26 @@ function update_neumann!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
         push!(vs, 2p(x-Δx, y)/Δx^2)
     else 
         push!(cs, i+1, i-1)
-        push!(
-            vs, 
-            (0.25p(x+Δx, y) - 0.25p(x-Δx, y) + p(x, y))/Δx^2,
-            (0.25p(x-Δx, y) - 0.25p(x+Δx, y) + p(x, y))/Δx^2
-        )
+        push!(vs, (0.25p(x+Δx, y) - 0.25p(x-Δx, y) + p(x, y)) / Δx^2,
+                  (0.25p(x-Δx, y) - 0.25p(x+Δx, y) + p(x, y)) / Δx^2)
     end
 
     # Add the coefficents of components along the y direction
     if bc.name == :y0 
         push!(cs, i+n_xs)
-        push!(vs, 2p(x, y+Δy)/Δy^2)
+        push!(vs, 2p(x, y+Δy) / Δy^2)
     elseif bc.name == :y1 
         push!(cs, i-n_xs)
-        push!(vs, 2p(x, y-Δy)/Δy^2)
+        push!(vs, 2p(x, y-Δy) / Δy^2)
     else 
         push!(cs, i+n_xs, i-n_xs)
-        push!(
-            vs, 
-            (0.25p(x, y+Δy) - 0.25p(x, y-Δy) + p(x, y))/Δy^2,
-            (0.25p(x, y-Δy) - 0.25p(x, y+Δy) + p(x, y))/Δy^2
-        )
+        push!(vs, (0.25p(x, y+Δy) - 0.25p(x, y-Δy) + p(x, y)) / Δy^2,
+                  (0.25p(x, y-Δy) - 0.25p(x, y+Δy) + p(x, y)) / Δy^2)
     end
 
 end
 
-function update_interior_point!(rs, cs, vs, i, x, y, Δx, Δy, p)
+function add_interior_point!(rs, cs, vs, i, x, y, Δx, Δy, p)
 
     push!(rs, i, i, i, i, i)
     push!(cs, i, i+1, i-1, i+n_xs, i-n_xs)
@@ -132,10 +126,10 @@ function update_interior_point!(rs, cs, vs, i, x, y, Δx, Δy, p)
     push!(
         vs,
         -(2p(x,y))/(Δx^2) - (2p(x,y))/(Δy^2),
-        (0.25p(x+Δx, y) - 0.25p(x-Δx, y) + p(x, y))/(Δx^2),
-        (0.25p(x-Δx, y) - 0.25p(x+Δx, y) + p(x, y))/(Δx^2),
-        (0.25p(x, y+Δy) - 0.25p(x, y-Δy) + p(x, y))/(Δy^2),
-        (0.25p(x, y-Δy) - 0.25p(x, y+Δy) + p(x, y))/(Δy^2)
+        (0.25p(x+Δx, y) - 0.25p(x-Δx, y) + p(x, y)) / Δx^2,
+        (0.25p(x-Δx, y) - 0.25p(x+Δx, y) + p(x, y)) / Δx^2,
+        (0.25p(x, y+Δy) - 0.25p(x, y-Δy) + p(x, y)) / Δy^2,
+        (0.25p(x, y-Δy) - 0.25p(x, y+Δy) + p(x, y)) / Δy^2
     )
 
 end
@@ -163,7 +157,7 @@ function generate_grid(xs, ys, Δx, Δy, p, bcs)
 
         if (x, y) ∈ corner_points
 
-            # TODO: fix this up
+            # TODO: fix this
             push!(rs, i)
             push!(cs, i)
             push!(vs, 1.0)
@@ -171,11 +165,11 @@ function generate_grid(xs, ys, Δx, Δy, p, bcs)
         elseif on_boundary(x, y, xmin, xmax, ymin, ymax)
 
             bc = get_boundary(x, y, xmin, xmax, ymin, ymax, bcs)
-            update_boundary!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
+            add_boundary_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
         
         else
         
-            update_interior_point!(rs, cs, vs, i, x, y, Δx, Δy, p)
+            add_interior_point!(rs, cs, vs, i, x, y, Δx, Δy, p)
         
         end
 
@@ -192,4 +186,4 @@ A, b = @time generate_grid(xs, ys, Δx, Δy, p, bcs)
 prob = LinearProblem(A, b)
 sol = solve(prob)
 u = reshape(sol.u, n_xs, n_ys)
-heatmap(xs, ys, u)
+heatmap(xs, ys, rotr90(u))
