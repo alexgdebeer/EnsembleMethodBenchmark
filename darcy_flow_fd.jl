@@ -1,10 +1,11 @@
 using LinearAlgebra
 using LinearSolve
 using Plots
+using SparseArrays
 
 # Define the grid dimensions
-xmin, Δx, xmax = 0.0, 1.0, 10.0
-ymin, Δy, ymax = 0.0, 1.0, 10.0
+xmin, Δx, xmax = 0.0, 1.0, 100.0
+ymin, Δy, ymax = 0.0, 1.0, 100.0
 
 xs = xmin:Δx:xmax
 ys = ymin:Δy:ymax
@@ -14,17 +15,21 @@ n_ys = length(ys)
 n_us = n_xs*n_ys
 
 # TODO: define permeability interpolation object
-p(x, y) = 1.0
+p(x, y) = 0.01rand()+0.5
 
 # Dirichlet boundary conditions
-x0(y) = y/10.0
-x1(y) = y/10.0
+x0(y) = y/100.0
+x1(y) = y/100.0
 
 y0(x) = 0.0
 y1(x) = 1.0
 
-A = zeros(n_us, n_us)
+#A = sparse(1.0I, n_us, n_us)
 b = zeros(n_us)
+
+rows = Int64[]
+cols = Int64[]
+vals = Float64[]
 
 for i ∈ 1:n_us 
 
@@ -32,44 +37,52 @@ for i ∈ 1:n_us
     x = xs[(i-1)%n_xs+1] 
     y = ys[Int(ceil(i/n_xs))]
 
-    A[i,i] = 1
+    if x ∈ [xs[1], xs[end]] || y ∈ [ys[1], ys[end]]
 
-    # Bottom boundary
-    if x == xs[1]
-        
-        b[i] = x0(y)
+        push!(rows, i)
+        push!(cols, i)
+        push!(vals, 1.0)
 
-    # Top boundary
-    elseif x == xs[end]
-        
-        b[i] = x1(y)
+        # Bottom boundary
+        if x == xs[1]
+            b[i] = x0(y)
 
-    # Left hand boundary 
-    elseif y == ys[1] 
+        # Top boundary
+        elseif x == xs[end]
+            b[i] = x1(y)
 
-        b[i] = y0(x)
+        # Left hand boundary 
+        elseif y == ys[1] 
+            b[i] = y0(x)
 
-    # Right hand boundary
-    elseif y == ys[end]
+        # Right hand boundary
+        elseif y == ys[end]
+            b[i] = y1(x)
 
-        b[i] = y1(x)
+        end
 
     else
 
         # Fill in the stencil
-        A[i,i] = -(p(x+Δx/2, y) + p(x-Δx/2, y))/(Δx^2) - (p(x, y+Δy/2) + p(x, y-Δy/2))/(Δy^2)
+        push!(rows, i, i, i, i, i)
+        push!(cols, i, i+n_xs, i-n_xs, i+1, i-1)
         
-        A[i,i+n_xs] = p(x, y+Δy/2)/(Δy^2)
-        A[i,i-n_xs] = p(x, y-Δy/2)/(Δy^2)
-        
-        A[i,i+1] = p(x+Δx/2, y)/(Δx^2)
-        A[i,i-1] = p(x-Δx/2, y)/(Δx^2)
+        push!(
+            vals,
+            -(p(x+Δx/2, y) + p(x-Δx/2, y))/(Δx^2) - (p(x, y+Δy/2) + p(x, y-Δy/2))/(Δy^2),
+            p(x, y+Δy/2)/(Δy^2),
+            p(x, y-Δy/2)/(Δy^2),
+            p(x+Δx/2, y)/(Δx^2),
+            p(x-Δx/2, y)/(Δx^2)
+        )
 
     end
 
 end
 
+A = sparse(rows, cols, vals, n_us, n_us)
+
 prob = LinearProblem(A, b)
-sol = solve(prob)
+@time sol = solve(prob)
 u = reshape(sol.u, n_xs, n_ys)
 heatmap(xs, ys, u)
