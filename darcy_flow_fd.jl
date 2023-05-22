@@ -24,7 +24,7 @@ x1(y) = y/100.0
 y0(x) = 0.0
 y1(x) = 1.0
 
-#A = sparse(1.0I, n_us, n_us)
+# TODO: clean up b
 b = zeros(n_us)
 
 rows = Int64[]
@@ -67,13 +67,21 @@ for i ∈ 1:n_us
         push!(rows, i, i, i, i, i)
         push!(cols, i, i+n_xs, i-n_xs, i+1, i-1)
         
+        # push!(
+        #     vals,
+        #     -(p(x+Δx/2, y) + p(x-Δx/2, y))/(Δx^2) - (p(x, y+Δy/2) + p(x, y-Δy/2))/(Δy^2),
+        #     p(x, y+Δy/2)/(Δy^2),
+        #     p(x, y-Δy/2)/(Δy^2),
+        #     p(x+Δx/2, y)/(Δx^2),
+        #     p(x-Δx/2, y)/(Δx^2)
+        # )
         push!(
             vals,
-            -(p(x+Δx/2, y) + p(x-Δx/2, y))/(Δx^2) - (p(x, y+Δy/2) + p(x, y-Δy/2))/(Δy^2),
-            p(x, y+Δy/2)/(Δy^2),
-            p(x, y-Δy/2)/(Δy^2),
-            p(x+Δx/2, y)/(Δx^2),
-            p(x-Δx/2, y)/(Δx^2)
+            -(2p(x,y))/(Δx^2) - (2p(x,y))/(Δy^2),
+            (0.25p(x, y+Δy) - 0.25p(x, y-Δy) + p(x, y))/(Δy^2),
+            (0.25p(x, y-Δy) - 0.25p(x, y+Δy) + p(x, y))/(Δy^2),
+            (0.25p(x+Δx, y) - 0.25p(x-Δx, y) + p(x, y))/(Δx^2),
+            (0.25p(x-Δx, y) - 0.25p(x+Δx, y) + p(x, y))/(Δx^2)
         )
 
     end
