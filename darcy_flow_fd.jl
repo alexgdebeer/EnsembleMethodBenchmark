@@ -1,7 +1,15 @@
 using LinearAlgebra
 using LinearSolve
 using Plots
+using Random
 using SparseArrays
+
+Random.seed!(10)
+
+struct BC
+    type::Symbol
+    func::Function
+end
 
 # Define the grid dimensions
 xmin, Δx, xmax = 0.0, 1.0, 100.0
@@ -15,14 +23,13 @@ n_ys = length(ys)
 n_us = n_xs*n_ys
 
 # TODO: define permeability interpolation object
-p(x, y) = 0.01rand()+0.5
+p(x, y) = 0.05rand() + 2.0
 
-# Dirichlet boundary conditions
-x0(y) = y/100.0
-x1(y) = y/100.0
-
-y0(x) = 0.0
-y1(x) = 1.0
+# Set up boundary conditions
+x0 = BC(:dirichlet, y -> y/100.0)
+x1 = BC(:dirichlet, y -> y/100.0)
+y0 = BC(:dirichlet, x -> 0.0)
+y1 = BC(:dirichlet, x -> 1.0)
 
 # TODO: clean up b
 b = zeros(n_us)
@@ -45,19 +52,19 @@ for i ∈ 1:n_us
 
         # Bottom boundary
         if x == xs[1]
-            b[i] = x0(y)
+            b[i] = x0.func(y)
 
         # Top boundary
         elseif x == xs[end]
-            b[i] = x1(y)
+            b[i] = x1.func(y)
 
         # Left hand boundary 
         elseif y == ys[1] 
-            b[i] = y0(x)
+            b[i] = y0.func(x)
 
         # Right hand boundary
         elseif y == ys[end]
-            b[i] = y1(x)
+            b[i] = y1.func(x)
 
         end
 
