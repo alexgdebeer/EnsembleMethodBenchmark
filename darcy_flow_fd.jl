@@ -42,7 +42,7 @@ function get_boundary(x, y, xmin, xmax, ymin, ymax, bcs)
 
 end
 
-function add_corner_point!(b, rs, cs, vs, c, bcs, i, x, y, Δx, Δy, p)
+function add_corner_point!(b, rs, cs, vs, c, bcs, i, x, y, Δx, Δy, n_xs, p)
 
     corner_bnds = Dict(
         :bl => (bcs[:y0], bcs[:x0]), 
@@ -119,12 +119,12 @@ function add_corner_point!(b, rs, cs, vs, c, bcs, i, x, y, Δx, Δy, p)
 
 end
 
-function add_boundary_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
+function add_boundary_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, n_xs, p)
 
     if bc.type == :dirichlet 
         add_dirichlet_point!(b, rs, cs, vs, bc, i, x, y)
     elseif bc.type == :neumann 
-        add_neumann_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
+        add_neumann_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, n_xs, p)
     end
 
 end
@@ -138,7 +138,7 @@ function add_dirichlet_point!(b, rs, cs, vs, bc, i, x, y)
 
 end
 
-function add_neumann_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
+function add_neumann_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, n_xs, p)
 
     # Add the constant part of the equation
     if bc.name == :y0 
@@ -184,7 +184,7 @@ function add_neumann_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
 
 end
 
-function add_interior_point!(rs, cs, vs, i, x, y, Δx, Δy, p)
+function add_interior_point!(rs, cs, vs, i, x, y, Δx, Δy, n_xs, p)
 
     push!(rs, i, i, i, i, i)
     push!(cs, i, i+1, i-1, i+n_xs, i-n_xs)
@@ -205,6 +205,10 @@ function generate_grid(xs, ys, Δx, Δy, p, bcs)
     xmin, xmax = extrema(xs)
     ymin, ymax = extrema(ys)
 
+    n_xs = length(xs)
+    n_ys = length(ys)
+    n_us = n_xs * n_ys
+
     # Initalise components of A
     rs = Int64[]
     cs = Int64[]
@@ -222,16 +226,16 @@ function generate_grid(xs, ys, Δx, Δy, p, bcs)
         if in_corner(x, y, xmin, xmax, ymin, ymax)
 
             c = get_corner(x, y, xmin, xmax, ymin, ymax)
-            add_corner_point!(b, rs, cs, vs, c, bcs, i, x, y, Δx, Δy, p)
+            add_corner_point!(b, rs, cs, vs, c, bcs, i, x, y, Δx, Δy, n_xs, p)
 
         elseif on_boundary(x, y, xmin, xmax, ymin, ymax)
 
             bc = get_boundary(x, y, xmin, xmax, ymin, ymax, bcs)
-            add_boundary_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
+            add_boundary_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, n_xs, p)
         
         else
         
-            add_interior_point!(rs, cs, vs, i, x, y, Δx, Δy, p)
+            add_interior_point!(rs, cs, vs, i, x, y, Δx, Δy, n_xs, p)
         
         end
 
