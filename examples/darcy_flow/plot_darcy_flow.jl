@@ -27,8 +27,8 @@ d = MvNormal(Γ)
 # Set up boundary conditions
 x0 = BoundaryCondition(:x0, :neumann, (x, y) -> 0.0)
 x1 = BoundaryCondition(:x1, :neumann, (x, y) -> 0.0)
-y0 = BoundaryCondition(:y0, :dirichlet, (x, y) -> 0.0)
-y1 = BoundaryCondition(:y1, :neumann, (x, y) -> 2.0)
+y0 = BoundaryCondition(:y0, :neumann, (x, y) -> -2.0)
+y1 = BoundaryCondition(:y1, :dirichlet, (x, y) -> 0.0)
 
 # Define a mapping between boundary condition names and objects
 bcs = Dict(:y0 => y0, :y1 => y1, :x0 => x0, :x1 => x1)
