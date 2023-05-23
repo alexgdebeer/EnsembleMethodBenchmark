@@ -3,10 +3,14 @@ using Interpolations
 using LinearAlgebra
 using LinearSolve
 using Plots
+using PyPlot
 using Random
 using SparseArrays
 
-Random.seed!(16)
+Random.seed!(64)
+
+PyPlot.rc("text", usetex=true)
+PyPlot.rc("font", family="serif")
 
 struct BoundaryCondition
     name::Symbol
@@ -175,7 +179,7 @@ n_ys = length(ys)
 n_us = n_xs*n_ys
 
 # Define permeability distribution
-Γ = exp_squared_cov(1.0, 0.1, xs, ys)
+Γ = exp_squared_cov(1.0, 0.2, xs, ys)
 d = MvNormal(Γ)
 
 # Set up boundary conditions
@@ -187,13 +191,61 @@ y1 = BoundaryCondition(:y1, :neumann, (x, y) -> 2.0)
 # Define a mapping between boundary condition names and objects
 bcs = Dict(:y0 => y0, :y1 => y1, :x0 => x0, :x1 => x1)
 
-# Generate a permeability field
-p = interpolate((xs, ys), sample_perms(d), Gridded(Linear()))
+n_sims = 3
 
-A, b = generate_grid(xs, ys, Δx, Δy, p, bcs)
+us = zeros(n_xs, n_ys, n_sims)
+ps = zeros(n_xs, n_ys, n_sims)
 
-prob = LinearProblem(A, b)
-sol = solve(prob)
-u = reshape(sol.u, n_xs, n_ys)
+@time for i ∈ 1:n_sims 
 
-heatmap(xs, ys, rotr90(u))
+    # Generate a permeability field
+    p = interpolate((xs, ys), sample_perms(d), Gridded(Linear()))
+
+    A, b = generate_grid(xs, ys, Δx, Δy, p, bcs)
+
+    prob = LinearProblem(A, b)
+    sol = solve(prob)
+
+    ps[:,:,i] = reshape(log.(p.coefs), n_xs, n_ys)
+    us[:,:,i] = reshape(sol.u, n_xs, n_ys)
+
+end
+
+p_min = minimum(ps)
+p_max = maximum(ps)
+u_min = minimum(us)
+u_max = maximum(us)
+
+fig, ax = PyPlot.subplots(2, 3, figsize=(8, 5))
+
+for col ∈ 1:3
+
+    m1 = ax[1, col].pcolormesh(
+        xs, ys, rotr90(ps[:, :, col]), 
+        cmap=:viridis, vmin=p_min, vmax=p_max
+    )
+    
+    m2 = ax[2, col].pcolormesh(
+        xs, ys, rotr90(us[:, :, col]), 
+        cmap=:coolwarm, vmin=u_min, vmax=u_max
+    )
+
+    for row ∈ 1:2
+        ax[row, col].set_box_aspect(1)
+        ax[row, col].set_xticks([0, 1])
+        ax[row, col].set_yticks([0, 1])
+    end
+
+    PyPlot.colorbar(m1, fraction=0.046, pad=0.04, ax=ax[1, col])
+    PyPlot.colorbar(m2, fraction=0.046, pad=0.04, ax=ax[2, col])
+
+end
+
+ax[1, 1].set_ylabel("ln(Permeability)", fontsize=14)
+ax[2, 1].set_ylabel("Pressure", fontsize=14)
+
+PyPlot.suptitle("ln(Permeability) and Pressure Fields", fontsize=20)
+PyPlot.tight_layout()
+PyPlot.savefig("test.pdf")
+
+heatmap(xs, ys, rotr90(us[:,:,1]))
