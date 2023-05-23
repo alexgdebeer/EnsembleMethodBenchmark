@@ -43,20 +43,55 @@ function get_boundary(x, y, xmin, xmax, ymin, ymax, bcs)
 end
 
 function add_corner_point!(b, rs, cs, vs, c, bcs, i, x, y, Δx, Δy, p)
-    
-    if c == :tr
+
+    corner_bnds = Dict(
+        :bl => (bcs[:y0], bcs[:x0]), 
+        :br => (bcs[:y0], bcs[:x1]),
+        :tl => (bcs[:y1], bcs[:x0]),
+        :tr => (bcs[:y1], bcs[:x1])
+    )
+
+    # Check for a Dirichlet boundary 
+    if corner_bnds[c][1].type == :dirichlet
         
-        b[i] = -(3p(x, y) - p(x-Δx, y)) * bcs[:x1].func(x, y) / Δx +
-               -(3p(x, y) - p(x, y-Δy)) * bcs[:y1].func(x, y) / Δy
+        b[i] = corner_bnds[c][1].func(x, y)
+        push!(rs, i)
+        push!(cs, i)
+        push!(vs, 1.0)
+        return
+        
+    elseif corner_bnds[c][2].type == :dirichlet 
+
+        b[i] = corner_bnds[c][2].func(x, y)
+        push!(rs, i)
+        push!(cs, i)
+        push!(vs, 1.0)
+        return
+
+    end
+
+    # Apply the Neumann equations
+    if c == :bl
+        
+        b[i] = -(p(x+Δx, y) - 3p(x, y)) * bcs[:x0].func(x, y) / Δx +
+               -(p(x, y+Δy) - 3p(x, y)) * bcs[:y0].func(x, y) / Δy
 
         push!(rs, i, i, i)
-        push!(cs, i, i-1, i-n_xs)
-        push!(
-            vs, 
-            -2p(x, y) / Δx^2 - 2p(x, y) / Δy^2,
-            2p(x, y) / Δx^2,
-            2p(x, y) / Δy^2
-        )
+        push!(cs, i, i+1, i+n_xs)
+        push!(vs, -2p(x, y) / Δx^2 - 2p(x, y) / Δy^2,
+                  2p(x, y) / Δx^2,
+                  2p(x, y) / Δy^2)
+    
+    elseif c == :br
+        
+        b[i] = -(3p(x, y) - p(x-Δx, y)) * bcs[:x1].func(x, y) / Δx +
+               -(p(x, y+Δy) - 3p(x, y)) * bcs[:y0].func(x, y) / Δy
+
+        push!(rs, i, i, i)
+        push!(cs, i, i-1, i+n_xs)
+        push!(vs, -2p(x, y) / Δx^2 - 2p(x, y) / Δy^2,
+                  2p(x, y) / Δx^2,
+                  2p(x, y) / Δy^2)
     
     elseif c == :tl
         
@@ -65,20 +100,21 @@ function add_corner_point!(b, rs, cs, vs, c, bcs, i, x, y, Δx, Δy, p)
 
         push!(rs, i, i, i)
         push!(cs, i, i+1, i-n_xs)
-        push!(
-            vs, 
-            -2p(x, y) / Δx^2 - 2p(x, y) / Δy^2,
-            2p(x, y) / Δx^2,
-            2p(x, y) / Δy^2
-        )
+        push!(vs, -2p(x, y) / Δx^2 - 2p(x, y) / Δy^2,
+                  2p(x, y) / Δx^2,
+                  2p(x, y) / Δy^2)
 
-    else
+    elseif c == :tr
+        
+        b[i] = -(3p(x, y) - p(x-Δx, y)) * bcs[:x1].func(x, y) / Δx +
+               -(3p(x, y) - p(x, y-Δy)) * bcs[:y1].func(x, y) / Δy
 
-        # TODO: fix this
-        push!(rs, i)
-        push!(cs, i)
-        push!(vs, 1.0)
-
+        push!(rs, i, i, i)
+        push!(cs, i, i-1, i-n_xs)
+        push!(vs, -2p(x, y) / Δx^2 - 2p(x, y) / Δy^2,
+                  2p(x, y) / Δx^2,
+                  2p(x, y) / Δy^2)
+    
     end
 
 end
@@ -219,7 +255,12 @@ n_ys = length(ys)
 n_us = n_xs*n_ys
 
 # TODO: define permeability interpolation object
-p(x, y) = 2.0 + 0.02rand()
+function p(x, y)
+    if x > xmax || x < xmin || y > ymax || y < ymin
+        error("$x, $y")
+    end
+    return 2.0 #+ 0.02rand()
+end
 
 # Set up boundary conditions
 x0 = BoundaryCondition(:x0, :neumann, (x, y) -> 0.0)
@@ -236,4 +277,4 @@ prob = LinearProblem(A, b)
 sol = solve(prob)
 u = reshape(sol.u, n_xs, n_ys)
 
-heatmap(xs, ys, u)
+heatmap(xs, ys, rotr90(u))
