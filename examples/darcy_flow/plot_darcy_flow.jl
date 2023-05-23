@@ -41,14 +41,14 @@ ps = zeros(n_xs, n_ys, n_sims)
 @time for i ∈ 1:n_sims 
 
     # Generate a permeability field
-    p = interpolate((xs, ys), sample_perms(d), Gridded(Linear()))
+    p = interpolate((xs, ys), sample_perms(d, n_xs, n_ys), Gridded(Linear()))
 
     A, b = generate_grid(xs, ys, Δx, Δy, p, bcs)
 
     prob = LinearProblem(A, b)
     sol = solve(prob)
 
-    ps[:,:,i] = reshape(log.(p.coefs), n_xs, n_ys)
+    ps[:,:,i] = log.(p.coefs)
     us[:,:,i] = reshape(sol.u, n_xs, n_ys)
 
 end
@@ -63,12 +63,12 @@ fig, ax = PyPlot.subplots(2, 3, figsize=(8, 5))
 for col ∈ 1:3
 
     m1 = ax[1, col].pcolormesh(
-        xs, ys, rotr90(ps[:, :, col]), 
+        xs, ys, ps[:, :, col]', 
         cmap=:viridis, vmin=p_min, vmax=p_max
     )
     
     m2 = ax[2, col].pcolormesh(
-        xs, ys, rotr90(us[:, :, col]), 
+        xs, ys, us[:, :, col]', 
         cmap=:coolwarm, vmin=u_min, vmax=u_max
     )
 

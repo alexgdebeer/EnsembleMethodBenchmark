@@ -141,8 +141,8 @@ using Random
 function exp_squared_cov(σ, γ, xs, ys)
 
     # Generate vectors of x and y coordinates
-    cxs = vec([x for _ ∈ ys, x ∈ xs])
-    cys = vec([y for y ∈ ys, _ ∈ xs])
+    cxs = vec([x for x ∈ xs, _ ∈ ys])
+    cys = vec([y for _ ∈ xs, y ∈ ys])
 
     # Generate a matrix of distances between each set of coordinates
     ds = (cxs .- cxs').^2 + (cys .- cys').^2
@@ -153,6 +153,6 @@ function exp_squared_cov(σ, γ, xs, ys)
 
 end
 
-function sample_perms(d) 
-    return exp.(reshape(rand(d), length(xs), length(ys)))
+function sample_perms(d, n_xs, n_ys) 
+    return exp.(reshape(rand(d), n_xs, n_ys))
 end
