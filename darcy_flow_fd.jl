@@ -6,7 +6,7 @@ using Plots
 using Random
 using SparseArrays
 
-# Random.seed!(16)
+Random.seed!(16)
 
 struct BoundaryCondition
     name::Symbol
@@ -41,7 +41,7 @@ function add_corner_point!(rs, cs, vs, i)
 
 end
 
-function add_boundary_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, n_xs, p)
+function add_boundary_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, n_xs)
 
     if bc.type == :dirichlet 
         add_dirichlet_point!(b, rs, cs, vs, bc, i, x, y)
@@ -64,20 +64,20 @@ function add_neumann_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, n_xs)
 
     b[i] = bc.func(x, y)
 
-    push!(rs, i, i)
+    push!(rs, i, i, i)
 
     if bc.name == :y0 
-        push!(cs, i, i+n_xs)
-        push!(vs, -1.0 / Δy, 1.0 / Δy)
+        push!(cs, i, i+n_xs, i+2nxs)
+        push!(vs, -3.0 / 2Δy, 4.0 / 2Δy, -1.0 / 2Δy)
     elseif bc.name == :y1 
-        push!(cs, i, i-n_xs)
-        push!(vs, 1.0 / Δy, -1.0 / Δy)
+        push!(cs, i-2n_xs, i-n_xs, i)
+        push!(vs, -3.0 / 2Δy, 4.0 / 2Δy, -1.0 / 2Δy)
     elseif bc.name == :x0 
-        push!(cs, i, i+1)
-        push!(vs, -1.0 / Δx, 1.0 / Δx)
+        push!(cs, i, i+1, i+2)
+        push!(vs, -3.0 / 2Δx, 4.0 / 2Δx, -1.0 / 2Δx)
     elseif bc.name == :x1 
-        push!(cs, i, i-1)
-        push!(vs, 1.0 / Δx, -1.0 / Δx)
+        push!(cs, i-2, i-1, i)
+        push!(vs, -3.0 / 2Δx, 4.0 / 2Δx, -1.0 / 2Δx)
     end
 
 end
@@ -128,7 +128,7 @@ function generate_grid(xs, ys, Δx, Δy, p, bcs)
         elseif on_boundary(x, y, xmin, xmax, ymin, ymax)
 
             bc = get_boundary(x, y, xmin, xmax, ymin, ymax, bcs)
-            add_boundary_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, n_xs, p)
+            add_boundary_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, n_xs)
         
         else
         
