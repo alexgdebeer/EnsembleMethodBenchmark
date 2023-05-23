@@ -12,43 +12,73 @@ struct BoundaryCondition
     func::Function
 end
 
-# Define the grid dimensions
-xmin, Δx, xmax = 0.0, 0.01, 1.0
-ymin, Δy, ymax = 0.0, 0.01, 1.0
+function in_corner(x, y, xmin, xmax, ymin, ymax)
+    return x ∈ [xmin, xmax] && y ∈ [ymin, ymax]
+end
 
-xs = xmin:Δx:xmax
-ys = ymin:Δy:ymax
+function get_corner(x, y, xmin, xmax, ymin, ymax)
 
-n_xs = length(xs)
-n_ys = length(ys)
-n_us = n_xs*n_ys
+    (x, y) == (xmin, ymin) && return :bl
+    (x, y) == (xmax, ymin) && return :br
+    (x, y) == (xmin, ymax) && return :tl
+    (x, y) == (xmax, ymax) && return :tr
 
-# TODO: define permeability interpolation object
-p(x, y) = 2.0 #+ 0.01rand()
+    error("Point ($x, $y) is not a corner point.")
 
-# Set up boundary conditions
-x0 = BoundaryCondition(:x0, :neumann, (x, y) -> 0.0)
-x1 = BoundaryCondition(:x1, :neumann, (x, y) -> 0.0)
-y0 = BoundaryCondition(:y0, :dirichlet, (x, y) -> 0.0)
-y1 = BoundaryCondition(:y1, :neumann, (x, y) -> 2.0)
-
-# Define a mapping between boundary condition names and objects
-bcs = Dict(:y0 => y0, :y1 => y1, :x0 => x0, :x1 => x1)
+end
 
 function on_boundary(x, y, xmin, xmax, ymin, ymax)
     return x ∈ [xmin, xmax] || y ∈ [ymin, ymax]
 end
 
 function get_boundary(x, y, xmin, xmax, ymin, ymax, bcs)
+
+    x == xmin && return bcs[:x0]
+    x == xmax && return bcs[:x1]
+    y == ymin && return bcs[:y0]
+    y == ymax && return bcs[:y1]
+
+    error("Point ($x, $y) is not on a boundary.")
+
+end
+
+function add_corner_point!(b, rs, cs, vs, c, bcs, i, x, y, Δx, Δy, p)
     
-    if x == xmin
-        return bcs[:x0]
-    elseif x == xmax
-        return bcs[:x1]
-    elseif y == ymin
-        return bcs[:y0]
-    elseif y == ymax
-        return bcs[:y1]
+    if c == :tr
+        
+        b[i] = -(3p(x, y) - p(x-Δx, y)) * bcs[:x1].func(x, y) / Δx +
+               -(3p(x, y) - p(x, y-Δy)) * bcs[:y1].func(x, y) / Δy
+
+        push!(rs, i, i, i)
+        push!(cs, i, i-1, i-n_xs)
+        push!(
+            vs, 
+            -2p(x, y) / Δx^2 - 2p(x, y) / Δy^2,
+            2p(x, y) / Δx^2,
+            2p(x, y) / Δy^2
+        )
+    
+    elseif c == :tl
+        
+        b[i] = -(p(x+Δx, y) - 3p(x, y)) * bcs[:x0].func(x, y) / Δx +
+               -(3p(x, y) - p(x, y-Δy)) * bcs[:y1].func(x, y) / Δy
+
+        push!(rs, i, i, i)
+        push!(cs, i, i+1, i-n_xs)
+        push!(
+            vs, 
+            -2p(x, y) / Δx^2 - 2p(x, y) / Δy^2,
+            2p(x, y) / Δx^2,
+            2p(x, y) / Δy^2
+        )
+
+    else
+
+        # TODO: fix this
+        push!(rs, i)
+        push!(cs, i)
+        push!(vs, 1.0)
+
     end
 
 end
@@ -75,9 +105,9 @@ end
 function add_neumann_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
 
     # Add the constant part of the equation
-    if bc.name == :y0
+    if bc.name == :y0 
         b[i] = -(p(x, y+Δy) - 3p(x, y)) * bc.func(x, y) / Δy
-    elseif bc.name == :y1
+    elseif bc.name == :y1 
         b[i] = -(3p(x, y) - p(x, y-Δy)) * bc.func(x, y) / Δy
     elseif bc.name == :x0 
         b[i] = -(p(x+Δx, y) - 3p(x, y)) * bc.func(x, y) / Δx
@@ -93,10 +123,10 @@ function add_neumann_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, p)
     # Add the coefficents of components along the x direction
     if bc.name == :x0 
         push!(cs, i+1)
-        push!(vs, 2p(x+Δx, y)/Δx^2)
+        push!(vs, 2p(x+Δx, y) / Δx^2)
     elseif bc.name == :x1 
         push!(cs, i-1)
-        push!(vs, 2p(x-Δx, y)/Δx^2)
+        push!(vs, 2p(x-Δx, y) / Δx^2)
     else 
         push!(cs, i+1, i-1)
         push!(vs, (0.25p(x+Δx, y) - 0.25p(x-Δx, y) + p(x, y)) / Δx^2,
@@ -125,7 +155,7 @@ function add_interior_point!(rs, cs, vs, i, x, y, Δx, Δy, p)
     
     push!(
         vs,
-        -(2p(x,y))/(Δx^2) - (2p(x,y))/(Δy^2),
+        -2p(x, y) / Δx^2 - 2p(x, y) / Δy^2,
         (0.25p(x+Δx, y) - 0.25p(x-Δx, y) + p(x, y)) / Δx^2,
         (0.25p(x-Δx, y) - 0.25p(x+Δx, y) + p(x, y)) / Δx^2,
         (0.25p(x, y+Δy) - 0.25p(x, y-Δy) + p(x, y)) / Δy^2,
@@ -138,8 +168,6 @@ function generate_grid(xs, ys, Δx, Δy, p, bcs)
 
     xmin, xmax = extrema(xs)
     ymin, ymax = extrema(ys)
-
-    corner_points = Set([(xmin, ymin), (xmin, ymax), (xmax, ymin), (xmax, ymax)])
 
     # Initalise components of A
     rs = Int64[]
@@ -155,12 +183,10 @@ function generate_grid(xs, ys, Δx, Δy, p, bcs)
         x = xs[(i-1)%n_xs+1] 
         y = ys[Int(ceil(i/n_xs))]
 
-        if (x, y) ∈ corner_points
+        if in_corner(x, y, xmin, xmax, ymin, ymax)
 
-            # TODO: fix this
-            push!(rs, i)
-            push!(cs, i)
-            push!(vs, 1.0)
+            c = get_corner(x, y, xmin, xmax, ymin, ymax)
+            add_corner_point!(b, rs, cs, vs, c, bcs, i, x, y, Δx, Δy, p)
 
         elseif on_boundary(x, y, xmin, xmax, ymin, ymax)
 
@@ -181,9 +207,33 @@ function generate_grid(xs, ys, Δx, Δy, p, bcs)
 
 end
 
-A, b = @time generate_grid(xs, ys, Δx, Δy, p, bcs)
+# Define the grid dimensions
+xmin, Δx, xmax = 0.0, 0.01, 1.0
+ymin, Δy, ymax = 0.0, 0.01, 1.0
+
+xs = xmin:Δx:xmax
+ys = ymin:Δy:ymax
+
+n_xs = length(xs)
+n_ys = length(ys)
+n_us = n_xs*n_ys
+
+# TODO: define permeability interpolation object
+p(x, y) = 2.0 + 0.02rand()
+
+# Set up boundary conditions
+x0 = BoundaryCondition(:x0, :neumann, (x, y) -> 0.0)
+x1 = BoundaryCondition(:x1, :neumann, (x, y) -> 0.0)
+y0 = BoundaryCondition(:y0, :dirichlet, (x, y) -> 0.0)
+y1 = BoundaryCondition(:y1, :neumann, (x, y) -> 2.0)
+
+# Define a mapping between boundary condition names and objects
+bcs = Dict(:y0 => y0, :y1 => y1, :x0 => x0, :x1 => x1)
+
+A, b = generate_grid(xs, ys, Δx, Δy, p, bcs)
 
 prob = LinearProblem(A, b)
 sol = solve(prob)
 u = reshape(sol.u, n_xs, n_ys)
-heatmap(xs, ys, rotr90(u))
+
+heatmap(xs, ys, u)
