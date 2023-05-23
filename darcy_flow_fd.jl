@@ -1,10 +1,12 @@
+using Distributions
+using Interpolations
 using LinearAlgebra
 using LinearSolve
 using Plots
 using Random
 using SparseArrays
 
-#Random.seed!(16)
+# Random.seed!(16)
 
 struct BoundaryCondition
     name::Symbol
@@ -247,6 +249,25 @@ function generate_grid(xs, ys, Δx, Δy, p, bcs)
 
 end
 
+function exp_squared_cov(σ, γ, xs, ys)
+
+    # Generate vectors of x and y coordinates
+    cxs = vec([x for _ ∈ ys, x ∈ xs])
+    cys = vec([y for y ∈ ys, _ ∈ xs])
+
+    # Generate a matrix of distances between each set of coordinates
+    ds = (cxs .- cxs').^2 + (cys .- cys').^2
+
+    Γ = σ^2 * exp.(-(1/2γ^2).*ds) + 1e-6I
+
+    return Γ
+
+end
+
+function sample_perms(d) 
+    return exp.(reshape(rand(d), length(xs), length(ys)))
+end
+
 # Define the grid dimensions
 xmin, Δx, xmax = 0.0, 0.01, 1.0
 ymin, Δy, ymax = 0.0, 0.01, 1.0
@@ -258,13 +279,9 @@ n_xs = length(xs)
 n_ys = length(ys)
 n_us = n_xs*n_ys
 
-# TODO: define permeability interpolation object
-function p(x, y)
-    if x > xmax || x < xmin || y > ymax || y < ymin
-        error("$x, $y")
-    end
-    return 2.0 #+ 0.02rand()
-end
+# Define permeability distribution
+Γ = exp_squared_cov(0.5, 0.2, xs, ys)
+d = MvNormal(Γ)
 
 # Set up boundary conditions
 x0 = BoundaryCondition(:x0, :neumann, (x, y) -> 0.0)
@@ -274,6 +291,9 @@ y1 = BoundaryCondition(:y1, :neumann, (x, y) -> 2.0)
 
 # Define a mapping between boundary condition names and objects
 bcs = Dict(:y0 => y0, :y1 => y1, :x0 => x0, :x1 => x1)
+
+# Generate a permeability field
+p = interpolate((xs, ys), sample_perms(d), Gridded(Linear()))
 
 A, b = generate_grid(xs, ys, Δx, Δy, p, bcs)
 
