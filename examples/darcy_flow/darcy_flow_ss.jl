@@ -2,12 +2,14 @@ using Distributions
 using Interpolations
 using LinearAlgebra
 using LinearSolve
-using Plots
-using PyPlot
 using Random
 using SparseArrays
 
-Random.seed!(64)
+using LaTeXStrings
+using Plots
+using PyPlot 
+
+Random.seed!(16)
 
 PyPlot.rc("text", usetex=true)
 PyPlot.rc("font", family="serif")
@@ -71,17 +73,17 @@ function add_neumann_point!(b, rs, cs, vs, bc, i, x, y, Δx, Δy, n_xs)
     push!(rs, i, i, i)
 
     if bc.name == :y0 
-        push!(cs, i, i+n_xs, i+2nxs)
+        push!(cs, i, i+n_xs, i+2n_xs)
         push!(vs, -3.0 / 2Δy, 4.0 / 2Δy, -1.0 / 2Δy)
     elseif bc.name == :y1 
-        push!(cs, i-2n_xs, i-n_xs, i)
-        push!(vs, -3.0 / 2Δy, 4.0 / 2Δy, -1.0 / 2Δy)
+        push!(cs, i, i-n_xs, i-2n_xs)
+        push!(vs, 3.0 / 2Δy, -4.0 / 2Δy, 1.0 / 2Δy)
     elseif bc.name == :x0 
         push!(cs, i, i+1, i+2)
         push!(vs, -3.0 / 2Δx, 4.0 / 2Δx, -1.0 / 2Δx)
     elseif bc.name == :x1 
-        push!(cs, i-2, i-1, i)
-        push!(vs, -3.0 / 2Δx, 4.0 / 2Δx, -1.0 / 2Δx)
+        push!(cs, i, i-1, i-2)
+        push!(vs, 3.0 / 2Δx, -4.0 / 2Δx, 1.0 / 2Δx)
     end
 
 end
@@ -91,14 +93,11 @@ function add_interior_point!(rs, cs, vs, i, x, y, Δx, Δy, n_xs, p)
     push!(rs, i, i, i, i, i)
     push!(cs, i, i+1, i-1, i+n_xs, i-n_xs)
     
-    push!(
-        vs,
-        -2p(x, y) / Δx^2 - 2p(x, y) / Δy^2,
-        (0.25p(x+Δx, y) - 0.25p(x-Δx, y) + p(x, y)) / Δx^2,
-        (0.25p(x-Δx, y) - 0.25p(x+Δx, y) + p(x, y)) / Δx^2,
-        (0.25p(x, y+Δy) - 0.25p(x, y-Δy) + p(x, y)) / Δy^2,
-        (0.25p(x, y-Δy) - 0.25p(x, y+Δy) + p(x, y)) / Δy^2
-    )
+    push!(vs, -2p(x, y) / Δx^2 - 2p(x, y) / Δy^2,
+              (0.25p(x+Δx, y) - 0.25p(x-Δx, y) + p(x, y)) / Δx^2,
+              (0.25p(x-Δx, y) - 0.25p(x+Δx, y) + p(x, y)) / Δx^2,
+              (0.25p(x, y+Δy) - 0.25p(x, y-Δy) + p(x, y)) / Δy^2,
+              (0.25p(x, y-Δy) - 0.25p(x, y+Δy) + p(x, y)) / Δy^2)
 
 end
 
@@ -179,7 +178,7 @@ n_ys = length(ys)
 n_us = n_xs*n_ys
 
 # Define permeability distribution
-Γ = exp_squared_cov(1.0, 0.2, xs, ys)
+Γ = exp_squared_cov(0.8, 0.1, xs, ys)
 d = MvNormal(Γ)
 
 # Set up boundary conditions
@@ -248,4 +247,24 @@ PyPlot.suptitle("ln(Permeability) and Pressure Fields", fontsize=20)
 PyPlot.tight_layout()
 PyPlot.savefig("test.pdf")
 
-heatmap(xs, ys, rotr90(us[:,:,1]))
+# heatmap(xs, ys, rotr90(us[:,:,1]))
+
+# fig, ax = PyPlot.subplots(figsize=(5, 4))
+
+# m = ax.pcolormesh(
+#     xs, ys, rotr90(reshape(sol.u, n_xs, n_ys)), 
+#     cmap=:coolwarm
+# )
+
+# ax.set_box_aspect(1)
+# ax.set_xticks([0, 1])
+# ax.set_yticks([0, 1])
+
+# PyPlot.colorbar(m, ax=ax)
+
+# PyPlot.title("Pressure profile (constant permeability)\n", fontsize=14)
+# PyPlot.xlabel(L"x", fontsize=12)
+# PyPlot.ylabel(L"y", fontsize=12)
+
+# PyPlot.tight_layout()
+# PyPlot.savefig("test2.pdf")
