@@ -77,11 +77,15 @@ function add_interior_point!(rs, cs, vs, i, x, y, Δx, Δy, n_xs, p)
     push!(rs, i, i, i, i, i)
     push!(cs, i, i+1, i-1, i+n_xs, i-n_xs)
 
-    push!(vs, -2p(x, y) / Δx^2 - 2p(x, y) / Δy^2,
-              (0.25p(x+Δx, y) - 0.25p(x-Δx, y) + p(x, y)) / Δx^2,
-              (0.25p(x-Δx, y) - 0.25p(x+Δx, y) + p(x, y)) / Δx^2,
-              (0.25p(x, y+Δy) - 0.25p(x, y-Δy) + p(x, y)) / Δy^2,
-              (0.25p(x, y-Δy) - 0.25p(x, y+Δy) + p(x, y)) / Δy^2)
+    push!(
+        vs, 
+        -(p(x+0.5Δx, y) + p(x-0.5Δx, y)) / Δx^2 - 
+            (p(x, y+0.5Δy) + p(x, y-0.5Δy)) / Δy^2,
+        p(x+0.5Δx, y) / Δx^2,
+        p(x-0.5Δx, y) / Δx^2,
+        p(x, y+0.5Δy) / Δy^2,
+        p(x, y-0.5Δy) / Δy^2
+    )
 
 end
 
@@ -131,23 +135,4 @@ function generate_grid(xs, ys, p, bcs)
 
     return A, b
 
-end
-
-function exp_squared_cov(σ, γ, xs, ys)
-
-    # Generate vectors of x and y coordinates
-    cxs = vec([x for x ∈ xs, _ ∈ ys])
-    cys = vec([y for _ ∈ xs, y ∈ ys])
-
-    # Generate a matrix of distances between each set of coordinates
-    ds = (cxs .- cxs').^2 + (cys .- cys').^2
-
-    Γ = σ^2 * exp.(-(1/2γ^2) * ds) + 1e-6I
-
-    return Γ
-
-end
-
-function sample_perms(d, n_xs, n_ys) 
-    return reshape(rand(d), n_xs, n_ys)
 end
