@@ -301,51 +301,63 @@ end
 
 
 function run_mcmc(
-    π::AbstractPrior,
     f::Function,
-    L::AbstractLikelihood,
-    G::Matrix,
-    κ::AbstractPerturbationKernel,
+    g::Function,
+    π::Distribution,
+    L::Distribution,
+    K::Distribution,
     N::Int;
-    verbose::Bool = true
+    θ_s::Union{AbstractVector,Nothing}=nothing,
+    verbose::Bool=true
 )
 
-    # θ = sample(π)
-    θ = [1.0, 1.0]
+    N_θ = length(π.μ)
+    N_y = length(L.μ)
 
-    y_m = G * f(θ)
+    θs = zeros(N_θ, N)
+    ys = zeros(N_y, N)
 
-    θs = [θ]
-    i = 0
+    if θ_s !== nothing
+        θs[:,1] = θ_s
+    else
+        θs[:,1] = rand(π)
+    end
+    
+    ys[:,1] = g(f(θs[:,1]))
 
-    for j ∈ 2:N 
+    j = 0
 
-        # Sample a new parameter 
-        θ⁺ = perturb(κ, θ, π)
+    for i ∈ 2:N 
 
-        # Run the forward model
-        y_m⁺ = G * f(θ⁺)
+        # Generate a proposal  
+        θ_p = θs[:,i-1] + rand(K)
+
+        # Run the forward model 
+        y_p = g(f(θ_p))
 
         # Calculate the acceptance probability
-        h = (density(π, θ⁺) * density(L, y_m⁺) * density(κ, θ⁺, θ)) / 
-                (density(π, θ) * density(L, y_m) * density(κ, θ, θ⁺))
+        log_h = @time (logpdf(π, θ_p) + logpdf(L, y_p) + logpdf(K, θs[:,i-1]-θ_p)) -
+                (logpdf(π, θs[:,i-1]) + logpdf(L, ys[:,i-1]) + logpdf(K, θ_p-θs[:,i-1]))
 
-        if h ≥ rand()
-            i += 1
-            θ = copy(θ⁺)
-            y_m = copy(y_m⁺)
+        # log_h = (logpdf(π, θ_p) + logpdf(L, y_p)) - (logpdf(π, θs[:,i-1]) + logpdf(L, ys[:,i-1]))
+
+        if log_h ≥ log(rand())
+            j += 1
+            θs[:,i] = θ_p
+            ys[:,i] = y_p
+        else
+            θs[:,i] = θs[:,i-1]
+            ys[:,i] = ys[:,i-1]
         end
 
-        push!(θs, θ)
-
-        if (verbose) && (j % 1000 == 0)
-            α = round(100i/j, digits=2)
-            @info("$j iterations complete (α = $α%).")
+        if (verbose) && (i % 1000 == 0)
+            α = round(100j/i, digits=2)
+            @info("$i iterations complete (α = $α%).")
         end
         
     end
 
-    return θs
+    return θs, ys
 
 end
 
@@ -500,46 +512,71 @@ function run_ibis(
 end
 
 
+"""Calculates the MAP estimate of the parameters."""
+function calculate_map(
+    f::Function, 
+    g::Function,
+    π::Distribution,
+    L::Distribution,
+    L_θ::AbstractMatrix,
+    L_ϵ::AbstractMatrix
+)
+
+    sol = Optim.optimize(
+        θ -> sum([L_ϵ*(g(f(θ))-L.μ); L_θ*(θ-π.μ)].^2), 
+        collect(π.μ), 
+        Optim.Newton(), 
+        Optim.Options(show_trace=true, f_abstol=1e-10), 
+        autodiff=:forward
+    )
+
+    if !Optim.converged(sol) 
+        @warn "MAP estimate optimisation failed to converge."
+    end
+
+    return Optim.minimizer(sol)
+
+end
+
+
 function run_rml(
     f::Function,
     g::Function,
-    π::GaussianPrior,
-    L::GaussianLikelihood,
+    π::Distribution,
+    L::Distribution,
     N::Int;
     verbose::Bool=true
 )
 
-    L_ϵ = LinearAlgebra.cholesky(inv(L.Σ)).U
-    L_θ = LinearAlgebra.cholesky(inv(π.Σ)).U  
+    N_θ = length(π.μ)
+    θs = zeros(N_θ, N)
+    
+    evals = zeros(N)
 
-    # Calculate the MAP estimate
-    res = Optim.optimize(
-        θ -> sum([L_ϵ*(g(f(θ))-L.μ); L_θ*(θ-π.μ)].^2), [1.0, 1.0], 
-        Optim.Newton(), 
-        Optim.Options(show_trace=false, f_abstol=1e-10), autodiff=:forward
-    )
+    L_θ = cholesky(inv(π.Σ)).U
+    L_ϵ = cholesky(inv(L.Σ)).U
 
-    θ_MAP = Optim.minimizer(res)
-    !Optim.converged(res) && @warn "MAP estimate optimisation failed to converge."
-
-    θs = []
-    evals = []
+    θ_map = calculate_map(f, g, π, L, L_θ, L_ϵ)
 
     for i ∈ 1:N
 
-        θ_i = sample(π)
-        y_i = sample(L)
+        θ_i = rand(π)
+        y_i = rand(L)
 
         res = Optim.optimize(
-            θ -> sum([L_ϵ*(g(f(θ)).-y_i); L_θ*(θ.-θ_i)].^2), θ_MAP, 
+            θ -> sum([L_ϵ*(g(f(θ))-y_i); L_θ*(θ-θ_i)].^2), 
+            θ_map, 
             Optim.Newton(), 
-            Optim.Options(show_trace=false, f_abstol=1e-10), autodiff=:forward
+            Optim.Options(show_trace=false, f_abstol=1e-10), 
+            autodiff=:forward
         )
 
-        !Optim.converged(res) && @warn "MAP estimate optimisation failed to converge."
+        if !Optim.converged(res)
+            @warn "MAP estimate optimisation failed to converge."
+        end
 
-        push!(θs, Optim.minimizer(res))
-        push!(evals, Optim.f_calls(res))
+        θs[:,i] = Optim.minimizer(res)
+        evals[i] = Optim.f_calls(res)
 
         if verbose && i % 100 == 0
             @info "$i samples generated. Mean number of function " *
@@ -548,7 +585,7 @@ function run_rml(
 
     end
 
-    return θ_MAP, θs
+    return θ_map, θs
 
 end
 
