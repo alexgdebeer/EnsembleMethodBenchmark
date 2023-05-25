@@ -300,68 +300,6 @@ function run_smc(
 end
 
 
-function run_mcmc(
-    f::Function,
-    g::Function,
-    π::Distribution,
-    L::Distribution,
-    K::Distribution,
-    N::Int;
-    θ_s::Union{AbstractVector,Nothing}=nothing,
-    verbose::Bool=true
-)
-
-    N_θ = length(π.μ)
-    N_y = length(L.μ)
-
-    θs = zeros(N_θ, N)
-    ys = zeros(N_y, N)
-
-    if θ_s !== nothing
-        θs[:,1] = θ_s
-    else
-        θs[:,1] = rand(π)
-    end
-    
-    ys[:,1] = g(f(θs[:,1]))
-
-    j = 0
-
-    for i ∈ 2:N 
-
-        # Generate a proposal  
-        θ_p = θs[:,i-1] + rand(K)
-
-        # Run the forward model 
-        y_p = g(f(θ_p))
-
-        # Calculate the acceptance probability
-        log_h = @time (logpdf(π, θ_p) + logpdf(L, y_p) + logpdf(K, θs[:,i-1]-θ_p)) -
-                (logpdf(π, θs[:,i-1]) + logpdf(L, ys[:,i-1]) + logpdf(K, θ_p-θs[:,i-1]))
-
-        # log_h = (logpdf(π, θ_p) + logpdf(L, y_p)) - (logpdf(π, θs[:,i-1]) + logpdf(L, ys[:,i-1]))
-
-        if log_h ≥ log(rand())
-            j += 1
-            θs[:,i] = θ_p
-            ys[:,i] = y_p
-        else
-            θs[:,i] = θs[:,i-1]
-            ys[:,i] = ys[:,i-1]
-        end
-
-        if (verbose) && (i % 1000 == 0)
-            α = round(100j/i, digits=2)
-            @info("$i iterations complete (α = $α%).")
-        end
-        
-    end
-
-    return θs, ys
-
-end
-
-
 function run_abc_mcmc(
     π::AbstractPrior,
     f::Function,
