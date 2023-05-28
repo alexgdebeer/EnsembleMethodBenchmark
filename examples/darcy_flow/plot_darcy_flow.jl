@@ -2,10 +2,10 @@ using LaTeXStrings
 using Plots
 using PyPlot 
 
+using DarcyFlow
+
 PyPlot.rc("text", usetex=true)
 PyPlot.rc("font", family="serif")
-
-include("darcy_flow_ss.jl")
 
 Random.seed!(16)
 
