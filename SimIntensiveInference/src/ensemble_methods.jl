@@ -180,12 +180,12 @@ function run_es(
     ys[:,:,1] = reduce(hcat, [g(f(θ)) for θ ∈ eachcol(θs[:,:,1])])
 
     # Generate a set of perturbations
-    ϵs = rand(Distributions.MvNormal(zeros(N_θ), Γ_ϵ), N_e)
+    ϵs = rand(Distributions.MvNormal(zeros(N_y), L.Σ), N_e)
 
     # Form the updated ensemble and generate the updated ensemble predictions
     K = kalman_gain(θs[:,:,1], ys[:,:,1], L.Σ)
     θs[:,:,2] = θs[:,:,1] + K * (L.μ .+ ϵs .- ys[:,:,1])
-    ys[:,:,2] = reduce(vcat, [f(θ) for θ ∈ eachcol(θs[:,:,2])])
+    ys[:,:,2] = reduce(vcat, [g(f(θ)) for θ ∈ eachcol(θs[:,:,2])])
 
     return θs, ys
 
@@ -218,7 +218,7 @@ function run_es_mda(
     for i ∈ 2:N_i+1
 
         # Generate a set of perturbations
-        ϵs = rand(MvNormal(zeros(N_θ), αs[i-1]*L.Σ), N_e)
+        ϵs = rand(MvNormal(zeros(N_y), αs[i-1]*L.Σ), N_e)
 
         # Generate the new ensemble and associated predictions
         K = kalman_gain(θs[:,:,i-1], ys[:,:,i-1], αs[i-1]*L.Σ)

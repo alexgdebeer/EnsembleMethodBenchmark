@@ -5,7 +5,8 @@ function run_chain(
     L::Distribution,
     K::Distribution,
     N::Int;
-    verbose::Bool=true
+    verbose::Bool=true,
+    θ_s::Union{AbstractVector,Nothing}=nothing
 )
 
     N_θ = length(π.μ)
@@ -15,7 +16,7 @@ function run_chain(
     ys = zeros(N_y, N)
 
     # Sample a starting point from the prior
-    θs[:,1] = rand(π)
+    θs[:,1] = θ_s === nothing ? rand(π) : θ_s
     ys[:,1] = g(f(θs[:,1]))
 
     j = 0
@@ -32,12 +33,10 @@ function run_chain(
         log_h = logpdf(π, θ_p) -
                 logpdf(π, θs[:,i-1]) +
                 logpdf(L, y_p) -
-                logpdf(L, ys[:,i-1]) +
-                logpdf(K, θs[:,i-1]-θ_p) -
-                logpdf(K, θ_p-θs[:,i-1])
-
-        # log_h = (logpdf(π, θ_p) + logpdf(L, y_p)) - (logpdf(π, θs[:,i-1]) + logpdf(L, ys[:,i-1]))
-
+                logpdf(L, ys[:,i-1]) # +
+                # logpdf(K, θs[:,i-1]-θ_p) -
+                # logpdf(K, θ_p-θs[:,i-1])
+        
         if log_h ≥ log(rand())
             j += 1
             θs[:,i] = θ_p
@@ -49,7 +48,7 @@ function run_chain(
 
         if (verbose) && (i % 1000 == 0)
             α = round(100j/i, digits=2)
-            @info("$i iterations complete (α = $α%).")
+            @info "$i iterations complete (α = $α%)."
         end
         
     end
@@ -67,8 +66,11 @@ function run_mcmc(
     K::Distribution,
     N::Int;
     n_chains::Int=1,
-    verbose::Bool=true
+    verbose::Bool=true,
+    θ_s::Union{AbstractVector,Nothing}=nothing
 )
+
+    @info "Starting MCMC..."
 
     N_θ = length(π.μ)
     N_y = length(L.μ)
@@ -77,7 +79,7 @@ function run_mcmc(
     ys = zeros(N_y, N, n_chains)
 
     Threads.@threads for i = 1:n_chains
-        θs[:,:,i], ys[:,:,i] = run_chain(f, g, π, L, K, N, verbose=verbose)
+        θs[:,:,i], ys[:,:,i] = run_chain(f, g, π, L, K, N, verbose=verbose, θ_s=θ_s)
     end
 
     return θs, ys
