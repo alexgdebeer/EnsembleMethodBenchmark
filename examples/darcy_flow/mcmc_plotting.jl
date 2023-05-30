@@ -8,10 +8,12 @@ include("problem_setup.jl")
 PyPlot.rc("text", usetex=true)
 PyPlot.rc("font", family="serif")
 
-post_mean_vs_truth = true
-chain_means = true
-trace_plots = true
-marginal_plots = true 
+post_mean_vs_truth = false
+post_stds = false
+chain_means = false
+trace_plots = false
+marginal_plots = false 
+pressure_predictions = true
 
 n_warmup = 500_000
 n_skip = 10
@@ -23,46 +25,12 @@ chain_length = 1_000_000
 
 # Remove warm-up iterations and thin the chain if necessary
 ps = ps[:,n_warmup+1:n_skip:end,:]
+us = us[:,n_warmup+1:n_skip:end,:]
 
 μ_post = reshape(mean(ps, dims=(2,3)), nx_c, ny_c)
     
 pmin = min(minimum(μ_post), minimum(ps_true))
 pmax = max(maximum(μ_post), maximum(ps_true))
-
-if chain_means
-
-    fig, ax = PyPlot.subplots(2, 3, figsize=(8, 5))
-
-    for i ∈ 1:2, j ∈ 1:3
-
-        chain = 3(i-1)+j
-
-        μ_θ = reshape(mean(ps[:, :, chain], dims=2), nx_c, ny_c)
-
-        m = ax[i, j].pcolormesh(
-            xs_c, ys_c, μ_θ', 
-            cmap=:viridis, vmin=pmin, vmax=pmax
-        )
-
-        ax[i, j].set_box_aspect(1)
-        ax[i, j].set_xticks([0, 1])
-        ax[i, j].set_yticks([0, 1])
-
-        PyPlot.colorbar(m, fraction=0.046, pad=0.04, ax=ax[i, j])
-
-        ax[i, j].set_title("Chain $chain", fontsize=12)
-        # ax[i, j].set_xlabel(L"x", fontsize=12)
-        # ax[i, j].set_ylabel(L"y", fontsize=12)
-
-    end
-
-    PyPlot.suptitle("Chain means", fontsize=20)
-
-    PyPlot.tight_layout()
-    PyPlot.savefig("chain_means.pdf")
-    PyPlot.clf()
-
-end
 
 if post_mean_vs_truth
 
@@ -94,7 +62,113 @@ if post_mean_vs_truth
     PyPlot.suptitle("Posterior mean vs truth", fontsize=20)
 
     PyPlot.tight_layout()
-    PyPlot.savefig("post_mean_vs_truth.pdf")
+    PyPlot.savefig("plots/darcy_flow/mcmc/post_mean_vs_truth.pdf")
+    PyPlot.clf()
+
+end
+
+if post_mean_preds_vs_truth
+
+    # Generate the predictions corresponding to the true field
+    p = interpolate((xs_f, ys_f), exp.(ps_true), Gridded(Linear()))
+    A, b = DarcyFlow.generate_grid(xs_f, ys_f, p, bcs)
+    sol = solve(LinearProblem(A, b))
+    us_true = reshape(sol.u, nx_f, ny_f)
+
+    # Generate the predictions corresponding to the posterior mean
+    p = interpolate((xs_c, ys_c), exp.(μ_post), Gridded(Linear()))
+    A, b = DarcyFlow.generate_grid(xs_c, ys_c, p, bcs)
+    sol = solve(LinearProblem(A, b))
+    us_μ_post = reshape(sol.u, nx_c, ny_c)
+
+    umin = min(minimum(us_μ_post), minimum(us_true))
+    umax = max(maximum(us_μ_post), maximum(us_true))
+
+    fig, ax = PyPlot.subplots(1, 2, figsize=(6, 3))
+
+    m_1 = ax[1].pcolormesh(
+        xs_c, ys_c, us_true', 
+        cmap=:coolwarm, vmin=umin, vmax=umax
+    )
+
+    m_2 = ax[2].pcolormesh(
+        xs_c, ys_c, us_μ_post',
+        cmap=:coolwarm, vmin=umin, vmax=umax
+    )
+
+    ax[1].set_box_aspect(1)
+    ax[1].set_xticks([0, 1])
+    ax[1].set_yticks([0, 1])
+    ax[1].set_title("Truth", fontsize=12)
+
+    ax[2].set_box_aspect(1)
+    ax[2].set_xticks([0, 1])
+    ax[2].set_yticks([0, 1])
+    ax[2].set_title("Posterior mean", fontsize=12)
+
+    PyPlot.colorbar(m_1, fraction=0.046, pad=0.04, ax=ax[1])
+    PyPlot.colorbar(m_2, fraction=0.046, pad=0.04, ax=ax[2])
+
+    PyPlot.suptitle("Posterior mean vs truth: predictions", fontsize=20)
+
+    PyPlot.tight_layout()
+    PyPlot.savefig("plots/darcy_flow/mcmc/post_mean_preds_vs_truth.pdf")
+    PyPlot.clf()
+
+end
+
+if post_stds
+
+    PyPlot.axes().set_aspect("equal")
+
+    PyPlot.pcolormesh(
+        xs_c, ys_c, reshape(std(ps, dims=(2,3)), nx_c, ny_c)',
+        cmap=:magma
+    )
+    PyPlot.colorbar()
+
+    PyPlot.xticks(ticks=[0, 1])
+    PyPlot.yticks(ticks=[0, 1])
+
+    PyPlot.title("Posterior standard deviations", fontsize=20)
+
+    PyPlot.tight_layout()
+    PyPlot.savefig("plots/darcy_flow/mcmc/post_stds.pdf")
+    PyPlot.clf()
+
+end
+
+if chain_means
+
+    fig, ax = PyPlot.subplots(2, 3, figsize=(8, 5))
+
+    for i ∈ 1:2, j ∈ 1:3
+
+        chain = 3(i-1)+j
+
+        μ_θ = reshape(mean(ps[:, :, chain], dims=2), nx_c, ny_c)
+
+        m = ax[i, j].pcolormesh(
+            xs_c, ys_c, μ_θ', 
+            cmap=:viridis, vmin=pmin, vmax=pmax
+        )
+
+        ax[i, j].set_box_aspect(1)
+        ax[i, j].set_xticks([0, 1])
+        ax[i, j].set_yticks([0, 1])
+
+        PyPlot.colorbar(m, fraction=0.046, pad=0.04, ax=ax[i, j])
+
+        ax[i, j].set_title("Chain $chain", fontsize=12)
+        # ax[i, j].set_xlabel(L"x", fontsize=12)
+        # ax[i, j].set_ylabel(L"y", fontsize=12)
+
+    end
+
+    PyPlot.suptitle("Chain means", fontsize=20)
+
+    PyPlot.tight_layout()
+    PyPlot.savefig("plots/darcy_flow/mcmc/chain_means.pdf")
     PyPlot.clf()
 
 end
@@ -126,7 +200,7 @@ if marginal_plots
     PyPlot.suptitle("Marginal permeability distributions at random locations", fontsize=20)
 
     PyPlot.tight_layout()
-    PyPlot.savefig("marginals.pdf")
+    PyPlot.savefig("plots/darcy_flow/mcmc/marginals.pdf")
     PyPlot.clf()
 
 end
@@ -159,100 +233,39 @@ if trace_plots
     PyPlot.suptitle("Trace plots for permeabilities at random locations", fontsize=20)
 
     PyPlot.tight_layout()
-    PyPlot.savefig("trace_plots.pdf")
+    PyPlot.savefig("plots/darcy_flow/mcmc/trace_plots.pdf")
     PyPlot.clf()
 
 end
 
-# # Form permeability interpolation object 
-# p = interpolate((xs_f, ys_f), exp.(ps_true), Gridded(Linear()))
+if posterior_predictions 
 
-# # Generate and solve the steady-state system of equations
-# A, b = DarcyFlow.generate_grid(xs_f, ys_f, p, bcs)
-# sol = solve(LinearProblem(A, b))
+    PyPlot.figure(figsize=(5, 4))
 
-# us_true = reshape(sol.u, nx_f, ny_f)
+    bp = PyPlot.boxplot(
+        [vec(us[i,:,:]) for i ∈ 1:8], 
+        flierprops=Dict(:marker=>".", :markersize=>2),
+        zorder=1
+    )
 
-# using PyPlot 
+    for i ∈ 1:8
+        x_mean = mean(bp["medians"][i].get_xdata())
+        PyPlot.errorbar(
+            x=x_mean, y=us_o[i], 
+            yerr=σ_ϵ,
+            color="tab:blue", marker=".", markersize=4,
+            zorder=2
+        )
+    end
 
-# fig, ax = PyPlot.subplots(figsize=(5, 4))
+    PyPlot.xticks(1:8, y_locs)
 
-# m = ax.pcolormesh(
-#     xs_f, ys_f, rotr90(us_true), 
-#     cmap=:coolwarm
-# )
+    PyPlot.title("Posterior predictions "*L"(x=0.1)", fontsize=20)
+    PyPlot.ylabel("Temperature", fontsize=12)
+    PyPlot.xlabel(L"y"*" coordinate", fontsize=12)
 
-# ax.set_box_aspect(1)
-# ax.set_xticks([0, 1])
-# ax.set_yticks([0, 1])
+    PyPlot.tight_layout()
+    PyPlot.savefig("plots/darcy_flow/posterior_predictions.pdf")
+    PyPlot.clf()
 
-# PyPlot.colorbar(m, ax=ax)
-
-# PyPlot.title("True pressure field and observation locations", fontsize=14)
-# PyPlot.xlabel(L"x", fontsize=12)
-# PyPlot.ylabel(L"y", fontsize=12)
-
-# PyPlot.scatter(xs_o, ys_o, marker="x", c="k")
-
-# PyPlot.tight_layout()
-# PyPlot.savefig("plots/darcy_flow/true_pressure_field.pdf")
-
-# using PyPlot 
-
-# for i ∈ 1:6
-
-#     fig, ax = PyPlot.subplots(figsize=(5, 4))
-
-#     m = ax.pcolormesh(
-#         xs_c, ys_c, rotr90(reshape(mean(ps[:,50_000:end,i], dims=2), nx_c, ny_c)), 
-#         cmap=:viridis
-#     )
-
-#     ax.set_box_aspect(1)
-#     ax.set_xticks([0, 1])
-#     ax.set_yticks([0, 1])
-
-#     PyPlot.colorbar(m, ax=ax)
-
-#     PyPlot.title("Permeability field: posterior mean", fontsize=14)
-#     PyPlot.xlabel(L"x", fontsize=12)
-#     PyPlot.ylabel(L"y", fontsize=12)
-
-#     PyPlot.tight_layout()
-#     PyPlot.savefig("plots/darcy_flow/posterior_mean_chain_$i.pdf")
-#     PyPlot.clf()
-
-# end
-
-# for i ∈ 1:6
-#     PyPlot.plot(50_001:100_000, ps[1,50_001:end,i], label="Chain $i")
-# end
-
-# PyPlot.title("Example diagnostic curves", fontsize=14)
-# PyPlot.xlabel("Iteration", fontsize=12)
-# PyPlot.ylabel("Permeability", fontsize=12)
-# PyPlot.legend(fontsize=10)
-
-# PyPlot.savefig("plots/darcy_flow/diagnostic_curve_example.pdf")
-# PyPlot.clf()
-
-
-
-# bp = PyPlot.boxplot([vec(us[i,50_000:end,:]) for i ∈ 1:8], zorder=1)
-
-# for i ∈ 1:8
-#     PyPlot.plot(
-#         mean(bp["medians"][i].get_xdata()), us_o[i], 
-#         color="tab:blue", marker="X", zorder=2, markersize=5
-#     )
-# end
-
-# PyPlot.xticks(1:8, y_locs)
-
-# PyPlot.title("Posterior predictions "*L"(x=0.1)", fontsize=14)
-# PyPlot.ylabel("Temperature", fontsize=12)
-# PyPlot.xlabel(L"y"*" coordinate", fontsize=12)
-
-# PyPlot.tight_layout()
-# PyPlot.savefig("plots/darcy_flow/posterior_predictions.pdf")
-# PyPlot.clf()
+end

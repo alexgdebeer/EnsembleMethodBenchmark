@@ -12,6 +12,9 @@ post_mean_vs_truth = true
 
 μ_post = reshape(mean(ps[:,:,end], dims=2), nx_c, ny_c)
 
+pmin = min(minimum(μ_post), minimum(ps_true))
+pmax = max(maximum(μ_post), maximum(ps_true))
+
 if post_mean_vs_truth
 
     fig, ax = PyPlot.subplots(1, 2, figsize=(6, 3))

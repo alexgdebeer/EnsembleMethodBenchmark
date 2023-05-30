@@ -39,8 +39,8 @@ ps = interpolate(
     Gridded(Linear())
 )
 
-# p(x, y) = ps(x, y)
-p(x, y) = 2.0 # x^2+y+1.0
+p(x, y) = ps(x, y)
+#p(x, y) = 2.0 # x^2+y+1.0
 
 # ----------------
 # Solve using MethodOfLines.jl 
