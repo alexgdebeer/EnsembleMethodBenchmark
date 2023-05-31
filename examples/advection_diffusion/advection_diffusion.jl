@@ -32,7 +32,7 @@ const xs = xmin:Δx:xmax
 const ys = ymin:Δy:ymax
 
 ModelingToolkit.@parameters t x y
-ModelingToolkit.@variables u(..) vxu(..) vyu(..)
+ModelingToolkit.@variables u(..) 
 ModelingToolkit.@constants c=500.0 ρ=8000.0
 
 ∂t = ModelingToolkit.Differential(t)
@@ -51,9 +51,7 @@ ModelingToolkit.@register_symbolic vx(x, y)
 ModelingToolkit.@register_symbolic vy(x, y)
 
 eqs = [
-    vxu(t,x,y) ~ vx(x,y)*u(t,x,y),
-    vyu(t,x,y) ~ vy(x,y)*u(t,x,y),
-    ∂t(u(t,x,y)) + ∂x(vxu(t,x,y)) + ∂y(vyu(t,x,y)) ~ ∂x(k(x) * ∂x(u(t,x,y))) + ∂y(k(x) * ∂y(u(t,x,y)))
+    ∂t(u(t,x,y)) ~ ∂x²(u(t,x,y)) + ∂y²(u(t,x,y))
 ]
 
 ic(x, y) = x^2 + y^2 ≤ π^2 ? 0.25(cos(x)+1)*(cos(y)+1) : 0.0
@@ -75,14 +73,19 @@ domains = [
 
 @named pde_sys = ModelingToolkit.PDESystem(
     eqs, bcs, domains, 
-    [t, x, y], [u(t, x, y), vxu(t,x,y), vyu(t,x,y)]
+    [t, x, y], [u(t, x, y)]
 )
 
-discretization = MethodOfLines.MOLFiniteDifference([x => Δx, y => Δy], t)
+discretization = MethodOfLines.MOLFiniteDifference(
+    [x => Δx, y => Δy], t, 
+    advection_scheme=MethodOfLines.WENOScheme()
+)
+
+println("Discretising...")
 prob = MethodOfLines.discretize(pde_sys, discretization)
 
 println("Solving...")
-sol = @time solve(prob, Tsit5(), saveat=Δt)
+sol = @time solve(prob, Tsit5(), saveat=Δt, progress=true)
 
 solu = sol[u(t, x, y)]
 
