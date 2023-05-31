@@ -1,4 +1,3 @@
-"""This is a test docstring."""
 module DarcyFlow
 
 using Interpolations
