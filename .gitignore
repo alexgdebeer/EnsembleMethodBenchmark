@@ -1,3 +1,8 @@
 .DS_Store
-*.pdf
+
+# Large files
+*.csv
 *.gif
+*.jld2
+*.pdf
+*.txt
