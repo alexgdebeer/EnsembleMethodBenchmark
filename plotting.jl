@@ -1,21 +1,17 @@
-module Plotting
-
-
 using Statistics
 using LaTeXStrings
 import PyPlot
 import Seaborn
 
-
 PyPlot.rc("text", usetex=true)
 PyPlot.rc("font", family="serif")
 
-const TITLE_SIZE = 20
-const LABEL_SIZE = 16
-const LEGEND_SIZE = 12
-const SMALL_SIZE = 8
+TITLE_SIZE = 20
+LABEL_SIZE = 16
+LEGEND_SIZE = 12
+SMALL_SIZE = 8
 
-const DARK_BLUE = "#4358CB"
+DARK_BLUE = "#4358CB"
 
 
 """Calculates the joint and marginal densities of two parameters on a grid of 
@@ -551,8 +547,5 @@ function plot_lm_posterior_predictions(
     PyPlot.clf()
 
     return nothing
-
-end
-
 
 end
