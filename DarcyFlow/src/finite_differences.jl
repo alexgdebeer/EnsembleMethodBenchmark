@@ -18,15 +18,62 @@ struct BoundaryCondition
     func::Function
 end
 
-function in_corner(x, y, g)
+function construct_grid(
+    xs::AbstractVector, 
+    ys::AbstractVector
+)::Grid
+
+    xmin, xmax = extrema(xs)
+    ymin, ymax = extrema(ys)
+
+    Δx = xs[2] - xs[1]
+    Δy = ys[2] - ys[1]
+
+    nx = length(xs)
+    ny = length(ys)
+    nu = nx * ny
+
+    return Grid(xs, ys, xmin, xmax, ymin, ymax, Δx, Δy, nx, ny, nu)
+
+end
+
+function get_coordinates(
+    i::Int,
+    g::Grid
+)::Tuple{Real, Real}
+
+    x = g.xs[(i-1)%g.nx+1] 
+    y = g.ys[Int(ceil(i/g.nx))]
+    return x, y
+
+end
+
+function in_corner(
+    x::Real, 
+    y::Real, 
+    g::Grid
+)::Bool
+
     return x ∈ [g.xmin, g.xmax] && y ∈ [g.ymin, g.ymax]
+
 end
 
-function on_boundary(x, y, g)
+function on_boundary(
+    x::Real, 
+    y::Real, 
+    g::Grid
+)::Bool
+
     return x ∈ [g.xmin, g.xmax] || y ∈ [g.ymin, g.ymax]
+
 end
 
-function get_boundary(x, y, g, bcs)
+function get_boundary(
+    x::Real, 
+    y::Real, 
+    g::Grid, 
+    bcs::Dict{Symbol, BoundaryCondition}
+)::BoundaryCondition
 
     x == g.xmin && return bcs[:x0]
     x == g.xmax && return bcs[:x1]
@@ -37,7 +84,12 @@ function get_boundary(x, y, g, bcs)
 
 end
 
-function add_corner_point!(rs, cs, vs, i)
+function add_corner_point!(
+    rs::Vector{Int}, 
+    cs::Vector{Int}, 
+    vs::Vector{Float64}, 
+    i::Int
+)
 
     push!(rs, i)
     push!(cs, i)
@@ -45,28 +97,44 @@ function add_corner_point!(rs, cs, vs, i)
 
 end
 
-function add_boundary_point!(b, rs, cs, vs, i, x, y, g, bc)
+function add_boundary_point!(
+    rs::Vector{Int}, 
+    cs::Vector{Int}, 
+    vs::Vector{Float64}, 
+    i::Int, 
+    g::Grid, 
+    bc::BoundaryCondition
+)
 
     if bc.type == :dirichlet 
-        add_dirichlet_point!(b, rs, cs, vs, i, x, y, bc)
+        add_dirichlet_point!(rs, cs, vs, i)
     elseif bc.type == :neumann 
-        add_neumann_point!(b, rs, cs, vs, i, x, y, g, bc)
+        add_neumann_point!(rs, cs, vs, i, g, bc)
     end
 
 end
 
-function add_dirichlet_point!(b, rs, cs, vs, i, x, y, bc)
+function add_dirichlet_point!(
+    rs::Vector{Int}, 
+    cs::Vector{Int}, 
+    vs::Vector{Float64}, 
+    i::Int
+)
 
-    b[i] = bc.func(x, y)
     push!(rs, i)
     push!(cs, i)
     push!(vs, 1.0)
 
 end
 
-function add_neumann_point!(b, rs, cs, vs, i, x, y, g, bc)
-
-    b[i] = bc.func(x, y)
+function add_neumann_point!(
+    rs::Vector{Int}, 
+    cs::Vector{Int}, 
+    vs::Vector{Float64}, 
+    i::Int,
+    g::Grid, 
+    bc::BoundaryCondition
+)
 
     push!(rs, i, i, i)
 
@@ -86,7 +154,16 @@ function add_neumann_point!(b, rs, cs, vs, i, x, y, g, bc)
 
 end
 
-function add_interior_point!(rs, cs, vs, i, x, y, g, p)
+function add_interior_point!(
+    rs::Vector{Int}, 
+    cs::Vector{Int}, 
+    vs::Vector{Float64}, 
+    i::Int, 
+    x::Real, 
+    y::Real, 
+    g::Grid, 
+    p::Interpolations.GriddedInterpolation
+)
 
     push!(rs, i, i, i, i, i)
     push!(cs, i, i+1, i-1, i+g.nx, i-g.nx)
@@ -103,32 +180,16 @@ function add_interior_point!(rs, cs, vs, i, x, y, g, p)
 
 end
 
-function generate_grid(xs, ys, p, bcs)
-
-    xmin, xmax = extrema(xs)
-    ymin, ymax = extrema(ys)
-
-    Δx = xs[2] - xs[1]
-    Δy = ys[2] - ys[1]
-
-    nx = length(xs)
-    ny = length(ys)
-    nu = nx * ny
-
-    g = Grid(
-        xs, ys, 
-        xmin, xmax, 
-        ymin, ymax, 
-        Δx, Δy, 
-        nx, ny, nu
-    )
+function generate_A(
+    g::Grid, 
+    p::Interpolations.GriddedInterpolation, 
+    bcs::Dict{Symbol, BoundaryCondition}
+)::SparseMatrixCSC
 
     # Initialise the components of A
     rs = Int[]
     cs = Int[]
     vs = Float64[]
-    
-    b = zeros(g.nu)
 
     for i ∈ 1:g.nu 
 
@@ -143,7 +204,7 @@ function generate_grid(xs, ys, p, bcs)
         elseif on_boundary(x, y, g)
 
             bc = get_boundary(x, y, g, bcs)
-            add_boundary_point!(b, rs, cs, vs, i, x, y, g, bc)
+            add_boundary_point!(rs, cs, vs, i, g, bc)
         
         else
         
@@ -155,6 +216,31 @@ function generate_grid(xs, ys, p, bcs)
 
     A = sparse(rs, cs, vs, g.nu, g.nu)
 
-    return A, b
+    return A
+
+end
+
+function generate_b(
+    g::Grid, 
+    bcs::Dict{Symbol, BoundaryCondition}
+)::SparseVector
+
+    # Initialise components of sparse vector
+    is = Int[]
+    vs = Float64[]
+
+    for i ∈ 1:g.nu 
+
+        x, y = get_coordinates(i, g)
+
+        if on_boundary(x, y, g)
+            bc = get_boundary(x, y, g, bcs)
+            push!(is, i)
+            push!(vs, bc.func(x, y))
+        end
+
+    end
+
+    return sparsevec(is, vs, g.nu)
 
 end
