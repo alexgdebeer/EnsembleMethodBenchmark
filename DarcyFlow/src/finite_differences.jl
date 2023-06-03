@@ -180,7 +180,7 @@ function add_interior_point!(
 
 end
 
-function generate_A(
+function construct_A(
     g::Grid, 
     p::Interpolations.GriddedInterpolation, 
     bcs::Dict{Symbol, BoundaryCondition}
@@ -220,7 +220,7 @@ function generate_A(
 
 end
 
-function generate_b(
+function construct_b(
     g::Grid, 
     bcs::Dict{Symbol, BoundaryCondition}
 )::SparseVector

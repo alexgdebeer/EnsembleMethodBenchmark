@@ -20,11 +20,11 @@ end
 
 function sample_perms(
     d::Distribution, 
-    n_x::Int, 
-    n_y::Int
+    nx::Int, 
+    ny::Int
 )::AbstractMatrix
 
-    return reshape(rand(d), n_x, n_y)
+    return reshape(rand(d), nx, ny)
 
 end
 
@@ -34,29 +34,31 @@ function generate_data(
     x_locs::AbstractVector, 
     y_locs::AbstractVector, 
     bcs::Dict{Symbol, BoundaryCondition}, 
-    p_dist::Distribution, 
+    logp_dist::Distribution, 
     ϵ_dist::Distribution
 )
 
-    n_x = length(xs)
-    n_y = length(ys)
+    nx = length(xs)
+    ny = length(ys)
 
     # Sample a permeability field
-    p = interpolate((xs, ys), sample_perms(p_dist, n_x, n_y), Gridded(Linear()))
+    logps = sample_perms(logp_dist, nx, ny)
+    ps = interpolate((xs, ys), exp.(logps), Gridded(Linear()))
     
-    # Generate and solve the corresponding steady-state problem
+    # Generate the steady-state problem
     g = construct_grid(xs, ys)
-    A = generate_A(g, p, bcs)
-    b = generate_b(g, bcs)
-    sol = solve(LinearProblem(A, b))
+    A = construct_A(g, ps, bcs)
+    b = construct_b(g, bcs)
 
-    us = interpolate((xs, ys), reshape(sol.u, n_x, n_y), Gridded(Linear()))
+    # Solve the steady-state problem
+    sol = solve(LinearProblem(A, b))
+    us = interpolate((xs, ys), reshape(sol.u, nx, ny), Gridded(Linear()))
 
     # Form a set of observations
     xs_o = [x for x ∈ x_locs for _ ∈ y_locs]
     ys_o = [y for _ ∈ x_locs for y ∈ y_locs]
     us_o = [us(x, y) for (x, y) ∈ zip(xs_o, ys_o)] + rand(ϵ_dist)
 
-    return log.(p.coefs), xs_o, ys_o, us_o 
+    return logps, xs_o, ys_o, us_o 
 
 end
