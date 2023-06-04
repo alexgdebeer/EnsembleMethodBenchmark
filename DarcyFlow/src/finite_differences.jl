@@ -87,7 +87,7 @@ end
 function add_corner_point!(
     rs::Vector{Int}, 
     cs::Vector{Int}, 
-    vs::Vector{Float64}, 
+    vs::Vector{<:Real}, 
     i::Int
 )
 
@@ -100,7 +100,7 @@ end
 function add_boundary_point!(
     rs::Vector{Int}, 
     cs::Vector{Int}, 
-    vs::Vector{Float64}, 
+    vs::Vector{<:Real}, 
     i::Int, 
     g::Grid, 
     bc::BoundaryCondition
@@ -117,7 +117,7 @@ end
 function add_dirichlet_point!(
     rs::Vector{Int}, 
     cs::Vector{Int}, 
-    vs::Vector{Float64}, 
+    vs::Vector{<:Real}, 
     i::Int
 )
 
@@ -130,7 +130,7 @@ end
 function add_neumann_point!(
     rs::Vector{Int}, 
     cs::Vector{Int}, 
-    vs::Vector{Float64}, 
+    vs::Vector{<:Real}, 
     i::Int,
     g::Grid, 
     bc::BoundaryCondition
@@ -157,39 +157,41 @@ end
 function add_interior_point!(
     rs::Vector{Int}, 
     cs::Vector{Int}, 
-    vs::Vector{Float64}, 
+    vs::Vector{<:Real}, 
     i::Int, 
     x::Real, 
     y::Real, 
     g::Grid, 
-    p::Interpolations.GriddedInterpolation
+    ps::Interpolations.GriddedInterpolation
 )
 
     push!(rs, i, i, i, i, i)
     push!(cs, i, i+1, i-1, i+g.nx, i-g.nx)
 
     push!(
-        vs, 
-        -(p(x+0.5g.Δx, y) + p(x-0.5g.Δx, y)) / g.Δx^2 - 
-            (p(x, y+0.5g.Δy) + p(x, y-0.5g.Δy)) / g.Δy^2,
-        p(x+0.5g.Δx, y) / g.Δx^2,
-        p(x-0.5g.Δx, y) / g.Δx^2,
-        p(x, y+0.5g.Δy) / g.Δy^2,
-        p(x, y-0.5g.Δy) / g.Δy^2
+        vs,
+        -(ps(x+0.5g.Δx, y) + ps(x-0.5g.Δx, y)) / g.Δx^2 - 
+         (ps(x, y+0.5g.Δy) + ps(x, y-0.5g.Δy)) / g.Δy^2,
+        ps(x+0.5g.Δx, y) / g.Δx^2,
+        ps(x-0.5g.Δx, y) / g.Δx^2,
+        ps(x, y+0.5g.Δy) / g.Δy^2,
+        ps(x, y-0.5g.Δy) / g.Δy^2
     )
 
 end
 
 function construct_A(
     g::Grid, 
-    p::Interpolations.GriddedInterpolation, 
+    ps::AbstractMatrix, 
     bcs::Dict{Symbol, BoundaryCondition}
 )::SparseMatrixCSC
 
     # Initialise the components of A
     rs = Int[]
     cs = Int[]
-    vs = Float64[]
+    vs = Vector{typeof(ps[1, 1])}(undef, 0)
+
+    ps = interpolate((g.xs, g.ys), ps, Gridded(Linear()))
 
     for i ∈ 1:g.nu 
 
@@ -208,7 +210,7 @@ function construct_A(
         
         else
         
-            add_interior_point!(rs, cs, vs, i, x, y, g, p)
+            add_interior_point!(rs, cs, vs, i, x, y, g, ps)
         
         end
 
@@ -222,12 +224,13 @@ end
 
 function construct_b(
     g::Grid, 
+    ps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition}
 )::SparseVector
 
     # Initialise components of sparse vector
     is = Int[]
-    vs = Float64[]
+    vs = Vector{typeof(ps[1, 1])}(undef, 0)
 
     for i ∈ 1:g.nu 
 

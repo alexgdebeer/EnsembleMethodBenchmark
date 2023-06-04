@@ -29,8 +29,7 @@ function sample_perms(
 end
 
 function generate_data(
-    xs::AbstractVector, 
-    ys::AbstractVector, 
+    g::Grid,
     x_locs::AbstractVector, 
     y_locs::AbstractVector, 
     bcs::Dict{Symbol, BoundaryCondition}, 
@@ -38,21 +37,19 @@ function generate_data(
     ϵ_dist::Distribution
 )
 
-    nx = length(xs)
-    ny = length(ys)
-
     # Sample a permeability field
-    logps = sample_perms(logp_dist, nx, ny)
-    ps = interpolate((xs, ys), exp.(logps), Gridded(Linear()))
+    logps = sample_perms(logp_dist, g.nx, g.ny)
+    ps = exp.(logps)
     
     # Generate the steady-state problem
-    g = construct_grid(xs, ys)
+    g = construct_grid(g.xs, g.ys)
     A = construct_A(g, ps, bcs)
-    b = construct_b(g, bcs)
+    b = construct_b(g, ps, bcs)
 
     # Solve the steady-state problem
     sol = solve(LinearProblem(A, b))
-    us = interpolate((xs, ys), reshape(sol.u, nx, ny), Gridded(Linear()))
+    us = reshape(sol.u, g.nx, g.ny)
+    us = interpolate((g.xs, g.ys), us, Gridded(Linear()))
 
     # Form a set of observations
     xs_o = [x for x ∈ x_locs for _ ∈ y_locs]
