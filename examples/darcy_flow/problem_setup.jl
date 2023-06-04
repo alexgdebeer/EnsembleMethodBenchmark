@@ -12,6 +12,13 @@ Random.seed!(16)
 xmin, xmax = 0.0, 1.0
 ymin, ymax = 0.0, 1.0
 
+# Generate grids
+Δx_f, Δy_f = 0.1, 0.1
+Δx_c, Δy_c = 0.1, 0.1
+
+g_f = DarcyFlow.construct_grid(xmin:Δx_f:xmax, ymin:Δy_f:ymax)
+g_c = DarcyFlow.construct_grid(xmin:Δx_c:xmax, ymin:Δy_c:ymax)
+
 # Define boundary conditions
 bcs = Dict(
     :x0 => DarcyFlow.BoundaryCondition(:x0, :neumann, (x, y) -> 0.0), 
@@ -24,18 +31,9 @@ bcs = Dict(
 # Generate data using fine grid
 # ----------------
 
-# Define fine grid parameters
-Δx_f, Δy_f = 0.05, 0.05
-
-xs_f = xmin:Δx_f:xmax
-ys_f = ymin:Δy_f:ymax
-
-nx_f = length(xs_f)
-ny_f = length(ys_f)
-
 # Define the distribution the true (log) permeability field will be drawn from
 σ_t, γ_t = 1.0, 0.25
-Γ_p = DarcyFlow.exp_squared_cov(σ_t, γ_t, xs_f, ys_f)
+Γ_p = DarcyFlow.exp_squared_cov(σ_t, γ_t, g_f.xs, g_f.ys)
 logp_dist = MvNormal(Γ_p)
 
 # Define the observation locations
@@ -50,29 +48,18 @@ n_obs = length(x_locs) * length(y_locs)
 
 # Generate a set of observations
 logps_t, xs_o, ys_o, us_o = DarcyFlow.generate_data(
-    xs_f, ys_f, x_locs, y_locs, bcs, logp_dist, ϵ_dist
+    g_f, x_locs, y_locs, bcs, logp_dist, ϵ_dist
 )
+
+logps_t = zeros(g_f.nx, g_f.ny)
 
 # ----------------
 # Define inversion parameters
 # ----------------
 
-# Define coarse grid parameters
-Δx_c, Δy_c = 0.05, 0.05
-
-xs_c = xmin:Δx_c:xmax
-ys_c = ymin:Δy_c:ymax
-
-nx_c = length(xs_c)
-ny_c = length(ys_c)
-
-# Generate grid and b vector
-grid = DarcyFlow.construct_grid(xs_c, ys_c)
-b = DarcyFlow.construct_b(grid, bcs)
-
-# Define prior distribution 
+# Define prior
 σ, γ = σ_t, γ_t
-Γ_π = DarcyFlow.exp_squared_cov(σ, γ, xs_c, ys_c)
+Γ_π = DarcyFlow.exp_squared_cov(σ, γ, g_c.xs, g_c.ys)
 π = MvNormal(Γ_π)
 
 # Define likelihood
@@ -81,15 +68,15 @@ b = DarcyFlow.construct_b(grid, bcs)
 L = MvNormal(us_o, Γ_L)
 
 # Define mapping between vector of log permeabilities and matrix of pressures
-function f(logps::AbstractVector)::AbstractMatrix
+function f(logps)
 
-    # Form permeability interpolation object 
-    logps = reshape(logps, nx_c, ny_c)
-    ps = interpolate((xs_c, ys_c), exp.(logps), Gridded(Linear()))
+    ps = reshape(exp.(logps), g_c.nx, g_c.ny)
 
     # Generate and solve the steady-state system of equations
-    A = DarcyFlow.construct_A(grid, ps, bcs)
-    us = reshape(solve(LinearProblem(A, b)), nx_c, ny_c)
+    A = DarcyFlow.construct_A(g_c, ps, bcs)
+    b = DarcyFlow.construct_b(g_c, ps, bcs)
+
+    us = reshape(solve(LinearProblem(A, b)), g_c.nx, g_c.ny)
 
     return us
 
@@ -98,8 +85,8 @@ end
 # Define mapping from a matrix of the model pressure field to the observations
 function g(us::AbstractMatrix)::AbstractVector 
 
-    us = reshape(us, nx_c, ny_c)
-    us = interpolate((xs_c, ys_c), us, Gridded(Linear()))
+    us = reshape(us, g_c.nx, g_c.ny)
+    us = interpolate((g_c.xs, g_c.ys), us, Gridded(Linear()))
 
     return [us(x, y) for (x, y) ∈ zip(xs_o, ys_o)]
 
