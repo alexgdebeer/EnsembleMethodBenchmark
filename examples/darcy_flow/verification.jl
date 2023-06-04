@@ -22,20 +22,19 @@ tmin, tmax = 0.0, 1.0
 xs = xmin:Δx:xmax
 ys = ymin:Δy:ymax
 
-n_x = length(xs)
-n_y = length(ys)
+grid = DarcyFlow.construct_grid(xs, ys)
 
 # ----------------
 # Define the permeability field 
 # ----------------
 
 # Generate a permeability distribution
-Γ = DarcyFlow.exp_squared_cov(0.8, 0.1, xs, ys)
+Γ = DarcyFlow.exp_squared_cov(0.8, 0.1, grid.xs, grid.ys)
 d = MvNormal(Γ)
 
 ps = interpolate(
     (xs, ys), 
-    exp.(DarcyFlow.sample_perms(d, n_x, n_y)), 
+    exp.(DarcyFlow.sample_perms(d, grid.nx, grid.ny)), 
     Gridded(Linear())
 )
 
@@ -65,13 +64,13 @@ domains = [
 
 mol_bcs = [
     u(x, y, tmin) ~ 0.0,
-    ∂x(u(xmin, y, t)) ~ 0.0, 
-    ∂x(u(xmax, y, t)) ~ 0.0, 
-    ∂y(u(x, ymin, t)) ~ -2.0, 
-    u(x, ymax, t) ~ 0.0
+    ∂x(u(grid.xmin, y, t)) ~ 0.0, 
+    ∂x(u(grid.xmax, y, t)) ~ 0.0, 
+    ∂y(u(x, grid.ymin, t)) ~ -2.0, 
+    u(x, grid.ymax, t) ~ 0.0
 ]
 
-discretization = MOLFiniteDifference([x => Δx, y => Δy], t)
+discretization = MOLFiniteDifference([x => grid.Δx, y => grid.Δy], t)
 
 darcy_pde = ModelingToolkit.PDESystem(
     [eq], mol_bcs, domains, 
@@ -84,7 +83,7 @@ steadystateprob = SteadyStateProblem(prob)
 state = solve(steadystateprob, DynamicSS(Rodas5()))
 
 state.retcode != ReturnCode.Success && error("$(state.retcode)")
-us_mol = reshape(state.u, (n_x-2, n_y-2))
+us_mol = reshape(state.u, (grid.nx-2, grid.ny-2))
 
 # ----------------
 # Solve with DarcyFlow.jl
@@ -97,8 +96,9 @@ fd_bcs = Dict(
     :y1 => DarcyFlow.BoundaryCondition(:y1, :dirichlet, (x, y) -> 0.0)
 )
 
-A, b = DarcyFlow.generate_grid(xs, ys, p, fd_bcs)
-us_fd = reshape(solve(LinearProblem(A, b)), n_x, n_y)
+A = DarcyFlow.construct_A(grid, ps.coefs, bcs)
+b = DarcyFlow.construct_b(grid, ps.coefs, bcs)
+us_fd = reshape(solve(LinearProblem(A, b)), grid.nx, grid.ny)
 
 println(maximum(abs.(us_fd[2:end-1, 2:end-1] - us_mol) ./ us_mol))
 # us_fd = reverse(us_fd, dims=1)
