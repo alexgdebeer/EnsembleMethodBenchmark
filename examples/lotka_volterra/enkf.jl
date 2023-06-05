@@ -1,12 +1,11 @@
 """Runs the EnKF on the LV model."""
 
-include("lv_model.jl")
-include("../../plotting.jl")
-include("../../sim_intensive_inference/sim_intensive_inference.jl")
+using SimIntensiveInference
 
-# Define the prior and ensemble size
-const π = SimIntensiveInference.GaussianPrior(LVModel.μ_π, LVModel.Γ_π)
-const N_e = 100
+include("model_setup.jl")
+include("../../plotting.jl")
+
+N_e = 100
 
 θs, us = SimIntensiveInference.run_enkf(
     LVModel.f, LVModel.b, π, LVModel.Y_0, 

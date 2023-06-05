@@ -75,7 +75,7 @@ ys_o = ys_t[:, is_o] + rand(Normal(0.0, σ_ϵ), size(ys_t[:, is_o]))
 L = MvNormal(μ_L, Γ_ϵ)
 
 # Compute the properties of the true posterior 
-n_pts = 50
+n_pts = 100
 as = collect(range(0.5, 1.5, n_pts))
 bs = collect(range(0.5, 1.5, n_pts))
 d(θs) = pdf(π, θs) * pdf(L, g(f(θs)))

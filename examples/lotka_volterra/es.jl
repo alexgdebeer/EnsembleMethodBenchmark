@@ -1,67 +1,39 @@
 """Runs the ES on the Lotka-Volterra model."""
 
-include("lv_model.jl")
-include("../../plotting.jl")
-include("../../sim_intensive_inference/sim_intensive_inference.jl")
+using SimIntensiveInference
 
-# Define the prior and ensemble size
-const π = SimIntensiveInference.GaussianPrior(LVModel.μ_π, LVModel.Γ_π)
-const N_e = 100
+include("problem_setup.jl")
 
-# Specify whether multiple data assimilation will occur, and if so, the α 
-# values to use
-const es_mda = true
-const es = true
-const αs = [16.0 for _ ∈ 1:16]
+N_e = 100
 
-if es
+mda = true
 
-    θs, ys = SimIntensiveInference.run_es(
-        LVModel.f, LVModel.g, π,  
-        reduce(vcat, LVModel.YS_O), 
-        LVModel.σ_ϵ, N_e
-    )
+if mda 
 
-    Plotting.plot_approx_posterior(
-        eachcol(θs[end]), 
-        LVModel.AS, LVModel.BS, 
-        LVModel.POST_MARG_A, LVModel.POST_MARG_B,
-        "LV: ES Posterior",
-        "$(LVModel.PLOTS_DIR)/es/es_posterior_modified_prior.pdf";
-        θs_t=LVModel.θS_T,
-        caption="Ensemble size: $N_e."
-    )
+    αs = [16.0 for _ ∈ 1:16]
 
-    Plotting.plot_lv_posterior_predictions(
-        LVModel.TS, ys[end], LVModel.YS_T, LVModel.TS_O, LVModel.YS_O, 
-        "LV: ES Posterior Predictions", 
-        "$(LVModel.PLOTS_DIR)/es/es_posterior_predictions_modified_prior.pdf"
-    )
+    θs, ys = SimIntensiveInference.run_es_mda(f, g, π, L, αs, N_e)
 
-end
-
-if es_mda
-
-    θs, ys = SimIntensiveInference.run_es_mda(
-        LVModel.f, LVModel.g, π,  
-        reduce(vcat, LVModel.YS_O), LVModel.σ_ϵ, 
-        αs, N_e
-    )
-
-    Plotting.plot_approx_posterior(
-        eachcol(θs[end]), 
-        LVModel.AS, LVModel.BS, 
-        LVModel.POST_MARG_A, LVModel.POST_MARG_B,
+    plot_approx_posterior(
+        eachcol(θs[:,:,end]), 
+        as, bs, post_marg_a, post_marg_b,
         "LV: ES-MDA Posterior",
-        "$(LVModel.PLOTS_DIR)/es/es_mda_posterior_modified_prior.pdf";
-        θs_t=LVModel.θS_T,
+        "$(plots_dir)/es/es_mda_posterior.pdf";
+        θs_t=θs_t,
         caption="Ensemble size: $N_e. Iterations: $(length(αs))."
     )
 
-    Plotting.plot_lv_posterior_predictions(
-        LVModel.TS, ys[end], LVModel.YS_T, LVModel.TS_O, LVModel.YS_O, 
-        "LV: ES-MDA Posterior Predictions", 
-        "$(LVModel.PLOTS_DIR)/es/es_mda_posterior_predictions_modified_prior.pdf"
+else
+
+    θs, ys = SimIntensiveInference.run_es(f, g, π, L, N_e)
+
+    plot_approx_posterior(
+        eachcol(θs[:,:,end]), 
+        as, bs, post_marg_a, post_marg_b,
+        "LV: ES Posterior",
+        "$(plots_dir)/es/es_posterior.pdf";
+        θs_t=θs_t,
+        caption="Ensemble size: $N_e."
     )
 
 end
