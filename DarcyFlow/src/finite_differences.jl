@@ -106,11 +106,8 @@ function add_boundary_point!(
     bc::BoundaryCondition
 )
 
-    if bc.type == :dirichlet 
-        add_dirichlet_point!(rs, cs, vs, i)
-    elseif bc.type == :neumann 
-        add_neumann_point!(rs, cs, vs, i, g, bc)
-    end
+    bc.type == :dirichlet && add_dirichlet_point!(rs, cs, vs, i)
+    bc.type == :neumann && add_neumann_point!(rs, cs, vs, i, g, bc)
 
 end
 
@@ -138,19 +135,12 @@ function add_neumann_point!(
 
     push!(rs, i, i, i)
 
-    if bc.name == :y0 
-        push!(cs, i, i+g.nx, i+2g.nx)
-        push!(vs, 3.0 / 2g.Δy, -4.0 / 2g.Δy, 1.0 / 2g.Δy)
-    elseif bc.name == :y1 
-        push!(cs, i, i-g.nx, i-2g.nx)
-        push!(vs, 3.0 / 2g.Δy, -4.0 / 2g.Δy, 1.0 / 2g.Δy)
-    elseif bc.name == :x0 
-        push!(cs, i, i+1, i+2)
-        push!(vs, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)
-    elseif bc.name == :x1 
-        push!(cs, i, i-1, i-2)
-        push!(vs, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)
-    end
+    bc.name == :x0 && push!(cs, i, i+1, i+2)
+    bc.name == :x1 && push!(cs, i, i-1, i-2)
+    bc.name == :y0 && push!(cs, i, i+g.nx, i+2g.nx)
+    bc.name == :y1 && push!(cs, i, i-g.nx, i-2g.nx)
+
+    push!(vs, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)
 
 end
 
@@ -195,9 +185,7 @@ function construct_A(
 
     for i ∈ 1:g.nu 
 
-        # Find the x and y coordinates of the current point
-        x = g.xs[(i-1)%g.nx+1] 
-        y = g.ys[Int(ceil(i/g.nx))]
+        x, y = get_coordinates(i, g)
 
         if in_corner(x, y, g)
 
@@ -216,9 +204,7 @@ function construct_A(
 
     end
 
-    A = sparse(rs, cs, vs, g.nu, g.nu)
-
-    return A
+    return sparse(rs, cs, vs, g.nu, g.nu)
 
 end
 
@@ -228,7 +214,7 @@ function construct_b(
     bcs::Dict{Symbol, BoundaryCondition}
 )::SparseVector
 
-    # Initialise components of sparse vector
+    # Initialise the components of b
     is = Int[]
     vs = Vector{typeof(ps[1, 1])}(undef, 0)
 
