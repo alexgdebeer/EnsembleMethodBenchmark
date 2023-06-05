@@ -140,13 +140,13 @@ function add_neumann_point!(
 
     if bc.name == :y0 
         push!(cs, i, i+g.nx, i+2g.nx)
-        push!(vs, -3.0 / 2g.Δy, 4.0 / 2g.Δy, -1.0 / 2g.Δy)
+        push!(vs, 3.0 / 2g.Δy, -4.0 / 2g.Δy, 1.0 / 2g.Δy)
     elseif bc.name == :y1 
         push!(cs, i, i-g.nx, i-2g.nx)
         push!(vs, 3.0 / 2g.Δy, -4.0 / 2g.Δy, 1.0 / 2g.Δy)
     elseif bc.name == :x0 
         push!(cs, i, i+1, i+2)
-        push!(vs, -3.0 / 2g.Δx, 4.0 / 2g.Δx, -1.0 / 2g.Δx)
+        push!(vs, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)
     elseif bc.name == :x1 
         push!(cs, i, i-1, i-2)
         push!(vs, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)

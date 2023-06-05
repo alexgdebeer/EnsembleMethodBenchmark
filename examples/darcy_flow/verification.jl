@@ -92,12 +92,12 @@ us_mol = reshape(state.u, (grid.nx-2, grid.ny-2))
 fd_bcs = Dict(
     :x0 => DarcyFlow.BoundaryCondition(:x0, :neumann, (x, y) -> 0.0), 
     :x1 => DarcyFlow.BoundaryCondition(:x1, :neumann, (x, y) -> 0.0),
-    :y0 => DarcyFlow.BoundaryCondition(:y0, :neumann, (x, y) -> -2.0), 
+    :y0 => DarcyFlow.BoundaryCondition(:y0, :neumann, (x, y) -> 2.0), 
     :y1 => DarcyFlow.BoundaryCondition(:y1, :dirichlet, (x, y) -> 0.0)
 )
 
-A = DarcyFlow.construct_A(grid, ps.coefs, bcs)
-b = DarcyFlow.construct_b(grid, ps.coefs, bcs)
+A = DarcyFlow.construct_A(grid, ps.coefs, fd_bcs)
+b = DarcyFlow.construct_b(grid, ps.coefs, fd_bcs)
 us_fd = reshape(solve(LinearProblem(A, b)), grid.nx, grid.ny)
 
 println(maximum(abs.(us_fd[2:end-1, 2:end-1] - us_mol) ./ us_mol))

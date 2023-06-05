@@ -13,8 +13,8 @@ xmin, xmax = 0.0, 1.0
 ymin, ymax = 0.0, 1.0
 
 # Generate grids
-Δx_f, Δy_f = 0.1, 0.1
-Δx_c, Δy_c = 0.1, 0.1
+Δx_f, Δy_f = 0.02, 0.02
+Δx_c, Δy_c = 0.02, 0.02
 
 g_f = DarcyFlow.construct_grid(xmin:Δx_f:xmax, ymin:Δy_f:ymax)
 g_c = DarcyFlow.construct_grid(xmin:Δx_c:xmax, ymin:Δy_c:ymax)
@@ -23,7 +23,7 @@ g_c = DarcyFlow.construct_grid(xmin:Δx_c:xmax, ymin:Δy_c:ymax)
 bcs = Dict(
     :x0 => DarcyFlow.BoundaryCondition(:x0, :neumann, (x, y) -> 0.0), 
     :x1 => DarcyFlow.BoundaryCondition(:x1, :neumann, (x, y) -> 0.0),
-    :y0 => DarcyFlow.BoundaryCondition(:y0, :neumann, (x, y) -> -2.0), 
+    :y0 => DarcyFlow.BoundaryCondition(:y0, :neumann, (x, y) -> 2.0), 
     :y1 => DarcyFlow.BoundaryCondition(:y1, :dirichlet, (x, y) -> 0.0)
 )
 
@@ -51,7 +51,7 @@ logps_t, xs_o, ys_o, us_o = DarcyFlow.generate_data(
     g_f, x_locs, y_locs, bcs, logp_dist, ϵ_dist
 )
 
-logps_t = zeros(g_f.nx, g_f.ny)
+# logps_t = zeros(g_f.nx, g_f.ny)
 
 # ----------------
 # Define inversion parameters
