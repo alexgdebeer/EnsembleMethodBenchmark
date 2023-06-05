@@ -89,11 +89,13 @@ function add_corner_point!(
     cs::Vector{Int}, 
     vs::Vector{<:Real}, 
     i::Int
-)
+)::Nothing
 
     push!(rs, i)
     push!(cs, i)
     push!(vs, 1.0)
+
+    return
 
 end
 
@@ -104,10 +106,12 @@ function add_boundary_point!(
     i::Int, 
     g::Grid, 
     bc::BoundaryCondition
-)
+)::Nothing
 
     bc.type == :dirichlet && add_dirichlet_point!(rs, cs, vs, i)
     bc.type == :neumann && add_neumann_point!(rs, cs, vs, i, g, bc)
+
+    return
 
 end
 
@@ -116,11 +120,13 @@ function add_dirichlet_point!(
     cs::Vector{Int}, 
     vs::Vector{<:Real}, 
     i::Int
-)
+)::Nothing
 
     push!(rs, i)
     push!(cs, i)
     push!(vs, 1.0)
+
+    return
 
 end
 
@@ -131,7 +137,7 @@ function add_neumann_point!(
     i::Int,
     g::Grid, 
     bc::BoundaryCondition
-)
+)::Nothing
 
     push!(rs, i, i, i)
 
@@ -141,6 +147,8 @@ function add_neumann_point!(
     bc.name == :y1 && push!(cs, i, i-g.nx, i-2g.nx)
 
     push!(vs, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)
+
+    return
 
 end
 
@@ -153,7 +161,7 @@ function add_interior_point!(
     y::Real, 
     g::Grid, 
     ps::Interpolations.GriddedInterpolation
-)
+)::Nothing
 
     push!(rs, i, i, i, i, i)
     push!(cs, i, i+1, i-1, i+g.nx, i-g.nx)
@@ -167,6 +175,8 @@ function add_interior_point!(
         ps(x, y+0.5g.Δy) / g.Δy^2,
         ps(x, y-0.5g.Δy) / g.Δy^2
     )
+
+    return
 
 end
 
