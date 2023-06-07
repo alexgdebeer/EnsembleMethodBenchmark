@@ -13,8 +13,8 @@ xmin, xmax = 0.0, 1.0
 ymin, ymax = 0.0, 1.0
 
 # Generate grids
-Δx_f, Δy_f = 0.02, 0.02
-Δx_c, Δy_c = 0.02, 0.02
+Δx_f, Δy_f = 0.05, 0.05
+Δx_c, Δy_c = 0.05, 0.05
 
 g_f = DarcyFlow.construct_grid(xmin:Δx_f:xmax, ymin:Δy_f:ymax)
 g_c = DarcyFlow.construct_grid(xmin:Δx_c:xmax, ymin:Δy_c:ymax)
@@ -32,7 +32,7 @@ bcs = Dict(
 # ----------------
 
 # Define the distribution the true (log) permeability field will be drawn from
-σ_t, γ_t = 1.0, 0.25
+σ_t, γ_t = 1.0, 0.20
 Γ_p = DarcyFlow.exp_squared_cov(σ_t, γ_t, g_f.xs, g_f.ys)
 logp_dist = MvNormal(Γ_p)
 
@@ -68,7 +68,7 @@ logps_t, xs_o, ys_o, us_o = DarcyFlow.generate_data(
 L = MvNormal(us_o, Γ_L)
 
 # Define mapping between vector of log permeabilities and matrix of pressures
-function f(logps)
+function f(logps::AbstractVector)::AbstractMatrix
 
     ps = reshape(exp.(logps), g_c.nx, g_c.ny)
 
