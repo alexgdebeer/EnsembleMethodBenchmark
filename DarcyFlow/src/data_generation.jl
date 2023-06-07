@@ -3,7 +3,7 @@ function exp_squared_cov(
     γ::Real, 
     xs::AbstractVector, 
     ys::AbstractVector
-)
+)::AbstractMatrix
 
     # Generate vectors of x and y coordinates
     cxs = [x for _ ∈ ys for x ∈ xs]

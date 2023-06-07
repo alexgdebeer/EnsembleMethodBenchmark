@@ -104,12 +104,15 @@ function add_boundary_point!(
     cs::Vector{Int}, 
     vs::Vector{<:Real}, 
     i::Int, 
+    x::Real,
+    y::Real,
     g::Grid, 
-    bc::BoundaryCondition
+    bc::BoundaryCondition,
+    ps::Interpolations.GriddedInterpolation
 )::Nothing
 
     bc.type == :dirichlet && add_dirichlet_point!(rs, cs, vs, i)
-    bc.type == :neumann && add_neumann_point!(rs, cs, vs, i, g, bc)
+    bc.type == :neumann && add_neumann_point!(rs, cs, vs, i, x, y, g, bc, ps)
 
     return
 
@@ -135,8 +138,11 @@ function add_neumann_point!(
     cs::Vector{Int}, 
     vs::Vector{<:Real}, 
     i::Int,
+    x::Real, 
+    y::Real, 
     g::Grid, 
-    bc::BoundaryCondition
+    bc::BoundaryCondition,
+    ps::Interpolations.GriddedInterpolation
 )::Nothing
 
     push!(rs, i, i, i)
@@ -144,9 +150,9 @@ function add_neumann_point!(
     bc.name == :x0 && push!(cs, i, i+1, i+2)
     bc.name == :x1 && push!(cs, i, i-1, i-2)
     bc.name == :y0 && push!(cs, i, i+g.nx, i+2g.nx)
-    bc.name == :y1 && push!(cs, i, i-g.nx, i-2g.nx)
+    bc.name == :y1 && push!(cs, i, i-g.nx, i-2g.nx)å
 
-    push!(vs, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)
+    push!(vs, 3.0ps(x, y) / 2g.Δx, -4.0ps(x, y) / 2g.Δx, 1.0ps(x, y) / 2g.Δx)
 
     return
 
@@ -204,7 +210,7 @@ function construct_A(
         elseif on_boundary(x, y, g)
 
             bc = get_boundary(x, y, g, bcs)
-            add_boundary_point!(rs, cs, vs, i, g, bc)
+            add_boundary_point!(rs, cs, vs, i, x, y, g, bc, ps)
         
         else
         
