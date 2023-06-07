@@ -67,7 +67,7 @@ function run_mcmc(
     N::Int;
     n_chains::Int=1,
     verbose::Bool=true,
-    θ_s::Union{AbstractVector,Nothing}=nothing
+    θ_s::Union{AbstractVector, Nothing}=nothing
 )
 
     @info "Starting MCMC..."
