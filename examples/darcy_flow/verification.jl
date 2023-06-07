@@ -64,9 +64,9 @@ domains = [
 
 mol_bcs = [
     u(x, y, tmin) ~ 0.0,
-    ∂x(u(grid.xmin, y, t)) ~ 0.0, 
-    ∂x(u(grid.xmax, y, t)) ~ 0.0, 
-    ∂y(u(x, grid.ymin, t)) ~ -2.0, 
+    p(x,y) * ∂x(u(grid.xmin, y, t)) ~ 0.0, 
+    p(x,y) * ∂x(u(grid.xmax, y, t)) ~ 0.0, 
+    p(x,y) * ∂y(u(x, grid.ymin, t)) ~ -2.0, 
     u(x, grid.ymax, t) ~ 0.0
 ]
 
