@@ -19,23 +19,23 @@ function gauss_newton(
     J = zeros(ny, nx)
 
     cfg = ForwardDiff.JacobianConfig(f, x, ForwardDiff.Chunk{20}())
-    r = DiffResults.DiffResult(zeros(ny), zeros(ny, nx))
+    res = DiffResults.DiffResult(zeros(ny), zeros(ny, nx))
 
     while true
 
-        r = ForwardDiff.jacobian!(r, f, x, cfg)
-        y, J = DiffResults.value(r), DiffResults.jacobian(r)
+        # Generate the residual vector, Jacobian and gradient
+        res = ForwardDiff.jacobian!(res, f, x, cfg)
+        r = DiffResults.value(res)
+        J = DiffResults.jacobian(res)
+        g = J' * r
 
-        # g = ForwardDiff.gradient(x -> sum(f(x).^2), x)
-        # n = norm(g)
+        println(norm(g))
 
-        println(norm(x-x_p))
-
-        norm(x-x_p) ≤ 1e-4 && break 
+        norm(g) ≤ 1e-4 && break 
 
         x_p = copy(x)
 
-        Δx = (J'*J + 1e-10I) \ J'*y
+        Δx = (J'*J + 1e-10I) \ J'*r
         x -= β*Δx
 
         y_p = copy(y)
