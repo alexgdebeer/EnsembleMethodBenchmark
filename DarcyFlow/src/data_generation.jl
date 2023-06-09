@@ -1,3 +1,5 @@
+export exp_squared_cov, sample_perms, generate_data
+
 function exp_squared_cov(
     σ::Real, 
     γ::Real, 

@@ -1,3 +1,5 @@
+export Grid, BoundaryCondition, construct_grid, construct_A, construct_b
+
 struct Grid
     xs::AbstractVector
     ys::AbstractVector
