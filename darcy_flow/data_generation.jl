@@ -1,4 +1,8 @@
-export exp_squared_cov, sample_perms, generate_data
+using Distributions
+using Interpolations 
+using LinearAlgebra
+using LinearSolve
+using Random
 
 function exp_squared_cov(
     σ::Real, 

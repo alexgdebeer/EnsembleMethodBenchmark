@@ -4,7 +4,8 @@ using LinearAlgebra
 using LinearSolve
 using Random
 
-using DarcyFlow
+include("finite_differences.jl")
+include("data_generation.jl")
 
 Random.seed!(16)
 
@@ -33,7 +34,7 @@ bcs = Dict(
 
 # Define the distribution the true (log) permeability field will be drawn from
 σ_t, γ_t = 1.0, 0.20
-Γ_p = DarcyFlow.exp_squared_cov(σ_t, γ_t, g_f.xs, g_f.ys)
+Γ_p = exp_squared_cov(σ_t, γ_t, g_f.xs, g_f.ys)
 logp_dist = MvNormal(Γ_p)
 
 # Define the observation locations
@@ -47,7 +48,7 @@ n_obs = length(x_locs) * length(y_locs)
 ϵ_dist = MvNormal(Γ_ϵ)
 
 # Generate a set of observations
-logps_t, xs_o, ys_o, us_o = DarcyFlow.generate_data(
+logps_t, xs_o, ys_o, us_o = generate_data(
     g_f, x_locs, y_locs, bcs, logp_dist, ϵ_dist
 )
 
@@ -57,7 +58,7 @@ logps_t, xs_o, ys_o, us_o = DarcyFlow.generate_data(
 
 # Define prior
 σ, γ = σ_t, γ_t
-Γ_π = DarcyFlow.exp_squared_cov(σ, γ, g_c.xs, g_c.ys)
+Γ_π = exp_squared_cov(σ, γ, g_c.xs, g_c.ys)
 π = MvNormal(Γ_π)
 
 # Define likelihood

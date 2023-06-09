@@ -1,4 +1,5 @@
-export Grid, BoundaryCondition, construct_grid, construct_A, construct_b
+using SparseArrays
+using LinearAlgebra
 
 struct Grid
     xs::AbstractVector
