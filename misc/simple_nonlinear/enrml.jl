@@ -25,5 +25,5 @@ Plotting.plot_nonlinear_approx_posterior(
     "LM-EnRML Posterior",
     "$(SimpleNonlinear.PLOTS_DIR)/enrml/lm_enrml_posterior.pdf",
     lims=(0.5, 8.0),
-    caption="Ensemble size: $N_e. "*L"\sigma_\epsilon"*": $(SimpleNonlinear.σ_ϵ)."
+    caption="Ensemble size: $N_e. Iterations: $l_max. "*L"\sigma_\epsilon"*": $(SimpleNonlinear.σ_ϵ)."
 )

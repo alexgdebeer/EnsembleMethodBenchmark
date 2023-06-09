@@ -6,7 +6,10 @@ include("plotting.jl")
 L_θ = cholesky(inv(π.Σ)).U
 L_ϵ = cholesky(inv(L.Σ)).U
 
-logps_map, us_map, J = calculate_map(f, g, π, L, L_ϵ, L_θ)
+logps_map, us_map, J = calculate_map(
+    f, g, π, L, L_ϵ, L_θ;
+    f_args=f_args, g_args=g_args
+)
 
 # Compute posterior covariance using Laplace approximation
 Γ_post = inv(J' * inv(L.Σ) * J + inv(π.Σ))
