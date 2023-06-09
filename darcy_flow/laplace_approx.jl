@@ -3,10 +3,13 @@ using SimIntensiveInference
 include("problem_setup.jl")
 include("plotting.jl")
 
-L_θ = cholesky(inv(π.Σ)).U
-L_ϵ = cholesky(inv(L.Σ)).U
+L_ϵ = inv_cholesky(L.Σ)
+L_θ = inv_cholesky(π.Σ)
 
-logps_map, us_map, J = calculate_map(f, g, π, L, L_ϵ, L_θ)
+sol = calculate_map(f, g, π, L, L_ϵ, L_θ)
+
+logps_map = sol.θ_min
+J = inv(L_ϵ) * sol.J_min[1:length(L.μ), :]
 
 # Compute posterior covariance using Laplace approximation
 Γ_post = inv(J' * inv(L.Σ) * J + inv(π.Σ))

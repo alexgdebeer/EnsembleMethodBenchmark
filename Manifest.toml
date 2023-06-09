@@ -2,7 +2,7 @@
 
 julia_version = "1.9.0"
 manifest_format = "2.0"
-project_hash = "c14e410bc7860b5f1de38dc8330ad624c39416d3"
+project_hash = "397c90e34bb4c702f31b226ea98044cc6463af28"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "dcfdf328328f2645531c4ddebf841228aef74130"
@@ -1642,7 +1642,7 @@ uuid = "992d4aef-0814-514b-bc4d-f2e9a6c4116f"
 version = "1.0.3"
 
 [[deps.SimIntensiveInference]]
-deps = ["DiffResults", "Distributions", "ForwardDiff", "LinearAlgebra", "Optim", "Random", "Statistics"]
+deps = ["DiffResults", "Distributions", "ForwardDiff", "LinearAlgebra", "LinearSolve", "Optim", "Printf", "Random", "Statistics"]
 path = "/Users/AlexdeBeer/Documents/uni/masters/code/SimIntensiveInference"
 uuid = "c421480a-815f-4d9a-a223-30067a5e5d2e"
 version = "0.1.0"

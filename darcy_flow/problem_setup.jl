@@ -9,11 +9,10 @@ include("data_generation.jl")
 
 Random.seed!(16)
 
-# Define boundaries of domain
+# Generate grids
 xmin, xmax = 0.0, 1.0
 ymin, ymax = 0.0, 1.0
 
-# Generate grids
 Δx_f, Δy_f = 0.05, 0.05
 Δx_c, Δy_c = 0.05, 0.05
 
