@@ -6,7 +6,7 @@ using LinearAlgebra
 using Random
 using Statistics
 
-include("../../plotting.jl")
+include("../plotting.jl")
 
 Random.seed!(0)
 
@@ -40,12 +40,10 @@ function f(
 
 end
 
-
 """Returns a vector of the model outputs at a specified set of time indices."""
 function g(ys::AbstractMatrix; is::AbstractVector=is_o)::AbstractVector
     return reduce(vcat, ys[:, is])
 end
-
 
 """Maps from the parameters / states to the modelled observations."""
 function b(θ::AbstractVector, u::AbstractVector)::AbstractVector

@@ -1,19 +1,18 @@
-using ForwardDiff
 using SimIntensiveInference
 
 include("problem_setup.jl")
 
-L_θ = cholesky(inv(π.Σ)).U
-L_ϵ = cholesky(inv(L.Σ)).U
+L_ϵ = inv_cholesky(L.Σ)
+L_θ = inv_cholesky(π.Σ)
 
-θ_map = SimIntensiveInference.calculate_map(f, g, π, L, L_θ, L_ϵ; x0=θs_t)
+sol = calculate_map(f, g, π, L, L_ϵ, L_θ; x0=θs_t)
 
-J = ForwardDiff.jacobian(x -> g(f(x)), θ_map)
+J = inv(L_ϵ) * sol.J_min[1:length(L.μ), :]
 
 # Compute posterior covariance using Laplace approximation
 Γ_post = inv(J' * inv(L.Σ) * J + inv(π.Σ))
 
-post = MvNormal(θ_map, Γ_post)
+post = MvNormal(sol.θ_min, Γ_post)
 
 plot_approx_posterior(
     eachcol(rand(post, 10_000)), 
