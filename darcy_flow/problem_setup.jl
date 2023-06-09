@@ -68,18 +68,16 @@ L = MvNormal(us_o, Γ_L)
 
 # Define mapping between vector of log permeabilities and matrix of pressures
 function f(
-    logps::AbstractVector, 
-    grid::Grid, 
-    bcs::Dict{Symbol, BoundaryCondition}
+    logps::AbstractVector
 )::AbstractMatrix
 
-    ps = reshape(exp.(logps), grid.nx, grid.ny)
+    ps = reshape(exp.(logps), g_c.nx, g_c.ny)
 
     # Generate and solve the steady-state system of equations
-    A = construct_A(grid, ps, bcs)
-    b = construct_b(grid, ps, bcs)
+    A = construct_A(g_c, ps, bcs)
+    b = construct_b(g_c, ps, bcs)
 
-    us = reshape(solve(LinearProblem(A, b)), grid.nx, grid.ny)
+    us = reshape(solve(LinearProblem(A, b)), g_c.nx, g_c.ny)
 
     return us
 
@@ -87,16 +85,10 @@ end
 
 # Define mapping from a matrix of the model pressure field to the observations
 function g(
-    us::AbstractMatrix,
-    grid::Grid,
-    xs_o::AbstractVector,
-    ys_o::AbstractVector
+    us::AbstractMatrix
 )::AbstractVector 
 
-    us = interpolate((grid.xs, grid.ys), us, Gridded(Linear()))
+    us = interpolate((g_c.xs, g_c.ys), us, Gridded(Linear()))
     return [us(x, y) for (x, y) ∈ zip(xs_o, ys_o)]
 
 end
-
-f_args = (g_c, bcs)
-g_args = (g_c, xs_o, ys_o)

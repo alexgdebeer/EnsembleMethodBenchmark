@@ -1643,9 +1643,7 @@ version = "1.0.3"
 
 [[deps.SimIntensiveInference]]
 deps = ["DiffResults", "Distributions", "ForwardDiff", "LinearAlgebra", "Optim", "Random", "Statistics"]
-git-tree-sha1 = "ef9192050edb0043acc3d5848b5c776adaee976b"
-repo-rev = "master"
-repo-url = "https://github.com/alexgdebeer/SimIntensiveInference"
+path = "/Users/AlexdeBeer/Documents/uni/masters/code/SimIntensiveInference"
 uuid = "c421480a-815f-4d9a-a223-30067a5e5d2e"
 version = "0.1.0"
 
