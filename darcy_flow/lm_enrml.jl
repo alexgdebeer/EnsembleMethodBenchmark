@@ -1,6 +1,7 @@
 using SimIntensiveInference
 
 include("problem_setup.jl")
+include("plotting.jl")
 
 γ = 10
 i_max = 16
