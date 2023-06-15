@@ -1,56 +1,11 @@
 using Interpolations
 using LinearAlgebra
+using LinearSolve
 using SparseArrays
 
-abstract type Grid end
+include("structs.jl")
 
-struct SteadyStateGrid <: Grid
-
-    xs::AbstractVector
-    ys::AbstractVector
-
-    xmin::Real
-    xmax::Real
-    ymin::Real
-    ymax::Real
-
-    Δx::Real
-    Δy::Real
-
-    nx::Int
-    ny::Int
-    nu::Int
-
-end
-
-struct TimeVaryingGrid <: Grid
-    
-    xs::AbstractVector 
-    ys::AbstractVector 
-    ts::AbstractVector
-
-    xmin::Real 
-    xmax::Real 
-    ymin::Real 
-    ymax::Real
-    tmax::Real
-    
-    Δx::Real 
-    Δy::Real 
-    Δt::Real 
-
-    nx::Int 
-    ny::Int 
-    nt::Int
-    nu::Int
-
-end
-
-struct BoundaryCondition
-    name::Symbol
-    type::Symbol
-    func::Function
-end
+# TODO: make θ an input somewhere...
 
 function construct_grid(
     xs::AbstractVector, 
@@ -214,7 +169,35 @@ function add_interior_point!(
     i::Int, 
     x::Real, 
     y::Real, 
-    g::Grid, 
+    g::SteadyStateGrid, 
+    ps::Interpolations.GriddedInterpolation
+)::Nothing
+
+    push!(rs, i, i, i, i, i)
+    push!(cs, i, i+1, i-1, i+g.nx, i-g.nx)
+
+    push!(
+        vs,
+        -(ps(x+0.5g.Δx, y) + ps(x-0.5g.Δx, y)) / g.Δx^2 - 
+         (ps(x, y+0.5g.Δy) + ps(x, y-0.5g.Δy)) / g.Δy^2,
+        ps(x+0.5g.Δx, y) / g.Δx^2,
+        ps(x-0.5g.Δx, y) / g.Δx^2,
+        ps(x, y+0.5g.Δy) / g.Δy^2,
+        ps(x, y-0.5g.Δy) / g.Δy^2
+    )
+
+    return
+
+end
+
+function add_interior_point!(
+    rs::Vector{Int}, 
+    cs::Vector{Int}, 
+    vs::Vector{<:Real}, 
+    i::Int, 
+    x::Real, 
+    y::Real, 
+    g::TimeVaryingGrid, 
     ps::Interpolations.GriddedInterpolation
 )::Nothing
 
@@ -251,7 +234,44 @@ function add_interior_point!(
 end
 
 function construct_A(
-    g::Grid, 
+    g::SteadyStateGrid, 
+    ps::AbstractMatrix, 
+    bcs::Dict{Symbol, BoundaryCondition}
+)::SparseMatrixCSC
+
+    rs = Int[]
+    cs = Int[]
+    vs = Vector{typeof(ps[1, 1])}(undef, 0)
+
+    ps = interpolate((g.xs, g.ys), ps, Gridded(Linear()))
+
+    for i ∈ 1:g.nu 
+
+        x, y = get_coordinates(i, g)
+
+        if in_corner(x, y, g)
+
+            add_corner_point!(rs, cs, vs, i)
+
+        elseif on_boundary(x, y, g)
+
+            bc = get_boundary(x, y, g, bcs)
+            add_boundary_point!(rs, cs, vs, i, g, bc)
+        
+        else
+        
+            add_interior_point!(rs, cs, vs, i, x, y, g, ps)
+        
+        end
+
+    end
+
+    return sparse(rs, cs, vs, g.nu, g.nu)
+
+end
+
+function construct_A(
+    g::TimeVaryingGrid, 
     ps::AbstractMatrix, 
     bcs::Dict{Symbol, BoundaryCondition}
 )::SparseMatrixCSC
@@ -262,14 +282,10 @@ function construct_A(
     cs = Int[]
     vs = Vector{typeof(ps[1, 1])}(undef, 0)
 
-    # Form the matrix of previous points
-    for i ∈ 1:g.nu
-        
-        push!(rs, i)
-        push!(cs, i)
-        push!(vs, 1.0)
-
-    end
+    # Form the matrix associated with the previous points
+    push!(rs, collect(1:g.nu)...)
+    push!(cs, collect(1:g.nu)...)
+    push!(vs, fill(1.0, g.nu)...)
 
     # Form the matrix of current points
     for i ∈ 1:g.nu 
@@ -298,7 +314,41 @@ function construct_A(
 end
 
 function construct_b(
-    g::Grid, 
+    g::SteadyStateGrid, 
+    ps::AbstractMatrix,
+    bcs::Dict{Symbol, BoundaryCondition}
+)::SparseVector
+
+    is = Int[]
+    vs = Vector{typeof(ps[1, 1])}(undef, 0)
+
+    ps = interpolate((g.xs, g.ys), ps, Gridded(Linear()))
+
+    for i ∈ 1:g.nu 
+
+        x, y = get_coordinates(i, g)
+
+        if on_boundary(x, y, g)
+
+            push!(is, i)
+
+            bc = get_boundary(x, y, g, bcs)
+            if bc.type == :neumann
+                push!(vs, bc.func(x, y) / ps(x, y))
+            else 
+                push!(vs, bc.func(x, y))
+            end
+
+        end
+
+    end
+
+    return sparsevec(is, vs, g.nu)
+
+end
+
+function construct_b(
+    g::TimeVaryingGrid, 
     ps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
     u_p::AbstractMatrix
@@ -333,5 +383,33 @@ function construct_b(
     end
 
     return sparsevec(is, vs, 2g.nu)
+
+end
+
+"""Note: the RHS is re-generated at each iteration. Currently, this is 
+unnecessary because there are no time-varying boundary conditions or forcing 
+terms, but this may change in the future."""
+function solve_system(
+    g::TimeVaryingGrid,
+    ps::AbstractMatrix,
+    bcs::Dict{Symbol}
+)::AbstractArray
+
+    u0 = [bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys]
+
+    us = zeros(g.nx, g.ny, g.nt+1)
+    us[:,:,1] = u0
+
+    A = construct_A(g, ps, bcs)
+
+    for t ∈ 1:g.nt
+
+        b = construct_b(g, ps, bcs, us[:,:,t])
+        u = solve(LinearProblem(A, b))
+        us[:,:,t+1] = reshape(u[g.nu+1:end], g.nx, g.ny)
+
+    end
+
+    return us
 
 end
