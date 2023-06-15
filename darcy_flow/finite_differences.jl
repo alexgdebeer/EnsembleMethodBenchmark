@@ -153,7 +153,7 @@ function add_neumann_point!(
     bc.name == :x0 && push!(cs, i, i+1, i+2)
     bc.name == :x1 && push!(cs, i, i-1, i-2)
     bc.name == :y0 && push!(cs, i, i+g.nx, i+2g.nx)
-    bc.name == :y1 && push!(cs, i, i-g.nx, i-2g.nx)å
+    bc.name == :y1 && push!(cs, i, i-g.nx, i-2g.nx)
 
     push!(vs, 3.0ps(x, y) / 2g.Δx, -4.0ps(x, y) / 2g.Δx, 1.0ps(x, y) / 2g.Δx)
 
