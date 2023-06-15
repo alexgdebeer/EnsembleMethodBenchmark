@@ -11,7 +11,7 @@ Random.seed!(16)
 
 xmin, xmax = 0.0, 1.0
 ymin, ymax = 0.0, 1.0
-tmax = 10.0
+tmax = 20.0
 
 Δx, Δy = 0.02, 0.02
 Δt = 0.05
@@ -40,5 +40,6 @@ A = construct_A(g_ss, ps, bcs)
 b = construct_b(g_ss, ps, bcs)
 
 us_ss = solve(LinearProblem(A, b))
+us_ss = reshape(us_ss, g_ss.nx, g_ss.ny)
 
-println("Done!")
+println(maximum(abs.(us_ss-us[:,:,end])))
