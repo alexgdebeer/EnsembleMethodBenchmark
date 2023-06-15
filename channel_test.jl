@@ -1,21 +1,20 @@
 using Distributions
 using LinearAlgebra
+using Plots
 
-# Gradient of line
-α = 0.6
-
-# Width
-w = 0.1
-
-# Amplitude
-a = 0.2
-
-# Period 
-p = 0.5
+# Gradient of underlying line, width, amplitude, period, centre
+α_dist = Uniform(-0.8, 0.8)
+w_dist = Uniform(0.1, 0.2)
+a_dist = Uniform(0.1, 0.2)
+p_dist = Uniform(0.25, 0.75)
+c_dist = MvNormal([0.5, 0.5], [0.1^2 0.05^2; 0.05^2 0.1^2])
 
 # Centre
-cx = 0.5
-cy = 0.5
+α = rand(α_dist)
+w = rand(w_dist)
+a = rand(a_dist)
+p = rand(p_dist)
+cx, cy = rand(c_dist)
 
 xs = 0.0:0.01:1.0
 ys = 0.0:0.01:1.0
