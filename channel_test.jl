@@ -76,7 +76,7 @@ end
 
 function channel_bounds(
     x::Real, α::Real, w::Real, a::Real, p::Real, cx::Real, cy::Real
-)
+)::Tuple
 
     centre = a * sin((2π/p) * (x-cx)) + α*(x-cx) + cy 
     return centre - w, centre + w
@@ -85,7 +85,7 @@ end
 
 function sample_channel(
     d::ChannelPrior
-)
+)::AbstractVector
 
     θs = [
         rand(d.α_dist),
@@ -103,7 +103,7 @@ end
 function sample_perms(
     d::ChannelPrior,
     channel_ps::AbstractVector 
-)
+)::AbstractVector
 
     μ = zeros(d.Nθ)
     Γ = zeros(d.Nθ, d.Nθ)
@@ -141,14 +141,15 @@ end
 function Base.rand(
     d::ChannelPrior,
     n::Int=1
-)
+)::AbstractVecOrMat
 
     θs = zeros(p.Nθ+6, n)
 
     for i ∈ 1:n
 
-        θs[1:6,i] = sample_channel(d)
-        θs[7:end,i] = sample_perms(d, θs[1:6,i])
+        channel_ps = sample_channel(d)
+        perms = sample_perms(d, channel_ps)
+        θs[:,i] = [channel_ps; perms]
 
     end
 
