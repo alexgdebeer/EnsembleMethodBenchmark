@@ -3,8 +3,8 @@ using LinearAlgebra
 using Plots
 
 # TODO: add logpdf function
-# Could just sample the full domain for all three sections and treat the stuff
-# that doesn't make it into the thing as an auxilliary variable
+# Could just sample the full domain for all three sections and treat the 
+# permeabilities that aren't actually used as auxilliary variables
 
 abstract type AbstractPrior end
 
@@ -15,8 +15,7 @@ struct ChannelPrior <: AbstractPrior
     w_dist::Uniform
     a_dist::Uniform
     p_dist::Uniform
-    cx_dist::Uniform
-    cy_dist::Uniform
+    c_dist::Uniform
 
     cxs::AbstractVector
     cys::AbstractVector
@@ -33,8 +32,7 @@ struct ChannelPrior <: AbstractPrior
         w_bnds::AbstractVector,
         a_bnds::AbstractVector,
         p_bnds::AbstractVector,
-        cx_bnds::AbstractVector,
-        cy_bnds::AbstractVector,
+        c_bnds::AbstractVector,
         xs::AbstractVector,
         ys::AbstractVector,
         μ_o::Real,
@@ -49,8 +47,7 @@ struct ChannelPrior <: AbstractPrior
         w_dist = Uniform(w_bnds...)
         a_dist = Uniform(a_bnds...)
         p_dist = Uniform(p_bnds...)
-        cx_dist = Uniform(cx_bnds...)
-        cy_dist = Uniform(cy_bnds...)
+        c_dist = Uniform(c_bnds...)
 
         Nθ = length(xs) * length(ys)
 
@@ -65,7 +62,7 @@ struct ChannelPrior <: AbstractPrior
         Γ_i = σ_i^2 * exp.(-(1/γ_i) * sqrt.(ds)) + 1.0e-8I
 
         return new(
-            α_dist, w_dist, a_dist, p_dist, cx_dist, cy_dist, 
+            α_dist, w_dist, a_dist, p_dist, c_dist, 
             cxs, cys, Nθ,
             μ_o, μ_i, Γ_o, Γ_i
         )
@@ -75,10 +72,10 @@ struct ChannelPrior <: AbstractPrior
 end
 
 function channel_bounds(
-    x::Real, α::Real, w::Real, a::Real, p::Real, cx::Real, cy::Real
+    x::Real, α::Real, w::Real, a::Real, p::Real, c::Real
 )::Tuple
 
-    centre = a * sin((2π/p) * (x-cx)) + α*(x-cx) + cy 
+    centre = a * sin((2π/p) * x) + α*x + c 
     return centre - w, centre + w
 
 end
@@ -92,8 +89,7 @@ function sample_channel(
         rand(d.w_dist),
         rand(d.a_dist),
         rand(d.p_dist),
-        rand(d.cx_dist),
-        rand(d.cy_dist)
+        rand(d.c_dist)
     ]
 
     return θs
@@ -143,7 +139,7 @@ function Base.rand(
     n::Int=1
 )::AbstractVecOrMat
 
-    θs = zeros(p.Nθ+6, n)
+    θs = zeros(p.Nθ+5, n)
 
     for i ∈ 1:n
 
@@ -158,12 +154,11 @@ function Base.rand(
 
 end
 
-α_bnds = [-0.8, 0.8]
+α_bnds = [-0.5, 0.5]
 w_bnds = [0.1, 0.2]
-a_bnds = [0.1, 0.2]
+a_bnds = [-0.2, 0.2]
 p_bnds = [0.25, 0.75]
-cx_bnds = [0.3, 0.7]
-cy_bnds = [0.3, 0.7]
+c_bnds = [0.4, 0.6]
 xs = 0:0.02:1
 ys = 0:0.02:1
 μ_o = 2.0
@@ -173,12 +168,12 @@ ys = 0:0.02:1
 γ_o = 0.1
 γ_i = 0.1
 
-p = @time ChannelPrior(
-    α_bnds, w_bnds, a_bnds, p_bnds, cx_bnds, cy_bnds,
+p = ChannelPrior(
+    α_bnds, w_bnds, a_bnds, p_bnds, c_bnds,
     xs, ys, μ_o, μ_i, σ_o, σ_i, γ_o, γ_i
 )
 
-θs = @time reshape(rand(p)[7:end], length(xs), length(ys))
+θs = reshape(rand(p)[6:end], length(xs), length(ys))
 # @time rand(p, 10)
 
 using Plots
