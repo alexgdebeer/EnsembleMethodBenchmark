@@ -1643,7 +1643,7 @@ version = "1.0.3"
 
 [[deps.SimIntensiveInference]]
 deps = ["DiffResults", "Distributions", "ForwardDiff", "LinearAlgebra", "LinearSolve", "Optim", "Printf", "Random", "Statistics"]
-path = "/Users/etiennedebeer/Documents/uni/masters/code/SimIntensiveInference"
+path = "/Users/AlexdeBeer/Documents/uni/masters/code/SimIntensiveInference"
 uuid = "c421480a-815f-4d9a-a223-30067a5e5d2e"
 version = "0.1.0"
 
