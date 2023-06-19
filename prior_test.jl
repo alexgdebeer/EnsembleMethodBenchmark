@@ -58,21 +58,20 @@ end
 function gen_channel_samples()
 
     m_bnds = [-0.3, 0.3]
-    c_bnds = [0.3, 0.5]
+    c_bnds = [0.3, 0.6]
     a_bnds = [0.1, 0.2]
     p_bnds = [0.4, 0.7]
     w_bnds = [0.1, 0.2]
 
     μ_o = 2.0
     μ_i = -1.0
-    σ_o = 0.5
-    σ_i = 0.5
-    γ_o = 0.1
-    γ_i = 0.1
+
+    k_o = ExpSquaredKernel(0.5, 0.1)
+    k_i = ExpKernel(0.5, 0.1)
 
     p = ChannelPrior(
         m_bnds, c_bnds, a_bnds, p_bnds, w_bnds,
-        xs, ys, μ_o, μ_i, σ_o, σ_i, γ_o, γ_i
+        μ_o, μ_i, k_o, k_i, xs, ys
     )
 
     ks = rand(p, 3)
