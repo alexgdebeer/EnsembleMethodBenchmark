@@ -26,9 +26,9 @@ function normalising_constant(r_max::Real)::Real
     
     end
 
-    a = Δx * Δy * z_sum
+    # a = Δx * Δy * z_sum
 
-    return a
+    return z_sum
 
 end
 
@@ -83,11 +83,11 @@ bcs = Dict(
 )
 
 wells = [
-    BumpWell(0.2, 0.2, 0.05, -1e-6),
-    BumpWell(0.2, 0.8, 0.05, -1e-6),
-    BumpWell(0.8, 0.2, 0.05, -1e-6),
-    BumpWell(0.8, 0.8, 0.05, -1e-6),
-    BumpWell(0.5, 0.5, 0.05, 4e-6)
+    BumpWell(0.2, 0.2, 0.05, -40),
+    BumpWell(0.2, 0.8, 0.05, -10),
+    BumpWell(0.8, 0.2, 0.05, -10),
+    BumpWell(0.8, 0.8, 0.05, -10),
+    BumpWell(0.5, 0.5, 0.05, 40)
 ]
 
 # Define forcing function 
@@ -113,9 +113,16 @@ us = @time solve(grid, ps, bcs, q)
 anim = @animate for i ∈ 1:size(us, 3)
 
     plot(
-        heatmap(us[2:end-1,2:end-1,i]', cmap=:turbo, aspect_ratio=:equal),
-        axis=([], false), size=(400, 400)
+        heatmap(
+            grid.xs, grid.ys, us[:,:,i]', 
+            clims=extrema(us[2:end-1,2:end-1,:]), 
+            cmap=:turbo, 
+            aspect_ratio=:equal
+        ),
+        axis=([], false), size=(600, 400)
     )
+
+    scatter!([0.2, 0.2, 0.8, 0.8, 0.5], [0.2, 0.8, 0.2, 0.8, 0.5]),
 
     title!("t = $(grid.ts[i])")
 
