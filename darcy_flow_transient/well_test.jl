@@ -1,34 +1,24 @@
+using Random: seed!
 using SimIntensiveInference
 include("setup/setup.jl")
 
-function normalising_constant(r_max::Real)::Real
+seed!(16)
 
-    Δr = r_max / 100.0
+function normalising_constant(g::Grid, x::Real, y::Real, r::Real)::Real
 
-    xs = -r_max:Δr:r_max
-    ys = -r_max:Δr:r_max
+    a = 0.0
 
-    nx = length(xs)
-    ny = length(ys)
+    for i ∈ 1:g.nx, j ∈ 1:g.ny
 
-    Δx = xs[2] - xs[1]
-    Δy = ys[2] - ys[1]
-
-    z_sum = 0.0
-
-    for i ∈ 1:nx, j ∈ 1:ny
-
-        r_sq = xs[i]^2 + ys[j]^2
+        r_sq = (g.xs[i] - x)^2 + (g.ys[j] - y)^2
     
-        if r_sq < r_max^2
-            z_sum += exp(-1/(r_max^2-r_sq))
+        if r_sq < r^2
+            a += exp(-1/(r^2-r_sq))
         end
     
     end
 
-    # a = Δx * Δy * z_sum
-
-    return z_sum
+    return a
 
 end
 
@@ -37,40 +27,56 @@ struct BumpWell
     x::Real
     y::Real
     r::Real
-
     q::Real
-
     a::Real
     
-    function BumpWell(x::Real, y::Real, r::Real, q::Real)
+    function BumpWell(g::Grid, x::Real, y::Real, r::Real, q::Real)
 
-        a = normalising_constant(r)
+        a = normalising_constant(g, x, y, r)
         return new(x, y, r, q, a)
     
     end
 
 end
 
-function well_rate(b::BumpWell, x::Real, y::Real)::Real
+struct DeltaWell 
 
-    r_sq = (x-b.x)^2 * (y-b.y)^2
+    x::Real 
+    y::Real
+    q::Real
 
-    if r_sq < b.r^2
-        return b.q * exp(-1/(b.r^2-r_sq)) / b.a
+end
+
+function well_rate(w::BumpWell, x::Real, y::Real)::Real
+
+    r_sq = (x-w.x)^2 + (y-w.y)^2
+
+    if r_sq < w.r^2
+        return w.q * exp(-1/(w.r^2-r_sq)) / w.a
     end
 
     return 0.0
 
 end
 
-xmin, Δx, xmax = 0.0, 0.02, 1.0
-ymin, Δy, ymax = 0.0, 0.02, 1.0
+function well_rate(w::DeltaWell, x::Real, y::Real)::Real 
+
+    if abs(w.x - x) ≤ 1e-8 && abs(w.y - y) ≤ 1e-8
+        return w.q 
+    end
+
+    return 0.0
+    
+end
+
+xmin, Δx, xmax = 0.0, 0.01, 1.0
+ymin, Δy, ymax = 0.0, 0.01, 1.0
 
 xs = xmin:Δx:xmax
 ys = ymin:Δy:ymax
 
-tmax = 2.0
-Δt = 0.01
+tmax = 0.2
+Δt = 0.001
 
 grid = TimeVaryingGrid(xs, ys, tmax, Δt)
 
@@ -83,12 +89,20 @@ bcs = Dict(
 )
 
 wells = [
-    BumpWell(0.2, 0.2, 0.05, -40),
-    BumpWell(0.2, 0.8, 0.05, -10),
-    BumpWell(0.8, 0.2, 0.05, -10),
-    BumpWell(0.8, 0.8, 0.05, -10),
-    BumpWell(0.5, 0.5, 0.05, 40)
+    BumpWell(grid, 0.2, 0.2, 0.05, -10),
+    BumpWell(grid, 0.2, 0.8, 0.05, -10),
+    # BumpWell(grid, 0.8, 0.2, 0.05, -10),
+    # BumpWell(grid, 0.8, 0.8, 0.05, -10),
+    BumpWell(grid, 0.5, 0.5, 0.05, 40)
 ]
+
+# wells = [
+#     DeltaWell(0.2, 0.2, -10),
+#     DeltaWell(0.2, 0.8, -10),
+#     DeltaWell(0.8, 0.2, -10),
+#     DeltaWell(0.8, 0.8, -10),
+#     DeltaWell(0.5, 0.5, 40)
+# ]
 
 # Define forcing function 
 function q(x, y, t)
@@ -117,7 +131,8 @@ anim = @animate for i ∈ 1:size(us, 3)
             grid.xs, grid.ys, us[:,:,i]', 
             clims=extrema(us[2:end-1,2:end-1,:]), 
             cmap=:turbo, 
-            aspect_ratio=:equal
+            aspect_ratio=:equal,
+            legend=:none
         ),
         axis=([], false), size=(600, 400)
     )
