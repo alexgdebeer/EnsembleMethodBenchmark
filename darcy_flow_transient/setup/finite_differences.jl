@@ -4,10 +4,11 @@ using LinearSolve
 using SciMLBase
 using SparseArrays
 
-# TODO: make θ an input somewhere
+# Implicit solve parameter (Crank-Nicolson)
+const θ = 0.5
+
 # TODO: ensure the boundary conditions are satisfied as part of the initial condition
 # TODO: check sign conventions for Neumann conditions
-θ = 0.5
 
 function get_coordinates(
     i::Int,
@@ -140,12 +141,12 @@ function add_interior_point!(
 
     push!(
         vs,
-        -(ps(x+0.5g.Δx, y) + ps(x-0.5g.Δx, y)) / g.Δx^2 - 
-         (ps(x, y+0.5g.Δy) + ps(x, y-0.5g.Δy)) / g.Δy^2,
-        ps(x+0.5g.Δx, y) / g.Δx^2,
-        ps(x-0.5g.Δx, y) / g.Δx^2,
-        ps(x, y+0.5g.Δy) / g.Δy^2,
-        ps(x, y-0.5g.Δy) / g.Δy^2
+        (1.0 / (g.μ * g.Δx^2)) * (ps(x+0.5g.Δx, y) + ps(x-0.5g.Δx, y)) + 
+        (1.0 / (g.μ * g.Δy^2)) * (ps(x, y+0.5g.Δy) + ps(x, y-0.5g.Δy)),
+        -(1.0 / (g.μ * g.Δx^2)) * ps(x+0.5g.Δx, y),
+        -(1.0 / (g.μ * g.Δx^2)) * ps(x-0.5g.Δx, y),
+        -(1.0 / (g.μ * g.Δy^2)) * ps(x, y+0.5g.Δy),
+        -(1.0 / (g.μ * g.Δy^2)) * ps(x, y-0.5g.Δy)
     )
 
     return
@@ -159,7 +160,7 @@ function add_interior_point!(
     i::Int, 
     x::Real, 
     y::Real, 
-    g::TimeVaryingGrid, 
+    g::TransientGrid, 
     ps::Interpolations.GriddedInterpolation
 )::Nothing
 
@@ -233,7 +234,7 @@ function construct_A(
 end
 
 function construct_A(
-    g::TimeVaryingGrid, 
+    g::TransientGrid, 
     ps::AbstractMatrix, 
     bcs::Dict{Symbol, BoundaryCondition}
 )::SparseMatrixCSC
@@ -278,7 +279,8 @@ end
 function construct_b(
     g::SteadyStateGrid, 
     ps::AbstractMatrix,
-    bcs::Dict{Symbol, BoundaryCondition}
+    bcs::Dict{Symbol, BoundaryCondition},
+    q::Function
 )::SparseVector
 
     is = Int[]
@@ -301,6 +303,11 @@ function construct_b(
                 push!(vs, bc.func(x, y))
             end
 
+        else 
+
+            push!(is, i)
+            push!(vs, q(x, y))
+
         end
 
     end
@@ -310,7 +317,7 @@ function construct_b(
 end
 
 function construct_b(
-    g::TimeVaryingGrid, 
+    g::TransientGrid, 
     ps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
     u_p::AbstractMatrix,
@@ -362,11 +369,12 @@ end
 function SciMLBase.solve(
     g::SteadyStateGrid,
     ps::AbstractMatrix,
-    bcs::Dict{Symbol, BoundaryCondition}
+    bcs::Dict{Symbol, BoundaryCondition},
+    q::Function
 )::AbstractMatrix
 
     A = construct_A(g, ps, bcs)
-    b = construct_b(g, ps, bcs)
+    b = construct_b(g, ps, bcs, q)
 
     us = solve(LinearProblem(A, b))
     us = reshape(us, g.nx, g.ny)
@@ -376,7 +384,7 @@ function SciMLBase.solve(
 end
 
 function SciMLBase.solve(
-    g::TimeVaryingGrid,
+    g::TransientGrid,
     ps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
     q::Function
