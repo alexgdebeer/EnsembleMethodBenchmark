@@ -17,9 +17,12 @@ struct SteadyStateGrid <: Grid
     ny::Int
     nu::Int
 
+    μ::Real
+
     function SteadyStateGrid(
         xs::AbstractVector,
-        ys::AbstractVector
+        ys::AbstractVector,
+        μ::Real=1.0,
     )::SteadyStateGrid 
         
         xmin, xmax = extrema(xs)
@@ -37,14 +40,15 @@ struct SteadyStateGrid <: Grid
             xmin, xmax, 
             ymin, ymax, 
             Δx, Δy, 
-            nx, ny, nu
+            nx, ny, nu,
+            μ
         )
 
     end
 
 end
 
-struct TimeVaryingGrid <: Grid
+struct TransientGrid <: Grid
     
     xs::AbstractVector 
     ys::AbstractVector 
@@ -69,7 +73,7 @@ struct TimeVaryingGrid <: Grid
     ϕ::Real
     c::Real
 
-    function TimeVaryingGrid(
+    function TransientGrid(
         xs::AbstractVector,
         ys::AbstractVector,
         tmax::Real,
@@ -77,7 +81,7 @@ struct TimeVaryingGrid <: Grid
         μ::Real=1.0,
         ϕ::Real=1.0,
         c::Real=1.0
-    )::TimeVaryingGrid 
+    )::TransientGrid 
 
         ts = 0.0:Δt:tmax 
 
