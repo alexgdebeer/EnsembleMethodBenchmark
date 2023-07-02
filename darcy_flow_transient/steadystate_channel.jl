@@ -24,6 +24,8 @@ bcs = Dict(
     :y1 => BoundaryCondition(:y1, :dirichlet, (x, y) -> 0.0)
 )
 
+q(x, y) = 0
+
 # ----------------
 # Prior setup
 # ----------------
@@ -34,11 +36,11 @@ a_bnds = [0.05, 0.2]
 p_bnds = [0.4, 1.0]
 w_bnds = [0.05, 0.2]
 
-μ_o = 0.0
+μ_o = -1.0
 μ_i = 2.0
 
-k_o = ExpSquaredKernel(0.2, 0.1)
-k_i = ExpKernel(0.2, 0.1)
+k_o = ExpSquaredKernel(0.5, 0.1)
+k_i = ExpKernel(0.5, 0.1)
 
 p = ChannelPrior(
     m_bnds, c_bnds, a_bnds, p_bnds, w_bnds,
@@ -53,7 +55,7 @@ p = ChannelPrior(
 θs_t = rand(p)
 logps_t = reshape(get_perms(p, θs_t), grid.nx, grid.ny)
 ps_t = exp.(logps_t)
-us_t = solve(grid, ps_t, bcs)
+us_t = solve(grid, ps_t, bcs, q)
 
 # Define the observation locations
 x_locs = 0.1:0.2:0.9
@@ -82,7 +84,7 @@ function f(
 
     logps = get_perms(p, θs)
     ps = reshape(exp.(logps), grid.nx, grid.ny)
-    us = solve(grid, ps, bcs)
+    us = solve(grid, ps, bcs, q)
 
     return us
 

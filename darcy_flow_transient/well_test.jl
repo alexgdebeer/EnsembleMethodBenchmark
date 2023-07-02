@@ -27,7 +27,7 @@ u0 = 2.0e7                      # Initial pressure, Pa
 q_ps = 30.0 / (Δx * Δy * h)     # Producer rate, (m^3 / day) / m^3
 q_is = 0.0 / (Δx * Δy * h)      # Injector rate, (m^3 / day) / m^3 
 
-grid = TimeVaryingGrid(xs, ys, tmax, Δt, μ, ϕ, c)
+grid = TransientGrid(xs, ys, tmax, Δt, μ, ϕ, c)
 
 bcs = Dict(
     :x0 => BoundaryCondition(:x0, :neumann, (x, y) -> 0.0), 
