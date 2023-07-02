@@ -4,7 +4,10 @@ using LinearSolve
 using SciMLBase
 using SparseArrays
 
-# TODO: make θ an input somewhere...
+# TODO: make θ an input somewhere
+# TODO: ensure the boundary conditions are satisfied as part of the initial condition
+# TODO: check sign conventions for Neumann conditions
+θ = 0.5
 
 function get_coordinates(
     i::Int,
@@ -160,32 +163,32 @@ function add_interior_point!(
     ps::Interpolations.GriddedInterpolation
 )::Nothing
 
-    θ = 0.5
-
     push!(rs, i, i, i, i, i, i, i, i, i, i)
 
-    # Add coefficients for points at previous time
+    # Add the coefficients for points at the previous time
     push!(cs, i-g.nu, i-g.nu+1, i-g.nu-1, i-g.nu+g.nx, i-g.nu-g.nx)
     push!(
         vs, 
-        1 - (1-θ) * (g.Δt / g.Δx^2) * (ps(x+0.5g.Δx, y) + ps(x-0.5g.Δx, y)) +
-          - (1-θ) * (g.Δt / g.Δy^2) * (ps(x, y+0.5g.Δy) + ps(x, y-0.5g.Δy)),
-        (1-θ) * (g.Δt / g.Δx^2) * ps(x+0.5g.Δx, y),
-        (1-θ) * (g.Δt / g.Δx^2) * ps(x-0.5g.Δx, y),
-        (1-θ) * (g.Δt / g.Δy^2) * ps(x, y+0.5g.Δy),
-        (1-θ) * (g.Δt / g.Δy^2) * ps(x, y-0.5g.Δy)
+        -(g.ϕ*g.c / g.Δt) +
+          ((1-θ) / (g.μ * g.Δx^2)) * (ps(x+0.5g.Δx, y) + ps(x-0.5g.Δx, y)) +
+          ((1-θ) / (g.μ * g.Δy^2)) * (ps(x, y+0.5g.Δy) + ps(x, y-0.5g.Δy)),
+        -((1-θ) / (g.μ * g.Δx^2)) * ps(x+0.5g.Δx, y),
+        -((1-θ) / (g.μ * g.Δx^2)) * ps(x-0.5g.Δx, y),
+        -((1-θ) / (g.μ * g.Δy^2)) * ps(x, y+0.5g.Δy),
+        -((1-θ) / (g.μ * g.Δy^2)) * ps(x, y-0.5g.Δy)
     )
 
-    # Add coefficients for points at current time
+    # Add the coefficients for points at the current time
     push!(cs, i, i+1, i-1, i+g.nx, i-g.nx)
     push!(
         vs, 
-        -1 - θ * (g.Δt / g.Δx^2) * (ps(x+0.5g.Δx, y) + ps(x-0.5g.Δx, y)) +
-           - θ * (g.Δt / g.Δy^2) * (ps(x, y+0.5g.Δy) + ps(x, y-0.5g.Δy)),
-        θ * (g.Δt / g.Δx^2) * ps(x+0.5g.Δx, y),
-        θ * (g.Δt / g.Δx^2) * ps(x-0.5g.Δx, y),
-        θ * (g.Δt / g.Δy^2) * ps(x, y+0.5g.Δy),
-        θ * (g.Δt / g.Δy^2) * ps(x, y-0.5g.Δy)
+        (g.ϕ*g.c / g.Δt) +
+          (θ / (g.μ * g.Δx^2)) * (ps(x+0.5g.Δx, y) + ps(x-0.5g.Δx, y)) +
+          (θ / (g.μ * g.Δy^2)) * (ps(x, y+0.5g.Δy) + ps(x, y-0.5g.Δy)),
+        -(θ / (g.μ * g.Δx^2)) * ps(x+0.5g.Δx, y),
+        -(θ / (g.μ * g.Δx^2)) * ps(x-0.5g.Δx, y),
+        -(θ / (g.μ * g.Δy^2)) * ps(x, y+0.5g.Δy),
+        -(θ / (g.μ * g.Δy^2)) * ps(x, y-0.5g.Δy)
     )
 
     return
@@ -310,7 +313,9 @@ function construct_b(
     g::TimeVaryingGrid, 
     ps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
-    u_p::AbstractMatrix
+    u_p::AbstractMatrix,
+    q::Function,
+    t::Real
 )::SparseVector
 
     is = Int[]
@@ -325,8 +330,7 @@ function construct_b(
 
         x, y = get_coordinates(i, g)
 
-        # Everything except for the boundaries is equal to 0
-        if on_boundary(x, y, g)
+        if on_boundary(x, y, g) && !in_corner(x, y, g)
 
             push!(is, i+g.nu)
 
@@ -337,6 +341,16 @@ function construct_b(
                 push!(vs, bc.func(x, y))
             end
 
+        else
+
+            # Add source term
+            push!(is, i+g.nu)
+            if t == 1
+                push!(vs, θ * q(x, y, g.ts[t+1]))
+            else
+                push!(vs, (1-θ) * q(x, y, g.ts[t]) + θ * q(x, y, g.ts[t+1]))
+            end
+        
         end
 
     end
@@ -364,7 +378,8 @@ end
 function SciMLBase.solve(
     g::TimeVaryingGrid,
     ps::AbstractMatrix,
-    bcs::Dict{Symbol, BoundaryCondition}
+    bcs::Dict{Symbol, BoundaryCondition},
+    q::Function
 )::AbstractArray
 
     u0 = [bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys]
@@ -376,7 +391,7 @@ function SciMLBase.solve(
 
     for t ∈ 1:g.nt
 
-        b = construct_b(g, ps, bcs, us[:,:,t])
+        b = construct_b(g, ps, bcs, us[:,:,t], q, t)
         u = solve(LinearProblem(A, b))
         us[:,:,t+1] = reshape(u[g.nu+1:end], g.nx, g.ny)
 

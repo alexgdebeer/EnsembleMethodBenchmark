@@ -65,11 +65,18 @@ struct TimeVaryingGrid <: Grid
     nt::Int
     nu::Int
 
+    μ::Real 
+    ϕ::Real
+    c::Real
+
     function TimeVaryingGrid(
         xs::AbstractVector,
         ys::AbstractVector,
         tmax::Real,
-        Δt::Real
+        Δt::Real,
+        μ::Real=1.0,
+        ϕ::Real=1.0,
+        c::Real=1.0
     )::TimeVaryingGrid 
 
         ts = 0.0:Δt:tmax 
@@ -90,7 +97,8 @@ struct TimeVaryingGrid <: Grid
             xmin, xmax, 
             ymin, ymax, tmax, 
             Δx, Δy, Δt, 
-            nx, ny, nt, nu
+            nx, ny, nt, nu,
+            μ, ϕ, c
         )
 
     end
