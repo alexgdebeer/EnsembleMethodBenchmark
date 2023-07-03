@@ -1,14 +1,15 @@
 using SimIntensiveInference
 
-include("setup_ss_channel.jl")
+include("steadystate_channel.jl")
 
-αs = [16.0 for _ ∈ 1:16]
-n = 100
-
+Ne = 100
 γ = 10
-i_max = 16
+i_max = 8
 
-θs, us, Ss, λs = run_lm_enrml(f, g, p, L, γ, i_max, n)
+θs, us, Ss, λs = run_lm_enrml(f, g, p, L, γ, i_max, Ne)
 
-logps = θs[6:end,:,:]
-μ_post = reshape(mean(logps[:,:,end], dims=2), grid.nx, grid.ny)
+# logps = θs[1:end,:,:]
+# μ_post = reshape(mean(logps[:,:,end], dims=2), grid.nx, grid.ny)
+
+logps = reduce(hcat, get_perms(p, θ) for θ ∈ eachcol(θs[:,:,end]))
+μ_post = reshape(mean(logps, dims=2), grid.nx, grid.ny)

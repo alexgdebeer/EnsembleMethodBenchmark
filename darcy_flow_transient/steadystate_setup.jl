@@ -7,7 +7,7 @@ using SimIntensiveInference
 
 include("setup/setup.jl")
 
-# seed!(16)
+seed!(16)
 
 xmin, Δx, xmax = 0.0, 0.02, 1.0
 ymin, Δy, ymax = 0.0, 0.02, 1.0
@@ -29,7 +29,7 @@ bcs = Dict(
 k = ARDExpSquaredKernel(σ, γx, γy)
 
 μ = 0.0
-p = GaussianPrior(μ, grid.xs, grid.ys, k)
+p = GaussianPrior(μ, k, grid.xs, grid.ys)
 
 # ----------------
 # Data generation
