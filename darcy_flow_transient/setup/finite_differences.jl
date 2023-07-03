@@ -8,7 +8,6 @@ using SparseArrays
 const θ = 0.5
 
 # TODO: ensure the boundary conditions are satisfied as part of the initial condition
-# TODO: check sign conventions for Neumann conditions
 
 function get_coordinates(
     i::Int,
@@ -114,12 +113,19 @@ function add_neumann_point!(
 
     push!(rs, i, i, i)
 
-    bc.name == :x0 && push!(cs, i, i+1, i+2)
-    bc.name == :x1 && push!(cs, i, i-1, i-2)
-    bc.name == :y0 && push!(cs, i, i+g.nx, i+2g.nx)
-    bc.name == :y1 && push!(cs, i, i-g.nx, i-2g.nx)
-
-    push!(vs, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)
+    if bc.name == :x0
+        push!(cs, i, i+1, i+2)
+        push!(vs, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)
+    elseif bc.name == :x1
+        push!(cs, i, i-1, i-2)
+        push!(vs, -3.0 / 2g.Δx, 4.0 / 2g.Δx, -1.0 / 2g.Δx)
+    elseif bc.name == :y0
+        push!(cs, i, i+g.nx, i+2g.nx)
+        push!(vs, 3.0 / 2g.Δy, -4.0 / 2g.Δy, 1.0 / 2g.Δy)
+    elseif bc.name == :y1 
+        push!(cs, i, i-g.nx, i-2g.nx)
+        push!(vs, -3.0 / 2g.Δy, 4.0 / 2g.Δy, -1.0 / 2g.Δy)
+    end
 
     return
 
