@@ -1,7 +1,6 @@
 using Interpolations
 using LinearAlgebra
 using LinearSolve
-using SciMLBase
 using SparseArrays
 
 # Implicit solve parameter (Crank-Nicolson)
@@ -396,9 +395,9 @@ function SciMLBase.solve(
     q::Function
 )::AbstractArray
 
-    u0 = [bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys]
+    u0 = reshape([bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys], g.nx, g.ny)
 
-    us = zeros(g.nx, g.ny, g.nt+1)
+    us = zeros(Real, g.nx, g.ny, g.nt+1)
     us[:,:,1] = u0
 
     A = construct_A(g, ps, bcs)

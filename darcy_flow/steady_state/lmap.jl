@@ -1,6 +1,6 @@
 using SimIntensiveInference
 
-include("steadystate_setup.jl")
+include("setup.jl")
 
 L_ϵ = inv_cholesky(L.Σ)
 
