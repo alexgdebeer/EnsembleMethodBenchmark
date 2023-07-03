@@ -2,7 +2,7 @@ using LaTeXStrings
 using Random: seed!
 using SimIntensiveInference
 
-include("setup/setup.jl")
+include("../setup/setup.jl")
 
 seed!(16)
 

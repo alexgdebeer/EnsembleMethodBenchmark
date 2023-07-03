@@ -5,14 +5,17 @@ using LinearSolve
 using Random: seed!
 using SimIntensiveInference
 
-include("setup/setup.jl")
+include("../setup/setup.jl")
 
 seed!(16)
 
 xmin, Δx, xmax = 0.0, 0.02, 1.0
 ymin, Δy, ymax = 0.0, 0.02, 1.0
 
-grid = SteadyStateGrid(xmin:Δx:xmax, ymin:Δy:ymax)
+xs = xmin:Δx:xmax
+ys = ymin:Δy:ymax
+
+grid = SteadyStateGrid(xs, ys)
 
 bcs = Dict(
     :x0 => BoundaryCondition(:x0, :neumann, (x, y) -> 0.0), 
@@ -21,15 +24,28 @@ bcs = Dict(
     :y1 => BoundaryCondition(:y1, :dirichlet, (x, y) -> 0.0)
 )
 
+q(x, y) = 0
+
 # ----------------
 # Prior setup
 # ----------------
 
-σ, γx, γy = 1.0, 0.2, 0.2
-k = ARDExpSquaredKernel(σ, γx, γy)
+m_bnds = [-0.3, 0.3]
+c_bnds = [0.2, 0.8]
+a_bnds = [0.05, 0.2]
+p_bnds = [0.4, 1.0]
+w_bnds = [0.05, 0.2]
 
-μ = 0.0
-p = GaussianPrior(μ, k, grid.xs, grid.ys)
+μ_o = -1.0
+μ_i = 2.0
+
+k_o = ExpSquaredKernel(0.5, 0.1)
+k_i = ExpKernel(0.5, 0.1)
+
+p = ChannelPrior(
+    m_bnds, c_bnds, a_bnds, p_bnds, w_bnds,
+    μ_o, μ_i, k_o, k_i, xs, ys
+)
 
 # ----------------
 # Data generation
@@ -37,13 +53,13 @@ p = GaussianPrior(μ, k, grid.xs, grid.ys)
 
 # Sample the true set of parameters from the prior
 θs_t = rand(p)
-logps_t = reshape(θs_t, grid.nx, grid.ny)
+logps_t = reshape(get_perms(p, θs_t), grid.nx, grid.ny)
 ps_t = exp.(logps_t)
-us_t = solve(grid, ps_t, bcs)
+us_t = solve(grid, ps_t, bcs, q)
 
 # Define the observation locations
 x_locs = 0.1:0.2:0.9
-y_locs = 0.3:0.2:0.9
+y_locs = 0.1:0.2:0.9
 n_obs = length(x_locs) * length(y_locs)
 
 # Define the distribution of the observation noise
@@ -66,8 +82,9 @@ function f(
     θs::AbstractVector
 )::AbstractMatrix
 
-    ps = reshape(exp.(θs), grid.nx, grid.ny)
-    us = solve(grid, ps, bcs)
+    logps = get_perms(p, θs)
+    ps = reshape(exp.(logps), grid.nx, grid.ny)
+    us = solve(grid, ps, bcs, q)
 
     return us
 
