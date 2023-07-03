@@ -10,22 +10,21 @@ animate = true
 
 xmin, Δx, xmax = 0.0, 10.0, 1000.0
 ymin, Δy, ymax = 0.0, 10.0, 1000.0
-h = 1.0
 
 xs = xmin:Δx:xmax
 ys = ymin:Δy:ymax
 
-tmax = 60.0
-Δt = 1.0
+tmax = 80.0
+Δt = 2.0
 
 # General parameters
-ϕ = 0.3                         # Porosity
+ϕ = 0.20                        # Porosity
 μ = 5.0e-4 / (3600.0 * 24.0)    # Viscosity, Pa⋅day
-c = 1.0e-8                      # Compressibility, Pa^-1
+c = 1.0e-9                      # Compressibility, Pa^-1
 u0 = 2.0e7                      # Initial pressure, Pa
 
-q_ps = 30.0 / (Δx * Δy * h)     # Producer rate, (m^3 / day) / m^3
-q_is = 0.0 / (Δx * Δy * h)      # Injector rate, (m^3 / day) / m^3 
+q_ps = 80.0 / (Δx * Δy)^2       # Producer rate, (m^3 / day) / m^3
+q_is = 0.0 / (Δx * Δy)^2        # Injector rate, (m^3 / day) / m^3 
 
 grid = TransientGrid(xs, ys, tmax, Δt, μ, ϕ, c)
 
@@ -58,7 +57,7 @@ q(x, y, t) = sum(well_rate(w, x, y, t) for w ∈ wells)
 σ, γx, γy = 0.5, 100, 100
 k = ARDExpSquaredKernel(σ, γx, γy)
 
-logμ = -14.0
+logμ = -15.0
 p = GaussianPrior(logμ, k, grid.xs, grid.ys)
 
 logps = reshape(rand(p), grid.nx, grid.ny)
@@ -85,7 +84,7 @@ if animate
                 ylabel=L"y \, \textrm{(m)}"
             ),
             plot(
-                well_us[1:i], 
+                grid.ts[1:i], well_us[1:i], 
                 size=(500, 500), 
                 xlims=(0, tmax),
                 ylims=extrema(well_us),
