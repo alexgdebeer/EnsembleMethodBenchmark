@@ -17,10 +17,10 @@ animate = true
 xmin, xmax = 0.0, 1000.0
 ymin, ymax = 0.0, 1000.0
 
-Δx_c, Δy_c = 50.0, 50.0
-Δx_f, Δy_f = 50.0, 50.0
+Δx_c, Δy_c = 20.0, 20.0
+Δx_f, Δy_f = 20.0, 20.0
 
-tmax = 90.0
+tmax = 80.0
 Δt = 2.0
 
 # General parameters
@@ -38,24 +38,30 @@ q_is_c = 00.0 / (Δx_c * Δy_c)       # Injector rate, (m^3 / day) / m^3
 q_ps_f = 20.0 / (Δx_f * Δy_f)       # Producer rate, (m^3 / day) / m^3
 q_is_f = 00.0 / (Δx_f * Δy_f)       # Injector rate, (m^3 / day) / m^3 
 
+well_r = 30.0
+
+well_cs = [
+    [200, 200], [200, 500], [200, 800],
+    [500, 200], [500, 500], [500, 800],
+    [800, 200], [800, 500], [800, 800],
+    [350, 350], [350, 650], [650, 350], [650, 650]
+]
+
+well_ts = [
+    [00, 40], [00, 40], [00, 40],
+    [00, 40], [00, 40], [00, 40],
+    [00, 40], [00, 40], [00, 40],
+    [40, 80], [40, 80], [40, 80], [40, 80]
+]
+
 wells_c = [
-    BumpWell(grid_c, 200, 200, 30, 0, 30, -q_ps_c),
-    BumpWell(grid_c, 200, 800, 30, 30, 60, -q_ps_c),
-    BumpWell(grid_c, 800, 800, 30, 0, 30, -q_ps_c),
-    BumpWell(grid_c, 800, 200, 30, 30, 60, -q_ps_c),
-    BumpWell(grid_c, 500, 500, 30, 0, 60, -q_ps_c)
+    BumpWell(grid_c, cs..., well_r, ts..., -q_ps_f) 
+    for (cs, ts) ∈ zip(well_cs, well_ts)
 ]
 
 wells_f = [
-    BumpWell(grid_f, 200, 200, 30, 00, 30, -q_ps_f),
-    BumpWell(grid_f, 200, 500, 30, 00, 30, -q_ps_f),
-    BumpWell(grid_f, 200, 800, 30, 00, 30, -q_ps_f),
-    BumpWell(grid_f, 500, 200, 30, 30, 60, -q_ps_f),
-    BumpWell(grid_f, 500, 500, 30, 30, 60, -q_ps_f),
-    BumpWell(grid_f, 500, 800, 30, 30, 60, -q_ps_f),
-    BumpWell(grid_f, 800, 200, 30, 60, 90, -q_ps_f),
-    BumpWell(grid_f, 800, 500, 30, 60, 90, -q_ps_f),
-    BumpWell(grid_f, 800, 800, 30, 60, 90, -q_ps_f)
+    BumpWell(grid_f, cs..., well_r, ts..., -q_ps_f) 
+    for (cs, ts) ∈ zip(well_cs, well_ts)
 ]
 
 q_c(x, y, t) = sum(well_rate(w, x, y, t) for w ∈ wells_c)
@@ -74,7 +80,7 @@ bcs = Dict(
 # ----------------
 
 logμ_p = -14.0
-σ_p = 0.2
+σ_p = 0.5
 γx_p, γy_p = 100, 100
 k = ARDExpSquaredKernel(σ_p, γx_p, γy_p)
 
@@ -111,7 +117,7 @@ end
 
 xs_o = [200, 500, 800]
 ys_o = [200, 500, 800]
-ts_o = [6, 11, 16, 21]
+ts_o = [6, 11, 16, 21, 26, 31, 36]
 n_obs = length(xs_o) * length(ys_o) * length(ts_o)
 
 σ_ϵ = u0 * 0.01
