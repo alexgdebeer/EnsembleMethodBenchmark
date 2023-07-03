@@ -20,7 +20,7 @@ ymin, ymax = 0.0, 1000.0
 Δx_c, Δy_c = 50.0, 50.0
 Δx_f, Δy_f = 50.0, 50.0
 
-tmax = 80.0
+tmax = 90.0
 Δt = 2.0
 
 # General parameters
@@ -43,15 +43,19 @@ wells_c = [
     BumpWell(grid_c, 200, 800, 30, 30, 60, -q_ps_c),
     BumpWell(grid_c, 800, 800, 30, 0, 30, -q_ps_c),
     BumpWell(grid_c, 800, 200, 30, 30, 60, -q_ps_c),
-    BumpWell(grid_c, 500, 500, 30, 0, 60, q_is_c)
+    BumpWell(grid_c, 500, 500, 30, 0, 60, -q_ps_c)
 ]
 
 wells_f = [
-    BumpWell(grid_f, 200, 200, 30, 0, 30, -q_ps_f),
-    BumpWell(grid_f, 200, 800, 30, 30, 60, -q_ps_f),
-    BumpWell(grid_f, 800, 800, 30, 0, 30, -q_ps_f),
-    BumpWell(grid_f, 800, 200, 30, 30, 60, -q_ps_f),
-    BumpWell(grid_f, 500, 500, 30, 0, 60, q_is_f)
+    BumpWell(grid_f, 200, 200, 30, 00, 30, -q_ps_f),
+    BumpWell(grid_f, 200, 500, 30, 00, 30, -q_ps_f),
+    BumpWell(grid_f, 200, 800, 30, 00, 30, -q_ps_f),
+    BumpWell(grid_f, 500, 200, 30, 30, 60, -q_ps_f),
+    BumpWell(grid_f, 500, 500, 30, 30, 60, -q_ps_f),
+    BumpWell(grid_f, 500, 800, 30, 30, 60, -q_ps_f),
+    BumpWell(grid_f, 800, 200, 30, 60, 90, -q_ps_f),
+    BumpWell(grid_f, 800, 500, 30, 60, 90, -q_ps_f),
+    BumpWell(grid_f, 800, 800, 30, 60, 90, -q_ps_f)
 ]
 
 q_c(x, y, t) = sum(well_rate(w, x, y, t) for w ∈ wells_c)
