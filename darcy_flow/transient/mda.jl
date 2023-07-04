@@ -2,7 +2,7 @@ using SimIntensiveInference
 
 include("setup.jl")
 
-Ni = 8
+Ni = 4
 Ne = 100
 
 θs, us, αs = run_es_mda(f, g, p, L, Ni, Ne)
