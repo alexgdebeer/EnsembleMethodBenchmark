@@ -9,8 +9,8 @@ include("../setup/setup.jl")
 
 seed!(16)
 
-xmin, Δx, xmax = 0.0, 0.02, 1.0
-ymin, Δy, ymax = 0.0, 0.02, 1.0
+xmin, Δx, xmax = 0.0, 0.05, 1.0
+ymin, Δy, ymax = 0.0, 0.05, 1.0
 
 xs = xmin:Δx:xmax
 ys = ymin:Δy:ymax

@@ -1,11 +1,11 @@
 using SimIntensiveInference
 
-include("steadystate_channel.jl")
+include("setup.jl")
 
-Ni = 8
-Ne = 100
+Ni = 4
+Ne = 50
 
-θs, us, αs = run_es_mda(f, g, p, L, Ni, Ne)
+θs, us, αs = run_es_mda(f, g, p, L, Ni, Ne)#, α_method=:constant)
 
 # logps = θs[1:end,:,:]
 # μ_post = reshape(mean(logps[:,:,end], dims=2), grid.nx, grid.ny)
@@ -15,19 +15,19 @@ logps_post = reduce(hcat, get_perms(p, θ) for θ ∈ eachcol(θs[:,:,end]))
 μ_post = reshape(mean(logps_post, dims=2), grid.nx, grid.ny)
 σ_post = reshape(std(logps_post, dims=2), grid.nx, grid.ny)
 
-plot(
-    heatmap(reshape(logps_pri[:,3], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
-    heatmap(reshape(logps_pri[:,4], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
-    heatmap(reshape(logps_pri[:,5], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
-    heatmap(reshape(logps_pri[:,6], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
-    heatmap(reshape(logps_pri[:,7], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
-    heatmap(reshape(logps_post[:,3], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
-    heatmap(reshape(logps_post[:,4], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
-    heatmap(reshape(logps_post[:,5], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
-    heatmap(reshape(logps_post[:,6], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
-    heatmap(reshape(logps_post[:,7], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
-    axis=([], false), layout=(2, 5), size=(1000, 400)
-)
+# plot(
+#     heatmap(reshape(logps_pri[:,3], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
+#     heatmap(reshape(logps_pri[:,4], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
+#     heatmap(reshape(logps_pri[:,5], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
+#     heatmap(reshape(logps_pri[:,6], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
+#     heatmap(reshape(logps_pri[:,7], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
+#     heatmap(reshape(logps_post[:,3], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
+#     heatmap(reshape(logps_post[:,4], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
+#     heatmap(reshape(logps_post[:,5], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
+#     heatmap(reshape(logps_post[:,6], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
+#     heatmap(reshape(logps_post[:,7], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
+#     axis=([], false), layout=(2, 5), size=(1000, 400)
+# )
 
 # anim = @animate for i ∈ 1:Ni+10
 
