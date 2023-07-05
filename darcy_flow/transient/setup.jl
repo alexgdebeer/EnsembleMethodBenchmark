@@ -17,15 +17,15 @@ animate = true
 xmin, xmax = 0.0, 1000.0
 ymin, ymax = 0.0, 1000.0
 
-Δx_c, Δy_c = 50.0, 50.0
-Δx_f, Δy_f = 50.0, 50.0
+Δx_c, Δy_c = 20.0, 20.0
+Δx_f, Δy_f = 10.0, 10.0
 
 tmax = 80.0
 Δt = 5.0
 
 # General parameters
 ϕ = 0.30                            # Porosity
-μ = 5.0 * 1e-4 / (3600.0 * 24.0)    # Viscosity (Pa⋅day)
+μ = 0.5 * 1e-3 / (3600.0 * 24.0)    # Viscosity (Pa⋅day)
 c = 1.0e-4 / 6895.0                 # Compressibility (Pa^-1)
 u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 
@@ -44,20 +44,18 @@ well_r = 30.0
 well_cs = [
     (150, 150), (150, 500), (150, 850),
     (500, 150), (500, 500), (500, 850),
-    (850, 150), (850, 500), (850, 850),
-    # [350, 350], [350, 650], [650, 350], [650, 650]
+    (850, 150), (850, 500), (850, 850)
 ]
 
 # Times wells are active during
 well_ts = [
     (00, 40), (40, 80), (00, 40),
     (40, 80), (00, 40), (40, 80),
-    (00, 40), (40, 80), (00, 40),
-    # [40, 80], [40, 80], [40, 80], [40, 80]
+    (00, 40), (40, 80), (00, 40)
 ]
 
 wells_c = [
-    BumpWell(grid_c, cs..., well_r, ts..., -q_ps_f) 
+    BumpWell(grid_c, cs..., well_r, ts..., -q_ps_c) 
     for (cs, ts) ∈ zip(well_cs, well_ts)
 ]
 
@@ -81,10 +79,10 @@ bcs = Dict(
 # Prior generation
 # ----------------
 
-logμ_p = -13.5
+logμ_p = -13.0
 σ_p = 0.5
-γx_p, γy_p = 100, 100
-k = ARDExpSquaredKernel(σ_p, γx_p, γy_p)
+γ_p = 150
+k = ExpSquaredKernel(σ_p, γ_p)
 
 p = GaussianPrior(logμ_p, k, grid_c.xs, grid_c.ys)
 

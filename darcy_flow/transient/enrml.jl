@@ -2,7 +2,7 @@ using SimIntensiveInference
 
 include("setup.jl")
 
-Ne = 25
+Ne = 100
 γ = 10
 i_max = 8
 
