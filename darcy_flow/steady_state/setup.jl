@@ -9,13 +9,14 @@ include("../setup/setup.jl")
 
 seed!(16)
 
-xmin, Δx, xmax = 0.0, 0.05, 1.0
-ymin, Δy, ymax = 0.0, 0.05, 1.0
+xmin, xmax = 0.0, 1.0
+ymin, ymax = 0.0, 1.0
 
-xs = xmin:Δx:xmax
-ys = ymin:Δy:ymax
+Δx_f, Δy_f = 0.01, 0.01
+Δx_c, Δy_c = 0.02, 0.02
 
-grid = SteadyStateGrid(xs, ys)
+grid_f = SteadyStateGrid(xmin:Δx_f:xmax, ymin:Δy_f:ymax)
+grid_c = SteadyStateGrid(xmin:Δx_c:xmax, ymin:Δy_c:ymax)
 
 bcs = Dict(
     :x0 => BoundaryCondition(:x0, :neumann, (x, y) -> 0.0), 
@@ -36,26 +37,30 @@ a_bnds = [0.05, 0.2]
 p_bnds = [0.4, 1.0]
 w_bnds = [0.05, 0.2]
 
-μ_o = -1.0
+μ_o = 0.0
 μ_i = 2.0
 
-k_o = ExpSquaredKernel(0.5, 0.1)
-k_i = ExpKernel(0.5, 0.1)
+k_o = ExpSquaredKernel(0.25, 0.1)
+k_i = ExpKernel(0.25, 0.1)
 
 p = ChannelPrior(
     m_bnds, c_bnds, a_bnds, p_bnds, w_bnds,
-    μ_o, μ_i, k_o, k_i, xs, ys
+    μ_o, μ_i, k_o, k_i, grid_c.xs, grid_c.ys
 )
 
 # ----------------
 # Data generation
 # ----------------
 
-# Sample the true set of parameters from the prior
-θs_t = rand(p)
-logps_t = reshape(get_perms(p, θs_t), grid.nx, grid.ny)
+# Sample the true set of parameters from a scaled version of the prior
+θs_t_dist = ChannelPrior(
+    m_bnds, c_bnds, a_bnds, p_bnds, w_bnds,
+    μ_o, μ_i, k_o, k_i, grid_f.xs, grid_f.ys
+)
+θs_t = rand(θs_t_dist)
+logps_t = reshape(get_perms(θs_t_dist, θs_t), grid_f.nx, grid_f.ny)
 ps_t = exp.(logps_t)
-us_t = solve(grid, ps_t, bcs, q)
+us_t = solve(grid_f, ps_t, bcs, q)
 
 # Define the observation locations
 x_locs = 0.1:0.2:0.9
@@ -67,7 +72,7 @@ n_obs = length(x_locs) * length(y_locs)
 Γ_ϵ = σ_ϵ_t^2 * Matrix(1.0I, n_obs, n_obs)
 ϵ_dist = MvNormal(Γ_ϵ)
 
-xs_o, ys_o, us_o = generate_data(grid, us_t, x_locs, y_locs, ϵ_dist)
+xs_o, ys_o, us_o = generate_data(grid_f, us_t, x_locs, y_locs, ϵ_dist)
 
 # ----------------
 # Likelihood setup 
@@ -83,8 +88,8 @@ function f(
 )::AbstractMatrix
 
     logps = get_perms(p, θs)
-    ps = reshape(exp.(logps), grid.nx, grid.ny)
-    us = solve(grid, ps, bcs, q)
+    ps = reshape(exp.(logps), grid_c.nx, grid_c.ny)
+    us = solve(grid_c, ps, bcs, q)
 
     return us
 
@@ -95,7 +100,7 @@ function g(
     us::AbstractMatrix
 )::AbstractVector 
 
-    us = interpolate((grid.xs, grid.ys), us, Gridded(Linear()))
+    us = interpolate((grid_c.xs, grid_c.ys), us, Gridded(Linear()))
     return [us(x, y) for (x, y) ∈ zip(xs_o, ys_o)]
 
 end

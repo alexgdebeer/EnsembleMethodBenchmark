@@ -2,8 +2,8 @@ using SimIntensiveInference
 
 include("setup.jl")
 
-Ni = 4
-Ne = 50
+Ni = 8
+Ne = 100
 
 θs, us, αs = run_es_mda(f, g, p, L, Ni, Ne)#, α_method=:constant)
 
@@ -12,8 +12,8 @@ Ne = 50
 
 logps_pri = reduce(hcat, get_perms(p, θ) for θ ∈ eachcol(θs[:,:,1]))
 logps_post = reduce(hcat, get_perms(p, θ) for θ ∈ eachcol(θs[:,:,end]))
-μ_post = reshape(mean(logps_post, dims=2), grid.nx, grid.ny)
-σ_post = reshape(std(logps_post, dims=2), grid.nx, grid.ny)
+μ_post = reshape(mean(logps_post, dims=2), grid_c.nx, grid_c.ny)
+σ_post = reshape(std(logps_post, dims=2), grid_c.nx, grid_c.ny)
 
 # plot(
 #     heatmap(reshape(logps_pri[:,3], grid.nx, grid.ny)', cmap=:turbo, clim=(-2.0, 3.0), aspect_ratio=:equal, colorbar=:none),
