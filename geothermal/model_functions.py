@@ -1,4 +1,3 @@
-from enum import Enum
 import h5py
 import json
 import layermesh.mesh as lm
@@ -8,14 +7,6 @@ import yaml
 
 plt.rc("text", usetex=True)
 plt.rc("font", family="serif")
-
-
-class ExitFlag(Enum):
-
-    success = 1
-    max_its = 2
-    aborted = 3
-    unknown = 4
 
 
 def build_base_model(
@@ -115,7 +106,8 @@ def build_model(model_folder, base_model_name, model_name, permeabilities):
         model = json.load(f)
 
     for rt in model["rock"]["types"]:
-        rt["permeability"] = permeabilities[rt["cells"][0]]
+        perm_x, perm_z = permeabilities[rt["cells"][0], :]
+        rt["permeability"] = [perm_x, perm_x, perm_z]
 
     model["output"]["filename"] = f"{model_folder}/{model_name}.h5"
 
@@ -123,30 +115,30 @@ def build_model(model_folder, base_model_name, model_name, permeabilities):
         json.dump(model, f, indent=2, sort_keys=True)
 
 
-def run_model(fname):
+def run_model(model_path):
 
     env = pywaiwera.docker.DockerEnv()
-    env.run_waiwera(fname, noupdate=True)
+    env.run_waiwera(f"{model_path}.json", noupdate=True)
 
 
-def run_info(log_fname):
+def run_info(model_path):
 
-    with open(log_fname, "r") as f:
+    with open(f"{model_path}.yaml", "r") as f:
         log = yaml.safe_load(f)
 
     for msg in log[:-20:-1]:
 
         if msg[:3] == ["info", "timestep", "end_time_reached"]:
-            return ExitFlag.success
+            return "success"
         
         elif msg[:3] == ["info", "timestep", "stop_size_maximum_reached"]:
-            return ExitFlag.success
+            return "success"
 
         elif msg[:3] == ["info", "timestep", "max_timesteps_reached"]:
-            return ExitFlag.max_its
+            return "max_its"
 
         elif msg[:3] == ["warn", "timestep", "aborted"]:
-            return ExitFlag.aborted
+            return "aborted"
 
     raise Exception("Unknown exit condition encountered. Check the log.")
     # return ExitFlag.unknown
