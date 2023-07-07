@@ -6,3 +6,9 @@
 *.jld2
 *.pdf
 *.txt
+
+# Geothermal model files
+*.h5
+*.json
+*.exo
+*.yaml
