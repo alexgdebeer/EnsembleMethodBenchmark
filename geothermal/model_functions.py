@@ -1,11 +1,21 @@
+from enum import Enum
 import json
 import layermesh.mesh as lm
 import pywaiwera
+import yaml
+
+class ExitFlag(Enum):
+
+    success = 1
+    max_its = 2
+    aborted = 3
+    unknown = 4
+
 
 def build_base_model(
         xmax, ymax, zmax, nx, ny, nz,
         P_atm=1.0e+5, T_atm=20.0, P0=1.0e+5, T0=20.0, 
-        permeability=0.5, porosity=0.25,
+        permeability=1.0e-14, porosity=0.25,
         mesh_name="g2D", model_name="2D_base", model_folder="geothermal/models"
     ):
 
@@ -88,7 +98,31 @@ def build_base_model(
     with open(f"{model_folder}/{model_name}.json", "w") as f:
         json.dump(model, f, indent=2, sort_keys=True)
 
+
 def run_model(fname):
 
     env = pywaiwera.docker.DockerEnv()
     env.run_waiwera(fname, noupdate=True)
+
+
+def run_info(log_fname):
+
+    with open(log_fname, "r") as f:
+        log = yaml.safe_load(f)
+
+    for msg in log[:-20:-1]:
+
+        if msg[:3] == ["info", "timestep", "end_time_reached"]:
+            return ExitFlag.success
+        
+        elif msg[:3] == ["info", "timestep", "stop_size_maximum_reached"]:
+            return ExitFlag.success
+
+        elif msg[:3] == ["info", "timestep", "max_timesteps_reached"]:
+            return ExitFlag.max_its
+
+        elif msg[:3] == ["warn", "timestep", "aborted"]:
+            return ExitFlag.aborted
+
+    raise Exception("Unknown exit condition encountered. Check the log.")
+    # return ExitFlag.unknown

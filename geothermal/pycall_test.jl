@@ -1,7 +1,6 @@
 using PyCall
 
-@pyinclude "geothermal/model_generation.py"
-@pyinclude "geothermal/model_running.py"
+@pyinclude "geothermal/model_functions.py"
 
 model_folder = "geothermal/models"
 mesh_name = "g2D"
@@ -14,3 +13,4 @@ zmax, nz = 1000.0, 20
 
 py"build_base_model"(xmax, ymax, zmax, nx, ny, nz)
 py"run_model"("$(model_folder)/$(model_name).json")
+flag = py"run_info"("$(model_folder)/$(model_name).yaml")
