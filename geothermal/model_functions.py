@@ -9,12 +9,9 @@ plt.rc("text", usetex=True)
 plt.rc("font", family="serif")
 
 
-def build_base_model(
-        xmax, ymax, zmax, nx, ny, nz,
-        mesh_name, model_name, model_folder,
-        P_atm=1.0e+5, T_atm=20.0, P0=1.0e+5, T0=20.0, 
-        permeability=1.0e-14, porosity=0.25
-    ):
+def build_base_model(xmax, ymax, zmax, nx, ny, nz, mesh_name, model_name, \
+                     model_folder, P_atm=1.0e+5, T_atm=20.0, P0=1.0e+5, \
+                     T0=20.0, permeability=1.0e-14, porosity=0.25):
 
     dx = xmax / nx
     dy = ymax / ny
@@ -43,7 +40,7 @@ def build_base_model(
     model["rock"] = {"types" : [
         {
             "name" : f"{c.index}", 
-            "permeability" : permeability, 
+            "permeability" : [permeability] * 3,
             "porosity" : porosity, 
             "cells" : [c.index],
             "wet_conductivity" : 2.5,
@@ -87,7 +84,7 @@ def build_base_model(
                 "minimum" : 5, 
                 "maximum" : 8
             }, 
-            "maximum" : {"number" : 10_000},
+            "maximum" : {"number" : 1_000},
             "method" : "beuler",
             "stop" : {"size" : {"maximum" : 1.0e+15}}
         }
@@ -115,9 +112,9 @@ def build_model(model_folder, base_model_name, model_name, permeabilities):
         json.dump(model, f, indent=2, sort_keys=True)
 
 
-def run_model(model_path):
+def run_model(model_path, debug=False):
 
-    env = pywaiwera.docker.DockerEnv()
+    env = pywaiwera.docker.DockerEnv(check=debug, verbose=debug)
     env.run_waiwera(f"{model_path}.json", noupdate=True)
 
 
@@ -144,10 +141,8 @@ def run_info(model_path):
     # return ExitFlag.unknown
 
 
-def slice_plot(
-        model_folder, mesh_name, quantity, 
-        value_label="log(Permeability)", value_unit="m$^2$"
-    ):
+def slice_plot(model_folder, mesh_name, quantity, cmap="coolwarm",
+               value_label="log(Permeability)", value_unit="m$^2$"):
 
     mesh = lm.mesh(f"{model_folder}/{mesh_name}.h5")
 
@@ -155,9 +150,9 @@ def slice_plot(
         value=quantity, 
         value_label=value_label,
         value_unit=value_unit,
-        colourmap="coolwarm",
+        colourmap=cmap,
         xlabel="$x$ (m)",
-        ylabel="$y$ (m)"
+        ylabel="$z$ (m)"
     )
 
 
