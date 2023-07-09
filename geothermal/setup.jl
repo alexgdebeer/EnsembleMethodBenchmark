@@ -53,7 +53,6 @@ function f(θs::AbstractVector)::Union{AbstractMatrix, Symbol}
 
     mass_rate = get_mass_rate(p, θs)
     logps = get_perms(p, θs)
-    print(mass_rate)
     ps = reshape(10 .^ logps, n_blocks, 2)
 
     model_name = "SQ$(n_blocks)_$(model_num)"
@@ -92,8 +91,8 @@ end
 mass_rate_bnds = [2e-3, 6e-3]
 logμ_reg = -14.0
 logμ_cap = -16.0
-k_reg = ARDExpSquaredKernel(0.5, 1000, 100)
-k_cap = ARDExpSquaredKernel(0.25, 1000, 100)
+k_reg = ARDExpSquaredKernel(0.5, 1500, 100)
+k_cap = ARDExpSquaredKernel(0.25, 1500, 100)
 ρ_xz = 0.8
 level_width = 0.25
 
