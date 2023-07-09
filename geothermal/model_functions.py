@@ -34,16 +34,21 @@ def build_base_model(
     ]
 
     model = {
-        "title" : "Simple 2D model",
-        "eos" : {"name" : "we"}
+        "eos" : {"name" : "we"},
+        "gravity" : 9.81,
+        "logfile" : {"echo" : False},
+        "mesh" : {
+            "filename" : f"{model_folder}/{mesh_name}.msh", 
+            "thickness" : dy
+        },
+        "output" : {
+            "filename" : f"{model_folder}/{model_name}.h5",
+            "frequency": 0, 
+            "initial": False, 
+            "final": True
+        },
+        "title" : "Simple 2D model"
     }
-
-    model["mesh"] = {
-        "filename" : f"{model_folder}/{mesh_name}.msh", 
-        "thickness" : dy
-    }
-
-    model["gravity"] = 9.81
 
     model["rock"] = {"types" : [
         {
@@ -73,7 +78,6 @@ def build_base_model(
         print("Warning: initial condition file not found.")
         model["initial"] = {"primary" : [P0, T0], "region" : 1}
 
-    # Define atmosphere boundary condition
     model["boundaries"] = [{
         "primary": [P_atm, T_atm], 
         "region": 1,
@@ -97,15 +101,6 @@ def build_base_model(
             "stop" : {"size" : {"maximum" : 1.0e+15}}
         }
     }
-
-    model["output"] = {
-        "filename" : f"{model_folder}/{model_name}.h5",
-        "frequency": 0, 
-        "initial": False, 
-        "final": True
-    }
-
-    model["logfile"] = {"echo" : False}
 
     with open(f"{model_folder}/{model_name}.json", "w") as f:
         json.dump(model, f, indent=2, sort_keys=True)
