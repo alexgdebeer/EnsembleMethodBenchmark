@@ -34,41 +34,41 @@ def build_base_model(
     ]
 
     model = {
-        "eos" : {"name" : "we"},
-        "gravity" : 9.81,
-        "logfile" : {"echo" : False},
-        "mesh" : {
-            "filename" : f"{model_folder}/{mesh_name}.msh", 
-            "thickness" : dy
+        "eos": {"name" : "we"},
+        "gravity": 9.81,
+        "logfile": {"echo" : False},
+        "mesh": {
+            "filename": f"{model_folder}/{mesh_name}.msh", 
+            "thickness": dy
         },
         "output" : {
-            "filename" : f"{model_folder}/{model_name}.h5",
+            "filename": f"{model_folder}/{model_name}.h5",
             "frequency": 0, 
             "initial": False, 
             "final": True
         },
-        "title" : "Simple 2D model"
+        "title": "Simple 2D model"
     }
 
     model["rock"] = {"types" : [
         {
-            "name" : f"{c.index}", 
-            "permeability" : [permeability] * 3,
-            "porosity" : porosity, 
-            "cells" : [c.index],
-            "wet_conductivity" : 2.5,
-            "dry_conductivity" : 2.5,
-            "density" : 2.5e+3,
-            "specific_heat" : 1.0e+3
+            "name": f"{c.index}", 
+            "permeability": [permeability] * 3,
+            "porosity": porosity, 
+            "cells": [c.index],
+            "wet_conductivity": 2.5,
+            "dry_conductivity": 2.5,
+            "density": 2.5e+3,
+            "specific_heat": 1.0e+3
         }
         for c in mesh.cell
     ]}
 
     model["source"] = [
         {
-            "component" : "energy",
-            "rate" : 1.0e+3,
-            "cells" : heat_cells
+            "component": "energy",
+            "rate": 1.0e+3,
+            "cells": heat_cells
         }
     ]
 
@@ -76,29 +76,29 @@ def build_base_model(
         model["initial"] = {"filename": f"{model_folder}/{model_name}_incon.h5"}
     else:
         print("Warning: initial condition file not found.")
-        model["initial"] = {"primary" : [P0, T0], "region" : 1}
+        model["initial"] = {"primary": [P0, T0], "region": 1}
 
     model["boundaries"] = [{
         "primary": [P_atm, T_atm], 
         "region": 1,
         "faces": {
-            "cells" : [c.index for c in mesh.surface_cells],
-            "normal" : [0, 1]
+            "cells": [c.index for c in mesh.surface_cells],
+            "normal": [0, 1]
         }
     }]
 
     model["time"] = {
-        "step" : {
-            "size" : 1.0e+6,
-            "adapt" : {
-                "on" : True,
-                "method" : "iteration",
-                "minimum" : 5, 
-                "maximum" : 8
+        "step": {
+            "size": 1.0e+6,
+            "adapt": {
+                "on": True,
+                "method": "iteration",
+                "minimum": 5, 
+                "maximum": 8
             }, 
-            "maximum" : {"number" : 1_000},
-            "method" : "beuler",
-            "stop" : {"size" : {"maximum" : 1.0e+15}}
+            "maximum": {"number": 1_000},
+            "method": "beuler",
+            "stop": {"size": {"maximum": 1.0e+15}}
         }
     }
 
