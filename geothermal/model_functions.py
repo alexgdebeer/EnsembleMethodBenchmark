@@ -10,9 +10,12 @@ plt.rc("text", usetex=True)
 plt.rc("font", family="serif")
 
 
-def build_base_model(xmax, ymax, zmax, nx, ny, nz, mesh_name, model_name, \
-                     model_folder, P_atm=1.0e+5, T_atm=20.0, P0=1.0e+5, \
-                     T0=20.0, permeability=1.0e-14, porosity=0.25):
+def build_base_model(
+    xmax, ymax, zmax, nx, ny, nz, 
+    mesh_name, model_name, model_folder, mass_cols, 
+    P_atm=1.0e+5, T_atm=20.0, P0=1.0e+5, T0=20.0, 
+    permeability=1.0e-14, porosity=0.25
+):
 
     dx = xmax / nx
     dy = ymax / ny
@@ -25,6 +28,10 @@ def build_base_model(xmax, ymax, zmax, nx, ny, nz, mesh_name, model_name, \
     mesh = lm.mesh(rectangular=(dxs, dys, dzs))
     mesh.write(f"{model_folder}/{mesh_name}.h5")
     mesh.export(f"{model_folder}/{mesh_name}.msh", fmt="gmsh22")
+
+    heat_cells = [
+        c.cell[-1].index for c in mesh.column if c.index not in mass_cols
+    ]
 
     model = {
         "title" : "Simple 2D model",
@@ -52,22 +59,11 @@ def build_base_model(xmax, ymax, zmax, nx, ny, nz, mesh_name, model_name, \
         for c in mesh.cell
     ]}
 
-    # TODO: make this an input
-    mass_inds = [8, 9, 10, 11]
-    mass_cells = [c.cell[-1].index for c in mesh.column if c.index in mass_inds]
-    heat_cells = [c.cell[-1].index for c in mesh.column if c.index not in mass_inds]
-
     model["source"] = [
         {
             "component" : "energy",
             "rate" : 1.0e+3,
             "cells" : heat_cells
-        },
-        {
-            "component" : "water",
-            "enthalpy" : 1.0e+7, 
-            "rate" : 0.001,
-            "cells" : mass_cells
         }
     ]
 
@@ -115,10 +111,20 @@ def build_base_model(xmax, ymax, zmax, nx, ny, nz, mesh_name, model_name, \
         json.dump(model, f, indent=2, sort_keys=True)
 
 
-def build_model(model_folder, base_model_name, model_name, permeabilities):
+def build_model(
+    model_folder, base_model_name, model_name, 
+    mass_rate, mass_cells, permeabilities
+):
 
     with open(f"{model_folder}/{base_model_name}.json", "r") as f:
         model = json.load(f)
+
+    model["source"].append({
+        "component" : "water",
+        "enthalpy" : 1.0e+7, 
+        "rate" : mass_rate / len(mass_cells),
+        "cells" : list([int(c) for c in mass_cells])
+    })
 
     for rt in model["rock"]["types"]:
         perm_x, perm_z = permeabilities[rt["cells"][0], :]
@@ -128,6 +134,12 @@ def build_model(model_folder, base_model_name, model_name, permeabilities):
 
     with open(f"{model_folder}/{model_name}.json", "w") as f:
         json.dump(model, f, indent=2, sort_keys=True)
+
+
+def get_mass_cells(mesh_name, model_folder, mass_cols):
+    
+    m = lm.mesh(f"{model_folder}/{mesh_name}.h5")
+    return [c.cell[-1].index for c in m.column if c.index in mass_cols]
 
 
 def run_model(model_path, debug=False):
