@@ -23,7 +23,7 @@ def build_base_model(xmax, ymax, zmax, nx, ny, nz, mesh_name, model_name, \
 
     mesh = lm.mesh(rectangular=(dxs, dys, dzs))
     mesh.write(f"{model_folder}/{mesh_name}.h5")
-    mesh.export(f"{model_folder}/{mesh_name}.exo")
+    mesh.export(f"{model_folder}/{mesh_name}.msh", fmt="gmsh22")
 
     model = {
         "title" : "Simple 2D model",
@@ -31,7 +31,7 @@ def build_base_model(xmax, ymax, zmax, nx, ny, nz, mesh_name, model_name, \
     }
 
     model["mesh"] = {
-        "filename" : f"{model_folder}/{mesh_name}.exo", 
+        "filename" : f"{model_folder}/{mesh_name}.msh", 
         "thickness" : dy
     }
 
