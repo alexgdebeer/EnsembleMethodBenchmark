@@ -88,6 +88,7 @@ end
 # Prior setup
 # ----------------
 
+cap_bnds = [-300, -150]
 mass_rate_bnds = [2e-3, 6e-3]
 logμ_reg = -14.0
 logμ_cap = -16.0
@@ -97,6 +98,7 @@ k_cap = ARDExpSquaredKernel(0.25, 1500, 100)
 level_width = 0.25
 
 p = GeothermalPrior(
+    cap_bnds,
     mass_rate_bnds, 
     logμ_reg, logμ_cap, 
     k_reg, k_cap, 
