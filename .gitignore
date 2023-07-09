@@ -10,5 +10,5 @@
 # Geothermal model files
 *.h5
 *.json
-*.exo
+*.msh
 *.yaml
