@@ -2,6 +2,7 @@ import h5py
 import json
 import layermesh.mesh as lm
 import matplotlib.pyplot as plt
+import os
 import pywaiwera
 import yaml
 
@@ -51,19 +52,30 @@ def build_base_model(xmax, ymax, zmax, nx, ny, nz, mesh_name, model_name, \
         for c in mesh.cell
     ]}
 
-    inflow_cells = [mesh.column[n].cell[-1].index for n in [8, 9, 10, 11]]
+    # TODO: make this an input
+    mass_inds = [8, 9, 10, 11]
+    mass_cells = [c.cell[-1].index for c in mesh.column if c.index in mass_inds]
+    heat_cells = [c.cell[-1].index for c in mesh.column if c.index not in mass_inds]
 
-    model["source"] = [{
-        "component" : 1,
-        "enthalpy" : 1.0e+7, 
-        "rate" : 0.002,
-        "cells" : inflow_cells
-    }]
+    model["source"] = [
+        {
+            "component" : "energy",
+            "rate" : 1.0e+3,
+            "cells" : heat_cells
+        },
+        {
+            "component" : "water",
+            "enthalpy" : 1.0e+7, 
+            "rate" : 0.001,
+            "cells" : mass_cells
+        }
+    ]
 
-    model["initial"] = {
-        "primary" : [P0, T0],
-        "region" : 1
-    }
+    if os.path.isfile(f"{model_folder}/{model_name}_incon.h5"):
+        model["initial"] = {"filename": f"{model_folder}/{model_name}_incon.h5"}
+    else:
+        print("Warning: initial condition file not found.")
+        model["initial"] = {"primary" : [P0, T0], "region" : 1}
 
     # Define atmosphere boundary condition
     model["boundaries"] = [{
@@ -90,7 +102,13 @@ def build_base_model(xmax, ymax, zmax, nx, ny, nz, mesh_name, model_name, \
         }
     }
 
-    model["output"] = {"filename" : f"{model_folder}/{model_name}.h5"}
+    model["output"] = {
+        "filename" : f"{model_folder}/{model_name}.h5",
+        "frequency": 0, 
+        "initial": False, 
+        "final": True
+    }
+
     model["logfile"] = {"echo" : False}
 
     with open(f"{model_folder}/{model_name}.json", "w") as f:
