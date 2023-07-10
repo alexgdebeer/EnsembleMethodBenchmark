@@ -68,10 +68,10 @@ function f(θs::AbstractVector)::Union{AbstractMatrix, Symbol}
     py"run_model"(model_path)
 
     flag = py"run_info"(model_path)
-    flag != "success" && @info "Model failed. Flag: $(flag)."
+    flag != "success" && @warn "Model failed. Flag: $(flag)."
     flag != "success" && return :failure 
 
-    temps = reshape(py"get_temperatures"(model_path), nx, nz)
+    temps = reshape(py"get_quantity"(model_path, "fluid_temperature"), nx, nz)
     return temps
 
 end
@@ -117,8 +117,8 @@ ps_t = 10 .^ logps_t
 us_t = @time f(vec(θs_t))
 
 # Define the observation locations
-x_locs = 100:50:900
-z_locs = 100:50:900
+x_locs = 250:200:1250
+z_locs = 100:100:1200
 n_obs = length(x_locs) * length(z_locs)
 
 # Define the distribution of the observation noise

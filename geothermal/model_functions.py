@@ -124,8 +124,8 @@ def build_model(
     })
 
     for rt in model["rock"]["types"]:
-        perm_x, perm_z = permeabilities[rt["cells"][0], :]
-        rt["permeability"] = [perm_x, perm_x, perm_z]
+        px, pz = permeabilities[rt["cells"][0], :]
+        rt["permeability"] = [px, -1.0, pz]
 
     model["output"]["filename"] = f"{model_folder}/{model_name}.h5"
 
