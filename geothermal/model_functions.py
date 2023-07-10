@@ -29,6 +29,8 @@ def build_base_model(
     mesh.write(f"{model_folder}/{mesh_name}.h5")
     mesh.export(f"{model_folder}/{mesh_name}.msh", fmt="gmsh22")
 
+    incon_name = f"{model_folder}/{model_name}_incon.h5"
+
     heat_cells = [
         c.cell[-1].index for c in mesh.column if c.index not in mass_cols
     ]
@@ -72,8 +74,8 @@ def build_base_model(
         }
     ]
 
-    if os.path.isfile(f"{model_folder}/{model_name}_incon.h5"):
-        model["initial"] = {"filename": f"{model_folder}/{model_name}_incon.h5"}
+    if os.path.isfile(incon_name):
+        model["initial"] = {"filename": incon_name}
     else:
         print("Warning: initial condition file not found.")
         model["initial"] = {"primary": [P0, T0], "region": 1}
@@ -181,10 +183,8 @@ def slice_plot(model_folder, mesh_name, quantity, cmap="coolwarm",
     )
 
 
-def get_temperatures(model_path):
-    
+def get_quantity(model_path, q="fluid_temperature"):
+
     results = h5py.File(f"{model_path}.h5", "r")
     index = results["cell_index"][:, 0]
-
-    temps = results["cell_fields"]["fluid_temperature"][-1][index]
-    return temps
+    return results["cell_fields"][q][-1][index]
