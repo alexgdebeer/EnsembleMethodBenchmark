@@ -1,10 +1,10 @@
 include("setup.jl")
 
-Ne = 100
+Ne = 25
 γ = 10
 i_max = 10
 
-θs, us, Ss, λs, inds = run_lm_enrml(f, g, p, L, γ, i_max, Ne)
+θs, fs, us, Ss, λs, inds = run_lm_enrml(f, g, p, L, γ, i_max, Ne)
 
 logps_post = reduce(hcat, get_perms(p, θ) for θ ∈ eachcol(θs[:,:,end][:,inds]))
 

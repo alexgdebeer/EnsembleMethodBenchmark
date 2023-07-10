@@ -104,16 +104,15 @@ def build_base_model(
         }
     }
 
-    with open(f"{model_folder}/{model_name}.json", "w") as f:
+    with open(f"{model_folder}/{model_name}_base.json", "w") as f:
         json.dump(model, f, indent=2, sort_keys=True)
 
 
 def build_model(
-    model_folder, base_model_name, model_name, 
-    mass_rate, mass_cells, permeabilities
+    model_folder, model_name, mass_rate, mass_cells, permeabilities
 ):
 
-    with open(f"{model_folder}/{base_model_name}.json", "r") as f:
+    with open(f"{model_folder}/{model_name}_base.json", "r") as f:
         model = json.load(f)
 
     model["source"].append({

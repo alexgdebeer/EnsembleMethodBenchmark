@@ -5,12 +5,11 @@ using PyCall
 using Random
 using SimIntensiveInference
 
-Random.seed!(16)
+# Random.seed!(1)
 
-# TODO: adapt ensemble methods to account for model failures
 # TODO: extend things to production history
-# TODO: change the initial condition? 
 # Make a finer grid for the truth
+# Save the full modelled temperatures somewhere
 
 # ----------------
 # Base model setup
@@ -19,7 +18,7 @@ Random.seed!(16)
 @pyinclude "geothermal/model_functions.py"
 
 xmax, nx = 1500.0, 20
-ymax, ny = 50.0, 1
+ymax, ny = 75.0, 1
 zmax, nz = 1500.0, 20
 
 dx = xmax / nx
@@ -32,13 +31,14 @@ n_blocks = nx * nz
 
 model_folder = "geothermal/models"
 mesh_name = "gSQ$n_blocks"
-base_model_name = "SQ$n_blocks"
+model_name = "SQ$(n_blocks)"
+model_path = "$(model_folder)/$(model_name)"
 
-mass_cols = [9, 10, 11, 12]
+mass_cols = [9, 10]
 
 py"build_base_model"(
     xmax, ymax, zmax, nx, ny, nz, 
-    mesh_name, base_model_name, model_folder, mass_cols
+    mesh_name, model_name, model_folder, mass_cols
 )
 
 mass_cells = py"get_mass_cells"(mesh_name, model_folder, mass_cols)
@@ -49,38 +49,29 @@ mass_cells = py"get_mass_cells"(mesh_name, model_folder, mass_cols)
 
 global model_num = 1
 
-function f(θs::AbstractVector)::Union{AbstractMatrix, Symbol}
+function f(θs::AbstractVector)::Union{AbstractVector, Symbol}
 
     mass_rate = get_mass_rate(p, θs)
     logps = get_perms(p, θs)
     ps = reshape(10 .^ logps, n_blocks, 2)
-
-    model_name = "SQ$(n_blocks)_$(model_num)"
-    model_path = "$(model_folder)/$(model_name)"
-
-    global model_num += 1
     
-    py"build_model"(
-        model_folder, base_model_name, model_name, 
-        mass_rate, mass_cells, ps
-    )
-    
+    py"build_model"(model_folder, model_name, mass_rate, mass_cells, ps)
     py"run_model"(model_path)
 
     flag = py"run_info"(model_path)
     flag != "success" && @warn "Model failed. Flag: $(flag)."
     flag != "success" && return :failure 
 
-    temps = reshape(py"get_quantity"(model_path, "fluid_temperature"), nx, nz)
+    temps = py"get_quantity"(model_path, "fluid_temperature")
     return temps
 
 end
 
-function g(us::Union{AbstractMatrix, Symbol})
+function g(temps::Union{AbstractVector, Symbol})
 
-    us == :failure && return :failure
-    us = interpolate((xs, zs), us, Gridded(Linear()))
-    return [us(x, z) for (x, z) ∈ zip(xs_o, zs_o)]
+    temps == :failure && return :failure
+    temps = interpolate((xs, zs), reshape(temps, nx, nz), Gridded(Linear()))
+    return [temps(x, z) for (x, z) ∈ zip(xs_o, zs_o)]
 
 end
 
@@ -88,12 +79,12 @@ end
 # Prior setup
 # ----------------
 
-cap_bnds = [-300, -150]
-mass_rate_bnds = [2e-3, 6e-3]
+cap_bnds = [-224.5, -75.5]
+mass_rate_bnds = [10e-3, 15e-3]
 logμ_reg = -14.0
 logμ_cap = -16.0
-k_reg = ARDExpSquaredKernel(0.5, 1500, 100)
-k_cap = ARDExpSquaredKernel(0.25, 1500, 100)
+k_reg = ARDExpSquaredKernel(0.5, 1500, 150)
+k_cap = ARDExpSquaredKernel(0.25, 1500, 150)
 ρ_xz = 0.8
 level_width = 0.25
 
@@ -114,11 +105,11 @@ p = GeothermalPrior(
 θs_t = rand(p)
 logps_t = get_perms(p, θs_t)
 ps_t = 10 .^ logps_t
-us_t = @time f(vec(θs_t))
+us_t = reshape(f(vec(θs_t)), nx, nz)
 
 # Define the observation locations
 x_locs = 250:200:1250
-z_locs = 100:100:1200
+z_locs = 100:100:1400
 n_obs = length(x_locs) * length(z_locs)
 
 # Define the distribution of the observation noise
