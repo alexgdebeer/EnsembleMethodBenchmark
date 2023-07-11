@@ -5,7 +5,7 @@ using PyCall
 using Random
 using SimIntensiveInference
 
-# Random.seed!(1)
+Random.seed!(16)
 
 # TODO: extend things to production history
 # Make a finer grid for the truth
@@ -52,8 +52,7 @@ global model_num = 1
 function f(θs::AbstractVector)::Union{AbstractVector, Symbol}
 
     mass_rate = get_mass_rate(p, θs)
-    logps = get_perms(p, θs)
-    ps = reshape(10 .^ logps, n_blocks, 2)
+    ps = 10 .^ get_perms(p, θs)
     
     py"build_model"(model_folder, model_name, mass_rate, mass_cells, ps)
     py"run_model"(model_path)
@@ -79,21 +78,23 @@ end
 # Prior setup
 # ----------------
 
-cap_bnds = [-224.5, -75.5]
-mass_rate_bnds = [10e-3, 15e-3]
-logμ_reg = -14.0
-logμ_cap = -16.0
-k_reg = ARDExpSquaredKernel(0.5, 1500, 150)
-k_cap = ARDExpSquaredKernel(0.25, 1500, 150)
-ρ_xz = 0.8
-level_width = 0.25
+depth_s = -100.0
+depth_c = -250.0
+mass_rate_bnds = [1.0e-2, 1.5e-2]
+μ_s = -14.0
+μ_c = -16.0
+μ_d = -14.0
+k_s = ARDExpSquaredKernel(0.25, 1000, 150)
+k_c = ARDExpSquaredKernel(0.25, 1000, 150)
+k_d = ARDExpSquaredKernel(0.50, 1000, 150)
+level_width = 0.5
 
 p = GeothermalPrior(
-    cap_bnds,
+    depth_s, depth_c,
     mass_rate_bnds, 
-    logμ_reg, logμ_cap, 
-    k_reg, k_cap, 
-    ρ_xz, level_width, 
+    μ_s, μ_c, μ_d, 
+    k_s, k_c, k_d, 
+    level_width, 
     xs, -zs
 )
 
@@ -105,7 +106,7 @@ p = GeothermalPrior(
 θs_t = rand(p)
 logps_t = get_perms(p, θs_t)
 ps_t = 10 .^ logps_t
-us_t = reshape(f(vec(θs_t)), nx, nz)
+us_t = @time reshape(f(vec(θs_t)), nx, nz)
 
 # Define the observation locations
 x_locs = 250:200:1250
