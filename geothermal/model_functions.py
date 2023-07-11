@@ -116,15 +116,14 @@ def build_model(
         model = json.load(f)
 
     model["source"].append({
-        "component" : "water",
-        "enthalpy" : 1.0e+7, 
-        "rate" : mass_rate / len(mass_cells),
-        "cells" : list([int(c) for c in mass_cells])
+        "component": "water",
+        "enthalpy": 1.0e+7, 
+        "rate": mass_rate / len(mass_cells),
+        "cells": list([int(c) for c in mass_cells])
     })
 
     for rt in model["rock"]["types"]:
-        px, pz = permeabilities[rt["cells"][0], :]
-        rt["permeability"] = [px, -1.0, pz]
+        rt["permeability"] = permeabilities[rt["cells"][0]]
 
     model["output"]["filename"] = f"{model_folder}/{model_name}.h5"
 
@@ -164,7 +163,7 @@ def run_info(model_path):
             return "aborted"
 
     raise Exception("Unknown exit condition encountered. Check the log.")
-    # return ExitFlag.unknown
+    # return "unknown"
 
 
 def slice_plot(model_folder, mesh_name, quantity, cmap="coolwarm",
