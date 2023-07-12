@@ -9,7 +9,7 @@ Random.seed!(16)
 
 # TODO: extend things to production history
 # Make a finer grid for the truth
-# Save the full modelled temperatures somewhere
+# Initial condition stuff?
 
 # ----------------
 # Base model setup
@@ -17,9 +17,9 @@ Random.seed!(16)
 
 @pyinclude "geothermal/model_functions.py"
 
-xmax, nx = 1500.0, 20
-ymax, ny = 75.0, 1
-zmax, nz = 1500.0, 20
+xmax, nx = 1500.0, 25
+ymax, ny = 60.0, 1
+zmax, nz = 1500.0, 25
 
 dx = xmax / nx
 dz = zmax / nz
@@ -34,7 +34,7 @@ mesh_name = "gSQ$n_blocks"
 model_name = "SQ$(n_blocks)"
 model_path = "$(model_folder)/$(model_name)"
 
-mass_cols = [9, 10]
+mass_cols = [13]
 
 py"build_base_model"(
     xmax, ymax, zmax, nx, ny, nz, 
@@ -87,7 +87,7 @@ mass_rate_bnds = [1.0e-2, 1.5e-2]
 k_s = ARDExpSquaredKernel(0.25, 1000, 150)
 k_c = ARDExpSquaredKernel(0.25, 1000, 150)
 k_d = ARDExpSquaredKernel(0.50, 1000, 150)
-level_width = 0.5
+level_width = 0.25
 
 p = GeothermalPrior(
     depth_s, depth_c,
@@ -109,8 +109,8 @@ ps_t = 10 .^ logps_t
 us_t = @time reshape(f(vec(θs_t)), nx, nz)
 
 # Define the observation locations
-x_locs = 250:200:1250
-z_locs = 100:100:1400
+x_locs = 300:300:1200
+z_locs = 100:200:1100
 n_obs = length(x_locs) * length(z_locs)
 
 # Define the distribution of the observation noise

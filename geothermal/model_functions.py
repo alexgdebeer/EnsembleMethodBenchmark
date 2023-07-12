@@ -10,12 +10,10 @@ plt.rc("text", usetex=True)
 plt.rc("font", family="serif")
 
 
-def build_base_model(
-    xmax, ymax, zmax, nx, ny, nz, 
-    mesh_name, model_name, model_folder, mass_cols, 
-    P_atm=1.0e+5, T_atm=20.0, P0=1.0e+5, T0=20.0, 
-    permeability=1.0e-14, porosity=0.25
-):
+def build_base_model(xmax, ymax, zmax, nx, ny, nz, 
+                     mesh_name, model_name, model_folder, mass_cols, 
+                     P_atm=1.0e+5, T_atm=20.0, P0=1.0e+5, T0=20.0, 
+                     permeability=1.0e-14, porosity=0.25):
 
     dx = xmax / nx
     dy = ymax / ny
@@ -108,9 +106,7 @@ def build_base_model(
         json.dump(model, f, indent=2, sort_keys=True)
 
 
-def build_model(
-    model_folder, model_name, mass_rate, mass_cells, permeabilities
-):
+def build_model(model_folder, model_name, mass_rate, mass_cells, permeabilities):
 
     with open(f"{model_folder}/{model_name}_base.json", "r") as f:
         model = json.load(f)
@@ -163,7 +159,6 @@ def run_info(model_path):
             return "aborted"
 
     raise Exception("Unknown exit condition encountered. Check the log.")
-    # return "unknown"
 
 
 def slice_plot(model_folder, mesh_name, quantity, cmap="coolwarm",
