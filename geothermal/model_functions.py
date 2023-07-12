@@ -4,10 +4,13 @@ import layermesh.mesh as lm
 import matplotlib.pyplot as plt
 import os
 import pywaiwera
+import subprocess
 import yaml
 
 plt.rc("text", usetex=True)
 plt.rc("font", family="serif")
+
+CID_LEN = 12
 
 
 def build_base_model(xmax, ymax, zmax, nx, ny, nz, 
@@ -133,10 +136,49 @@ def get_mass_cells(mesh_name, model_folder, mass_cols):
     return [c.cell[-1].index for c in m.column if c.index in mass_cols]
 
 
-def run_model(model_path, debug=False):
+import time
 
-    env = pywaiwera.docker.DockerEnv(check=debug, verbose=debug)
-    env.run_waiwera(f"{model_path}.json", noupdate=True)
+def run_model(model_path):
+
+    if os.path.isfile(".cid"):
+        time.sleep(1.0)
+        with open(".cid") as f:
+            cid = f.readline().strip()[:CID_LEN]
+        # cmd = ["docker", "exec", cid, "gosu", 
+        #        "waiwera", "mpiexec", "/opt/waiwera/build/waiwera",
+        #        f"{model_path}.json"]
+        # p = subprocess.Popen(cmd)
+        # ret = p.wait()
+        # print(ret)
+        st = os.popen("docker container inspect -f '{{.State.Status}}' "+ f"{cid}").read().strip()
+        print(st)
+        while st != "running":
+            print("in if")
+            st = os.popen("docker container inspect -f '{{.State.Status}}' "+ f"{cid}").read().strip()
+            print(st)
+        print("here")
+        os.system(f"docker exec {cid} gosu waiwera mpiexec /opt/waiwera/build/waiwera {model_path}.json")
+        print("run model")
+
+    else:
+        print("Docker container not found. Creating one...")
+        fo = open(".idcheck", "wb")
+        fo.close()
+        # cmd = ["docker", "run", "--cidfile", ".cid", "--restart", "always",
+        #        "--volume", f"{os.getcwd()}:/data", "--workdir", "/data",
+        #        "waiwera/waiwera:latest", "mpiexec", "/opt/waiwera/build/waiwera",
+        #        f"{model_path}.json"]
+        # p = subprocess.Popen(cmd)
+        # ret = p.wait()
+        # print(ret)
+        os.system(f"docker run --cidfile .cid --restart unless-stopped --volume /Users/AlexdeBeer/Documents/uni/masters/code/InferenceSandbox:/data --workdir /data waiwera/waiwera:latest mpiexec /opt/waiwera/build/waiwera {model_path}.json")
+
+
+    # docker_cmd = "docker run --cidfile .cid --restart unless-stopped --volume /Users/AlexdeBeer/Documents/uni/masters/code/GeothermalModels:/data --workdir /data waiwera/waiwera:latest mpiexec /opt/waiwera/build/waiwera model_2d.json"
+    # docker_cmd_2 = "docker exec 2e316525631d gosu waiwera mpiexec /opt/waiwera/build/waiwera model_2d.json"
+
+    # env = pywaiwera.docker.DockerEnv(check=debug, verbose=debug)
+    # env.run_waiwera(f"{model_path}.json", noupdate=True)
 
 
 def run_info(model_path):
