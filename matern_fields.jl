@@ -5,6 +5,70 @@ using SpecialFunctions: gamma
 
 include("darcy_flow/setup/structs.jl")
 
+function gauss_to_unif(x::Real, lb::Real, ub::Real)
+    return lb + (ub - lb) * cdf(Normal(), x)
+end
+
+struct MaternField
+
+    g::Grid
+
+    σ_bounds::Tuple{Real, Real}
+    lx_bounds::Tuple{Real, Real}
+    ly_bounds::Tuple{Real, Real}
+    
+    I::AbstractMatrix
+    X::AbstractMatrix 
+    Y::AbstractMatrix
+    
+    D::AbstractMatrix
+    Nx::AbstractMatrix 
+    Ny::AbstractMatrix
+
+    function MaternField(
+        g::Grid, 
+        σ_bounds::Tuple{Real, Real},
+        lx_bounds::Tuple{Real, Real},
+        ly_bounds::Tuple{Real, Real}
+    )::MaternField
+
+        return new(
+            g, σ_bounds, lx_bounds, ly_bounds, 
+            build_fd_matrices(g)...
+        )
+
+    end
+
+end
+
+function transform(
+    f::MaternField, 
+    pars::AbstractVector
+)::AbstractVector
+
+    σ, lx, ly, W... = pars
+
+    σ = gauss_to_unif(σ, f.σ_bounds...)
+    lx = gauss_to_unif(lx, f.lx_bounds...)
+    ly = gauss_to_unif(ly, f.ly_bounds...)
+
+    d = 2
+    ν = 2-d/2
+
+    α = σ^2 * 2^d * π^(d/2) * gamma(ν+d/2) / gamma(ν)
+
+    λx = 1.42 * lx
+    λy = 1.42 * ly
+
+    corner_pts, boundary_pts, interior_pts = get_point_types(f.g)
+    A = f.I - lx^2*f.X - ly^2*f.Y + f.D + λx*f.Nx + λy*f.Ny
+    W[[corner_pts..., boundary_pts...]] .= 0
+
+    X = @time solve(LinearProblem(A, √(α*lx*ly/(f.g.Δx*f.g.Δy)) * W))
+    return X
+
+end
+
 function get_coordinates(
     i::Int,
     g::Grid
@@ -159,29 +223,16 @@ end
 xmin, xmax = 0, 1000
 ymin, ymax = 0, 1000
 Δx, Δy = 5, 5
+
+σ_bounds = (1.0, 2.0)
+lx_bounds = (100, 200)
+ly_bounds = (100, 200)
+
 g = SteadyStateGrid(xmin:Δx:xmax, ymin:Δy:ymax)
+f = MaternField(g, σ_bounds, lx_bounds, ly_bounds)
 
-lx = 100
-ly = 100
-
-d = 2
-ν = 2-d/2
-σ = 1.0
-
-α = σ^2 * 2^d * π^(d/2) * gamma(ν+d/2) / gamma(ν)
-
-λx = 1.42 * lx
-λy = 1.42 * ly
-
-corner_pts, boundary_pts, interior_pts = get_point_types(g)
-I, X, Y, D, Nx, Ny = build_fd_matrices(g)
-
-A = I - lx^2 * X - ly^2 * Y + D + λx * Nx + λy * Ny
-
-b = rand(Normal(), g.nu)
-b[[corner_pts..., boundary_pts...]] .= 0
-
-X = @time solve(LinearProblem(A, √(α*lx*ly/(g.Δx*g.Δy)) * b))
+b = rand(Normal(), g.nu + 3)
+X = transform(f, b)
 X = reshape(X, g.nx, g.ny)
 
 # Fill in corners
