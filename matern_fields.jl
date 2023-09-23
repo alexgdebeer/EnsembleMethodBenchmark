@@ -13,9 +13,9 @@ struct MaternField
 
     g::Grid
 
+    mu::Real
     σ_bounds::Tuple{Real, Real}
-    lx_bounds::Tuple{Real, Real}
-    ly_bounds::Tuple{Real, Real}
+    l_bounds::Tuple{Real, Real}
     
     I::AbstractMatrix
     X::AbstractMatrix 
@@ -27,13 +27,13 @@ struct MaternField
 
     function MaternField(
         g::Grid, 
+        mu::Real,
         σ_bounds::Tuple{Real, Real},
-        lx_bounds::Tuple{Real, Real},
-        ly_bounds::Tuple{Real, Real}
+        l_bounds::Tuple{Real, Real}
     )::MaternField
 
         return new(
-            g, σ_bounds, lx_bounds, ly_bounds, 
+            g, mu, σ_bounds, l_bounds,
             build_fd_matrices(g)...
         )
 
@@ -43,29 +43,34 @@ end
 
 function transform(
     f::MaternField, 
-    pars::AbstractVector
-)::AbstractVector
+    W::AbstractVector
+)::AbstractMatrix
 
-    σ, lx, ly, W... = pars
-
-    σ = gauss_to_unif(σ, f.σ_bounds...)
-    lx = gauss_to_unif(lx, f.lx_bounds...)
-    ly = gauss_to_unif(ly, f.ly_bounds...)
+    σ = gauss_to_unif(W[1], f.σ_bounds...)
+    l = gauss_to_unif(W[2], f.l_bounds...)
 
     d = 2
     ν = 2-d/2
-
     α = σ^2 * 2^d * π^(d/2) * gamma(ν+d/2) / gamma(ν)
+    λ = 1.42l
 
-    λx = 1.42 * lx
-    λy = 1.42 * ly
+    corner_pts, boundary_pts, _ = get_point_types(f.g)
 
-    corner_pts, boundary_pts, interior_pts = get_point_types(f.g)
-    A = f.I - lx^2*f.X - ly^2*f.Y + f.D + λx*f.Nx + λy*f.Ny
-    W[[corner_pts..., boundary_pts...]] .= 0
+    A = f.I - l^2*f.X - l^2*f.Y + f.D + λ*(f.Nx+f.Ny)
+    b = √((α*l^2)/(f.g.Δx*f.g.Δy)) * W[3:end]
+    b[[corner_pts..., boundary_pts...]] .= 0
 
-    X = @time solve(LinearProblem(A, √(α*lx*ly/(f.g.Δx*f.g.Δy)) * W))
-    return X
+    X = solve(LinearProblem(A, b)).u
+
+    X = reshape(X, f.g.nx, f.g.ny)
+
+    # Fill in corners
+    X[1, 1] = (X[1, 2] + X[2, 1]) / 2
+    X[end, 1] = (X[end, 2] + X[end-1, 1]) / 2
+    X[1, end] = (X[1, end-1] + X[2, end]) / 2
+    X[end, end] = (X[end, end-1] + X[end-1, end]) / 2
+
+    return f.mu .+ X
 
 end
 
@@ -222,26 +227,16 @@ end
 
 xmin, xmax = 0, 1000
 ymin, ymax = 0, 1000
-Δx, Δy = 5, 5
+Δx, Δy = 20, 20
 
+mu = -14
 σ_bounds = (1.0, 2.0)
-lx_bounds = (100, 200)
-ly_bounds = (100, 200)
+l_bounds = (100, 300)
 
 g = SteadyStateGrid(xmin:Δx:xmax, ymin:Δy:ymax)
-f = MaternField(g, σ_bounds, lx_bounds, ly_bounds)
+f = MaternField(g, mu, σ_bounds, l_bounds)
 
-b = rand(Normal(), g.nu + 3)
-X = transform(f, b)
-X = reshape(X, g.nx, g.ny)
+W = rand(Normal(), g.nu + 2)
+X = transform(f, W)
 
-# Fill in corners
-X[1, 1] = (X[1, 2] + X[2, 1]) / 2
-X[end, 1] = (X[end, 2] + X[end-1, 1]) / 2
-X[1, end] = (X[1, end-1] + X[2, end]) / 2
-X[end, end] = (X[end, end-1] + X[end-1, end]) / 2
-
-heatmap(rotl90(reshape(X, g.nx, g.ny)), aspect_ratio=:equal, cmap=:turbo)
-
-# stds = std(XS, dims=2)
-# heatmap(rotl90(reshape(stds, g.nx, g.ny)), aspect_ratio=:equal, cmap=:turbo)
+heatmap(rotl90(X), aspect_ratio=:equal, cmap=:turbo)
