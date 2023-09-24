@@ -2,7 +2,6 @@ using Distributions
 using Interpolations
 using LaTeXStrings
 using Random: seed!
-using SimIntensiveInference
 
 include("../setup/setup.jl")
 
@@ -20,13 +19,13 @@ ymin, ymax = 0.0, 1000.0
 Δx_c, Δy_c = 20.0, 20.0
 Δx_f, Δy_f = 10.0, 10.0
 
-tmax = 80.0
-Δt = 2.0
+tmax = 120.0
+Δt = 4.0
 
 # General parameters
 ϕ = 0.30                            # Porosity
 μ = 0.5 * 1e-3 / (3600.0 * 24.0)    # Viscosity (Pa⋅day)
-c = 1.0e-4 / 6895.0                 # Compressibility (Pa^-1)
+c = 2.0e-4 / 6895.0                 # Compressibility (Pa^-1)
 u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 
 q_ps_c = 30.0 / (Δx_c * Δy_c)       # Producer rate, (m^3 / day) / m^3
@@ -40,14 +39,14 @@ grid_f = TransientGrid(xmin:Δx_f:xmax, ymin:Δy_f:ymax, tmax, Δt, μ, ϕ, c)
 
 well_r = 30.0
 
-# Coordinates of wells
+# Define well positions
 well_cs = [
     (150, 150), (150, 500), (150, 850),
     (500, 150), (500, 500), (500, 850),
     (850, 150), (850, 500), (850, 850)
 ]
 
-# Times wells are active during
+# Define times wells are active during
 well_ts = [
     (00, 40), (40, 80), (00, 40),
     (40, 80), (00, 40), (40, 80),
@@ -79,9 +78,9 @@ bcs = Dict(
 # Prior generation
 # ----------------
 
-logp_mu = -13.0
-σ_bounds = (0.4, 0.6)
-l_bounds = (200, 400)
+logp_mu = -14.0
+σ_bounds = (0.25, 0.75)
+l_bounds = (100, 400)
 
 p = MaternField(grid_c, logp_mu, σ_bounds, l_bounds)
 
@@ -118,39 +117,37 @@ end
 xs_o = [
     150, 150, 150, 
     500, 500, 500, 
-    850, 850, 850, 
-    350, 350, 650, 650
+    850, 850, 850
 ]
 
 ys_o = [
     150, 500, 850, 
     150, 500, 850, 
-    150, 500, 850, 
-    350, 650, 350, 650
+    150, 500, 850
 ]
 
-ts_o = [2, 4, 6, 8, 10, 12, 14]
+ts_o = [3, 5, 7, 9, 11, 13, 15, 17] # Measure every 10 days for the first 80 days
 
 n_obs = length(xs_o) * length(ts_o)
 
 σ_ϵ = u0 * 0.01
-Γ_ϵ = σ_ϵ^2 * Matrix(1.0I, n_obs, n_obs)
+Γ = σ_ϵ^2 * Matrix(1.0I, n_obs, n_obs)
 
 us_o = get_observations(grid_f, us_t, ts_o, xs_o, ys_o)
-us_o += rand(MvNormal(Γ_ϵ))
+us_o += rand(MvNormal(Γ))
 
-L = MvNormal(us_o, Γ_ϵ)
+# L = MvNormal(us_o, Γ_ϵ)
 
 # ----------------
 # Model functions
 # ----------------
 
-function f(θs::AbstractVector)
+function F(θs::AbstractVector)
     ps = 10.0 .^ transform(p, θs)
     return vec(solve(grid_c, ps, bcs, q_c))
 end
 
-function g(us::AbstractVector)
+function G(us::AbstractVector)
     us = reshape(us, grid_c.nx, grid_c.ny, grid_c.nt+1)
     return get_observations(grid_c, us, ts_o, xs_o, ys_o)
 end
@@ -161,7 +158,7 @@ if ANIMATE
 
     # Rescale pressures and extract pressures at well of interest
     us_t ./= 1.0e6
-    well_us = us_t[11,11,:]
+    well_us = us_t[16,16,:]
 
     anim = @animate for i ∈ axes(us_t, 3)
 

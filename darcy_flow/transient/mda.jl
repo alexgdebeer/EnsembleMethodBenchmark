@@ -4,7 +4,7 @@ include("setup.jl")
 
 Nf = grid_c.nx * grid_c.ny * (grid_c.nt+1)
 Ni = 8
-Ne = 500
+Ne = 100
 
 θs, fs, us, αs, inds = run_es_mda(f, g, p, L, Nf, Ni, Ne, α_method=:constant)
 
