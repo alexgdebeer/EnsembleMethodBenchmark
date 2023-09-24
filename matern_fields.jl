@@ -5,7 +5,11 @@ using SpecialFunctions: gamma
 
 include("darcy_flow/setup/structs.jl")
 
-function gauss_to_unif(x::Real, lb::Real, ub::Real)
+function gauss_to_unif(
+    x::Real, 
+    lb::Real, 
+    ub::Real
+)::Real
     return lb + (ub - lb) * cdf(Normal(), x)
 end
 
@@ -22,8 +26,10 @@ struct MaternField
     Y::AbstractMatrix
     
     D::AbstractMatrix
-    Nx::AbstractMatrix 
-    Ny::AbstractMatrix
+    N::AbstractMatrix 
+
+    corner_pts::AbstractVector 
+    boundary_pts::AbstractVector
 
     function MaternField(
         g::Grid, 
@@ -41,6 +47,18 @@ struct MaternField
 
 end
 
+function fill_corners!(
+    X::AbstractMatrix
+)::Nothing
+
+    X[1, 1] = (X[1, 2] + X[2, 1]) / 2
+    X[end, 1] = (X[end, 2] + X[end-1, 1]) / 2
+    X[1, end] = (X[1, end-1] + X[2, end]) / 2
+    X[end, end] = (X[end, end-1] + X[end-1, end]) / 2
+    return nothing
+
+end
+
 function transform(
     f::MaternField, 
     W::AbstractVector
@@ -54,22 +72,13 @@ function transform(
     α = σ^2 * 2^d * π^(d/2) * gamma(ν+d/2) / gamma(ν)
     λ = 1.42l
 
-    corner_pts, boundary_pts, _ = get_point_types(f.g)
-
-    A = f.I - l^2*f.X - l^2*f.Y + f.D + λ*(f.Nx+f.Ny)
+    A = f.I - l^2*(f.X+f.Y) + f.D + λ*f.N
     b = √((α*l^2)/(f.g.Δx*f.g.Δy)) * W[3:end]
-    b[[corner_pts..., boundary_pts...]] .= 0
+    b[[f.corner_pts..., f.boundary_pts...]] .= 0
 
     X = solve(LinearProblem(A, b)).u
-
     X = reshape(X, f.g.nx, f.g.ny)
-
-    # Fill in corners
-    X[1, 1] = (X[1, 2] + X[2, 1]) / 2
-    X[end, 1] = (X[end, 2] + X[end-1, 1]) / 2
-    X[1, end] = (X[1, end-1] + X[2, end]) / 2
-    X[end, end] = (X[end, end-1] + X[end-1, end]) / 2
-
+    fill_corners!(X)
     return f.mu .+ X
 
 end
@@ -105,7 +114,9 @@ function on_boundary(
 
 end
 
-function get_point_types(g::Grid)
+function get_point_types(
+    g::Grid
+)::Tuple{AbstractVector, AbstractVector, AbstractVector}
 
     corner_pts = Int[]
     boundary_pts = Int[]
@@ -144,17 +155,36 @@ function get_boundary(
 
 end
 
-function build_fd_matrices(g::Grid)
+function add_corner_points!(
+    D_i::AbstractVector,
+    D_j::AbstractVector,
+    D_v::AbstractVector,
+    corner_pts::AbstractVector
+)::Nothing
 
-    I_i, I_j, I_v = Int[], Int[], Float64[]
-    X_i, X_j, X_v = Int[], Int[], Float64[]
-    Y_i, Y_j, Y_v = Int[], Int[], Float64[]
-    
-    D_i, D_j, D_v = Int[], Int[], Float64[]
-    Nx_i, Nx_j, Nx_v = Int[], Int[], Float64[]
-    Ny_i, Ny_j, Ny_v = Int[], Int[], Float64[]
+    for i ∈ corner_pts
+        push!(D_i, i)
+        push!(D_j, i)
+        push!(D_v, 1.0)
+    end
 
-    corner_pts, boundary_pts, interior_pts = get_point_types(g)
+    return
+
+end
+
+function add_interior_points!(
+    I_i::AbstractVector,
+    I_j::AbstractVector,
+    I_v::AbstractVector,
+    X_i::AbstractVector,
+    X_j::AbstractVector,
+    X_v::AbstractVector, 
+    Y_i::AbstractVector,
+    Y_j::AbstractVector,
+    Y_v::AbstractVector, 
+    interior_pts::AbstractVector, 
+    g::Grid
+)::Nothing
 
     for i ∈ interior_pts
 
@@ -172,13 +202,20 @@ function build_fd_matrices(g::Grid)
 
     end
 
-    for i ∈ corner_pts
+    return
 
-        push!(D_i, i)
-        push!(D_j, i)
-        push!(D_v, 1.0)
+end
 
-    end
+function add_boundary_points!(
+    D_i::AbstractVector,
+    D_j::AbstractVector,
+    D_v::AbstractVector,
+    N_i::AbstractVector,
+    N_j::AbstractVector,
+    N_v::AbstractVector,
+    boundary_pts::AbstractVector,
+    g::Grid
+)
 
     for i ∈ boundary_pts
 
@@ -187,50 +224,78 @@ function build_fd_matrices(g::Grid)
 
         push!(D_i, i)
         push!(D_j, i)
-        if boundary ∈ (:x0, :y0)
-            push!(D_v, 1.0)
-        else
-            push!(D_v, -1.0)
-        end
+        push!(D_v, 1.0)
+
+        push!(N_i, i, i, i)
 
         if boundary == :x0
-            push!(Nx_i, i, i, i)
-            push!(Nx_j, i, i+1, i+2)
-            push!(Nx_v, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)
+            push!(N_j, i, i+1, i+2)
+            push!(N_v, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)
         elseif boundary == :x1
-            push!(Nx_i, i, i, i)
-            push!(Nx_j, i, i-1, i-2)
-            push!(Nx_v, -3.0 / 2g.Δx, 4.0 / 2g.Δx, -1.0 / 2g.Δx)
+            push!(N_j, i, i-1, i-2)
+            push!(N_v, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)
         elseif boundary == :y0
-            push!(Ny_i, i, i, i)
-            push!(Ny_j, i, i+g.nx, i+2g.nx)
-            push!(Ny_v, 3.0 / 2g.Δy, -4.0 / 2g.Δy, 1.0 / 2g.Δy)
+            push!(N_j, i, i+g.nx, i+2g.nx)
+            push!(N_v, 3.0 / 2g.Δy, -4.0 / 2g.Δy, 1.0 / 2g.Δy)
         elseif boundary == :y1 
-            push!(Ny_i, i, i, i)
-            push!(Ny_j, i, i-g.nx, i-2g.nx)
-            push!(Ny_v, -3.0 / 2g.Δy, 4.0 / 2g.Δy, -1.0 / 2g.Δy)
+            push!(N_j, i, i-g.nx, i-2g.nx)
+            push!(N_v, 3.0 / 2g.Δy, -4.0 / 2g.Δy, 1.0 / 2g.Δy)
         end
 
     end
+
+    return
+
+end
+
+function build_fd_matrices(
+    g::Grid
+)
+
+    I_i, I_j, I_v = Int[], Int[], Float64[]
+    X_i, X_j, X_v = Int[], Int[], Float64[]
+    Y_i, Y_j, Y_v = Int[], Int[], Float64[]
+    
+    D_i, D_j, D_v = Int[], Int[], Float64[]
+    N_i, N_j, N_v = Int[], Int[], Float64[]
+
+    corner_pts, boundary_pts, interior_pts = get_point_types(g)
+
+    add_corner_points!(
+        D_i, D_j, D_v, 
+        corner_pts
+    )
+
+    add_interior_points!(
+        I_i, I_j, I_v, 
+        X_i, X_j, X_v, 
+        Y_i, Y_j, Y_v, 
+        interior_pts, g
+    )
+
+    add_boundary_points!(
+        D_i, D_j, D_v,
+        N_i, N_j, N_v,
+        boundary_pts, g
+    )
 
     I = sparse(I_i, I_j, I_v, g.nu, g.nu)
     X = sparse(X_i, X_j, X_v, g.nu, g.nu)
     Y = sparse(Y_i, Y_j, Y_v, g.nu, g.nu)
     
     D = sparse(D_i, D_j, D_v, g.nu, g.nu)
-    Nx = sparse(Nx_i, Nx_j, Nx_v, g.nu, g.nu)
-    Ny = sparse(Ny_i, Ny_j, Ny_v, g.nu, g.nu)
+    N = sparse(N_i, N_j, N_v, g.nu, g.nu)
 
-    return I, X, Y, D, Nx, Ny
+    return I, X, Y, D, N, corner_pts, boundary_pts
 
 end
 
 xmin, xmax = 0, 1000
 ymin, ymax = 0, 1000
-Δx, Δy = 20, 20
+Δx, Δy = 10, 10
 
 mu = -14
-σ_bounds = (1.0, 2.0)
+σ_bounds = (0.5, 1.0)
 l_bounds = (100, 300)
 
 g = SteadyStateGrid(xmin:Δx:xmax, ymin:Δy:ymax)
