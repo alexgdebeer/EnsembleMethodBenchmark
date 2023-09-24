@@ -1,17 +1,7 @@
 using Distributions
-using LinearSolve 
+using LinearSolve
 using SparseArrays
 using SpecialFunctions: gamma
-
-include("darcy_flow/setup/structs.jl")
-
-function gauss_to_unif(
-    x::Real, 
-    lb::Real, 
-    ub::Real
-)::Real
-    return lb + (ub - lb) * cdf(Normal(), x)
-end
 
 struct MaternField
 
@@ -31,6 +21,8 @@ struct MaternField
     corner_pts::AbstractVector 
     boundary_pts::AbstractVector
 
+    Nθ::Int 
+
     function MaternField(
         g::Grid, 
         mu::Real,
@@ -40,10 +32,20 @@ struct MaternField
 
         return new(
             g, mu, σ_bounds, l_bounds,
-            build_fd_matrices(g)...
+            build_fd_matrices(g)..., g.nu + 2
         )
 
     end
+
+end
+
+function gauss_to_unif(
+    x::Real, 
+    lb::Real, 
+    ub::Real
+)::Real
+
+    return lb + (ub - lb) * cdf(Normal(), x)
 
 end
 
@@ -80,6 +82,14 @@ function transform(
     X = reshape(X, f.g.nx, f.g.ny)
     fill_corners!(X)
     return f.mu .+ X
+
+end
+
+function Base.rand(
+    f::MaternField, n::Int=1
+)::AbstractMatrix
+    
+    return rand(Normal(), f.Nθ, n)
 
 end
 
@@ -215,7 +225,7 @@ function add_boundary_points!(
     N_v::AbstractVector,
     boundary_pts::AbstractVector,
     g::Grid
-)
+)::Nothing
 
     for i ∈ boundary_pts
 
@@ -289,19 +299,3 @@ function build_fd_matrices(
     return I, X, Y, D, N, corner_pts, boundary_pts
 
 end
-
-xmin, xmax = 0, 1000
-ymin, ymax = 0, 1000
-Δx, Δy = 10, 10
-
-mu = -14
-σ_bounds = (0.5, 1.0)
-l_bounds = (100, 300)
-
-g = SteadyStateGrid(xmin:Δx:xmax, ymin:Δy:ymax)
-f = MaternField(g, mu, σ_bounds, l_bounds)
-
-W = rand(Normal(), g.nu + 2)
-X = transform(f, W)
-
-heatmap(rotl90(X), aspect_ratio=:equal, cmap=:turbo)

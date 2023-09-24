@@ -8,7 +8,7 @@ include("../setup/setup.jl")
 
 seed!(16)
 
-animate = true
+ANIMATE = true
 
 # ----------------
 # Coarse and fine grid setup
@@ -21,7 +21,7 @@ ymin, ymax = 0.0, 1000.0
 Δx_f, Δy_f = 10.0, 10.0
 
 tmax = 80.0
-Δt = 5.0
+Δt = 2.0
 
 # General parameters
 ϕ = 0.30                            # Porosity
@@ -79,19 +79,19 @@ bcs = Dict(
 # Prior generation
 # ----------------
 
-logμ_p = -13.0
-σ_p = 0.5
-γ_p = 150
-k = ExpSquaredKernel(σ_p, γ_p)
+logp_mu = -13.0
+σ_bounds = (0.4, 0.6)
+l_bounds = (200, 400)
 
-p = GaussianPrior(logμ_p, k, grid_c.xs, grid_c.ys)
+p = MaternField(grid_c, logp_mu, σ_bounds, l_bounds)
 
 # ----------------
 # Truth generation
 # ----------------
 
-logps_t = rand(GaussianPrior(logμ_p, k, grid_f.xs, grid_f.ys))
-logps_t = reshape(logps_t, grid_f.nx, grid_f.ny)
+true_field = MaternField(grid_f, logp_mu, σ_bounds, l_bounds)
+θs_t = rand(true_field)
+logps_t = transform(true_field, vec(θs_t))
 ps_t = 10.0 .^ logps_t
 
 us_t = @time solve(grid_f, ps_t, bcs, q_f)
@@ -145,18 +145,19 @@ L = MvNormal(us_o, Γ_ϵ)
 # Model functions
 # ----------------
 
-function f(logps::AbstractVector)
-    ps = 10.0 .^ reshape(logps, grid_c.nx, grid_c.ny)
-    return solve(grid_c, ps, bcs, q_c)
+function f(θs::AbstractVector)
+    ps = 10.0 .^ transform(p, θs)
+    return vec(solve(grid_c, ps, bcs, q_c))
 end
 
-function g(us::AbstractArray)
+function g(us::AbstractVector)
+    us = reshape(us, grid_c.nx, grid_c.ny, grid_c.nt+1)
     return get_observations(grid_c, us, ts_o, xs_o, ys_o)
 end
 
 @info "Setup complete"
 
-if animate
+if ANIMATE
 
     # Rescale pressures and extract pressures at well of interest
     us_t ./= 1.0e6

@@ -3,67 +3,20 @@ using LinearAlgebra
 using LinearSolve
 using SparseArrays
 
+# TODO: ensure the boundary conditions are satisfied as part of the initial condition
+
 # Implicit solve parameter (Crank-Nicolson)
 const θ = 0.5
 
-# TODO: ensure the boundary conditions are satisfied as part of the initial condition
-
-function get_coordinates(
-    i::Int,
-    g::Grid
-)::Tuple{Real, Real}
-
-    x = g.xs[(i-1)%g.nx+1] 
-    y = g.ys[Int(ceil(i/g.nx))]
-    return x, y
-
-end
-
-function in_corner(
-    x::Real, 
-    y::Real, 
-    g::Grid
-)::Bool
-
-    return x ∈ [g.xmin, g.xmax] && y ∈ [g.ymin, g.ymax]
-
-end
-
-function on_boundary(
-    x::Real, 
-    y::Real, 
-    g::Grid
-)::Bool
-
-    return x ∈ [g.xmin, g.xmax] || y ∈ [g.ymin, g.ymax]
-
-end
-
-function get_boundary(
-    x::Real, 
-    y::Real, 
-    g::Grid, 
-    bcs::Dict{Symbol, BoundaryCondition}
-)::BoundaryCondition
-
-    x == g.xmin && return bcs[:x0]
-    x == g.xmax && return bcs[:x1]
-    y == g.ymin && return bcs[:y0]
-    y == g.ymax && return bcs[:y1]
-
-    error("Point ($x, $y) is not on a boundary.")
-
-end
-
 function add_corner_point!(
-    rs::Vector{Int}, 
-    cs::Vector{Int}, 
+    is::Vector{Int}, 
+    js::Vector{Int}, 
     vs::Vector{<:Real}, 
     i::Int
 )::Nothing
 
-    push!(rs, i)
-    push!(cs, i)
+    push!(is, i)
+    push!(js, i)
     push!(vs, 1.0)
 
     return
@@ -71,30 +24,30 @@ function add_corner_point!(
 end
 
 function add_boundary_point!(
-    rs::Vector{Int}, 
-    cs::Vector{Int}, 
+    is::Vector{Int}, 
+    js::Vector{Int}, 
     vs::Vector{<:Real}, 
     i::Int,
     g::Grid, 
     bc::BoundaryCondition
 )::Nothing
 
-    bc.type == :dirichlet && add_dirichlet_point!(rs, cs, vs, i)
-    bc.type == :neumann && add_neumann_point!(rs, cs, vs, i, g, bc)
+    bc.type == :dirichlet && add_dirichlet_point!(is, js, vs, i)
+    bc.type == :neumann && add_neumann_point!(is, js, vs, i, g, bc)
 
     return
 
 end
 
 function add_dirichlet_point!(
-    rs::Vector{Int}, 
-    cs::Vector{Int}, 
+    is::Vector{Int}, 
+    js::Vector{Int}, 
     vs::Vector{<:Real}, 
     i::Int
 )::Nothing
 
-    push!(rs, i)
-    push!(cs, i)
+    push!(is, i)
+    push!(js, i)
     push!(vs, 1.0)
 
     return
@@ -102,27 +55,27 @@ function add_dirichlet_point!(
 end
 
 function add_neumann_point!(
-    rs::Vector{Int}, 
-    cs::Vector{Int}, 
+    is::Vector{Int}, 
+    js::Vector{Int}, 
     vs::Vector{<:Real}, 
     i::Int,
     g::Grid, 
     bc::BoundaryCondition,
 )::Nothing
 
-    push!(rs, i, i, i)
+    push!(is, i, i, i)
 
     if bc.name == :x0
-        push!(cs, i, i+1, i+2)
+        push!(js, i, i+1, i+2)
         push!(vs, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)
     elseif bc.name == :x1
-        push!(cs, i, i-1, i-2)
+        push!(js, i, i-1, i-2)
         push!(vs, -3.0 / 2g.Δx, 4.0 / 2g.Δx, -1.0 / 2g.Δx)
     elseif bc.name == :y0
-        push!(cs, i, i+g.nx, i+2g.nx)
+        push!(js, i, i+g.nx, i+2g.nx)
         push!(vs, 3.0 / 2g.Δy, -4.0 / 2g.Δy, 1.0 / 2g.Δy)
     elseif bc.name == :y1 
-        push!(cs, i, i-g.nx, i-2g.nx)
+        push!(js, i, i-g.nx, i-2g.nx)
         push!(vs, -3.0 / 2g.Δy, 4.0 / 2g.Δy, -1.0 / 2g.Δy)
     end
 
@@ -131,8 +84,8 @@ function add_neumann_point!(
 end
 
 function add_interior_point!(
-    rs::Vector{Int}, 
-    cs::Vector{Int}, 
+    is::Vector{Int}, 
+    js::Vector{Int}, 
     vs::Vector{<:Real}, 
     i::Int, 
     x::Real, 
@@ -141,8 +94,8 @@ function add_interior_point!(
     ps::Interpolations.GriddedInterpolation
 )::Nothing
 
-    push!(rs, i, i, i, i, i)
-    push!(cs, i, i+1, i-1, i+g.nx, i-g.nx)
+    push!(is, i, i, i, i, i)
+    push!(js, i, i+1, i-1, i+g.nx, i-g.nx)
 
     push!(
         vs,
@@ -159,8 +112,8 @@ function add_interior_point!(
 end
 
 function add_interior_point!(
-    rs::Vector{Int}, 
-    cs::Vector{Int}, 
+    is::Vector{Int}, 
+    js::Vector{Int}, 
     vs::Vector{<:Real}, 
     i::Int, 
     x::Real, 
@@ -169,10 +122,10 @@ function add_interior_point!(
     ps::Interpolations.GriddedInterpolation
 )::Nothing
 
-    push!(rs, i, i, i, i, i, i, i, i, i, i)
+    push!(is, i, i, i, i, i, i, i, i, i, i)
 
     # Add the coefficients for points at the previous time
-    push!(cs, i-g.nu, i-g.nu+1, i-g.nu-1, i-g.nu+g.nx, i-g.nu-g.nx)
+    push!(js, i-g.nu, i-g.nu+1, i-g.nu-1, i-g.nu+g.nx, i-g.nu-g.nx)
     push!(
         vs, 
         -(g.ϕ*g.c / g.Δt) +
@@ -185,7 +138,7 @@ function add_interior_point!(
     )
 
     # Add the coefficients for points at the current time
-    push!(cs, i, i+1, i-1, i+g.nx, i-g.nx)
+    push!(js, i, i+1, i-1, i+g.nx, i-g.nx)
     push!(
         vs, 
         (g.ϕ*g.c / g.Δt) +
@@ -207,8 +160,8 @@ function construct_A(
     bcs::Dict{Symbol, BoundaryCondition}
 )::SparseMatrixCSC
 
-    rs = Int[]
-    cs = Int[]
+    is = Int[]
+    js = Int[]
     vs = Vector{typeof(ps[1, 1])}(undef, 0)
 
     ps = interpolate((g.xs, g.ys), ps, Gridded(Linear()))
@@ -219,22 +172,22 @@ function construct_A(
 
         if in_corner(x, y, g)
 
-            add_corner_point!(rs, cs, vs, i)
+            add_corner_point!(is, js, vs, i)
 
         elseif on_boundary(x, y, g)
 
             bc = get_boundary(x, y, g, bcs)
-            add_boundary_point!(rs, cs, vs, i, g, bc)
+            add_boundary_point!(is, js, vs, i, g, bc)
         
         else
         
-            add_interior_point!(rs, cs, vs, i, x, y, g, ps)
+            add_interior_point!(is, js, vs, i, x, y, g, ps)
         
         end
 
     end
 
-    return sparse(rs, cs, vs, g.nu, g.nu)
+    return sparse(is, js, vs, g.nu, g.nu)
 
 end
 
@@ -246,13 +199,13 @@ function construct_A(
 
     ps = interpolate((g.xs, g.ys), ps, Gridded(Linear()))
 
-    rs = Int[]
-    cs = Int[]
+    is = Int[]
+    js = Int[]
     vs = Vector{typeof(ps[1, 1])}(undef, 0)
 
     # Form the matrix associated with the previous points
-    push!(rs, collect(1:g.nu)...)
-    push!(cs, collect(1:g.nu)...)
+    push!(is, collect(1:g.nu)...)
+    push!(js, collect(1:g.nu)...)
     push!(vs, fill(1.0, g.nu)...)
 
     # Form the matrix of current points
@@ -262,22 +215,22 @@ function construct_A(
 
         if in_corner(x, y, g)
 
-            add_corner_point!(rs, cs, vs, g.nu+i)
+            add_corner_point!(is, js, vs, g.nu+i)
 
         elseif on_boundary(x, y, g)
 
             bc = get_boundary(x, y, g, bcs)
-            add_boundary_point!(rs, cs, vs, g.nu+i, g, bc)
+            add_boundary_point!(is, js, vs, g.nu+i, g, bc)
         
         else
         
-            add_interior_point!(rs, cs, vs, g.nu+i, x, y, g, ps)
+            add_interior_point!(is, js, vs, g.nu+i, x, y, g, ps)
         
         end
 
     end
 
-    return sparse(rs, cs, vs, 2g.nu, 2g.nu)
+    return sparse(is, js, vs, 2g.nu, 2g.nu)
 
 end
 
