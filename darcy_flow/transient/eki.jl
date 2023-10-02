@@ -43,7 +43,7 @@ function run_eki_dmc(
 )
 
     NG = length(ys)
-    L = cholesky(inv(Γ)).U # U vs L doesn't matter, matrix is diagonal
+    L = cholesky(inv(Γ)).U
 
     θs = []
     Fs = []
@@ -105,7 +105,7 @@ end
 include("setup.jl")
 
 NF = grid_c.nx * grid_c.ny * (grid_c.nt+1)
-Ne = 100
+Ne = 1000
 
 θs, Fs, Gs, αs = run_eki_dmc(F, G, p, us_o, Γ, NF, Ne)
 

@@ -3,8 +3,6 @@ using LinearAlgebra
 using LinearSolve
 using SparseArrays
 
-# TODO: ensure the boundary conditions are satisfied as part of the initial condition
-
 # Implicit solve parameter (Crank-Nicolson)
 const θ = 0.5
 
