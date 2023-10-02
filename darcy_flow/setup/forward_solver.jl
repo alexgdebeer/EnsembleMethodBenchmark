@@ -3,6 +3,8 @@ using LinearAlgebra
 using LinearSolve
 using SparseArrays
 
+# TODO: bring the steady-state solve into line with the transient solve
+
 # Implicit solve parameter (Crank-Nicolson)
 const θ = 0.5
 
@@ -89,7 +91,7 @@ function add_interior_point!(
     x::Real, 
     y::Real, 
     g::SteadyStateGrid, 
-    ps::Interpolations.GriddedInterpolation
+    logps::Interpolations.GriddedInterpolation
 )::Nothing
 
     push!(is, i, i, i, i, i)
@@ -97,12 +99,12 @@ function add_interior_point!(
 
     push!(
         vs,
-        (1.0 / (g.μ * g.Δx^2)) * (ps(x+0.5g.Δx, y) + ps(x-0.5g.Δx, y)) + 
-        (1.0 / (g.μ * g.Δy^2)) * (ps(x, y+0.5g.Δy) + ps(x, y-0.5g.Δy)),
-        -(1.0 / (g.μ * g.Δx^2)) * ps(x+0.5g.Δx, y),
-        -(1.0 / (g.μ * g.Δx^2)) * ps(x-0.5g.Δx, y),
-        -(1.0 / (g.μ * g.Δy^2)) * ps(x, y+0.5g.Δy),
-        -(1.0 / (g.μ * g.Δy^2)) * ps(x, y-0.5g.Δy)
+        (1.0 / (g.μ * g.Δx^2)) * (10^logps(x+0.5g.Δx, y) + 10^logps(x-0.5g.Δx, y)) + 
+        (1.0 / (g.μ * g.Δy^2)) * (10^logps(x, y+0.5g.Δy) + 10^logps(x, y-0.5g.Δy)),
+        -(1.0 / (g.μ * g.Δx^2)) * 10^logps(x+0.5g.Δx, y),
+        -(1.0 / (g.μ * g.Δx^2)) * 10^logps(x-0.5g.Δx, y),
+        -(1.0 / (g.μ * g.Δy^2)) * 10^logps(x, y+0.5g.Δy),
+        -(1.0 / (g.μ * g.Δy^2)) * 10^logps(x, y-0.5g.Δy)
     )
 
     return
@@ -113,26 +115,26 @@ function add_interior_point!(
     is::Vector{Int}, 
     js::Vector{Int}, 
     vs::Vector{<:Real}, 
-    i::Int, 
-    x::Real, 
-    y::Real, 
+    i::Int,
     g::TransientGrid, 
-    ps::Interpolations.GriddedInterpolation
+    logps::Interpolations.GriddedInterpolation
 )::Nothing
 
-    push!(is, i, i, i, i, i, i, i, i, i, i)
+    x, y = g.ixs[i%g.nu], g.iys[i%g.nu]
+
+    push!(is, fill(i, 10)...)
 
     # Add the coefficients for points at the previous time
     push!(js, i-g.nu, i-g.nu+1, i-g.nu-1, i-g.nu+g.nx, i-g.nu-g.nx)
     push!(
         vs, 
         -(g.ϕ*g.c / g.Δt) +
-          ((1-θ) / (g.μ * g.Δx^2)) * (ps(x+0.5g.Δx, y) + ps(x-0.5g.Δx, y)) +
-          ((1-θ) / (g.μ * g.Δy^2)) * (ps(x, y+0.5g.Δy) + ps(x, y-0.5g.Δy)),
-        -((1-θ) / (g.μ * g.Δx^2)) * ps(x+0.5g.Δx, y),
-        -((1-θ) / (g.μ * g.Δx^2)) * ps(x-0.5g.Δx, y),
-        -((1-θ) / (g.μ * g.Δy^2)) * ps(x, y+0.5g.Δy),
-        -((1-θ) / (g.μ * g.Δy^2)) * ps(x, y-0.5g.Δy)
+          ((1-θ) / (g.μ * g.Δx^2)) * (10^logps(x+0.5g.Δx, y) + 10^logps(x-0.5g.Δx, y)) +
+          ((1-θ) / (g.μ * g.Δy^2)) * (10^logps(x, y+0.5g.Δy) + 10^logps(x, y-0.5g.Δy)),
+        -((1-θ) / (g.μ * g.Δx^2)) * 10^logps(x+0.5g.Δx, y),
+        -((1-θ) / (g.μ * g.Δx^2)) * 10^logps(x-0.5g.Δx, y),
+        -((1-θ) / (g.μ * g.Δy^2)) * 10^logps(x, y+0.5g.Δy),
+        -((1-θ) / (g.μ * g.Δy^2)) * 10^logps(x, y-0.5g.Δy)
     )
 
     # Add the coefficients for points at the current time
@@ -140,12 +142,12 @@ function add_interior_point!(
     push!(
         vs, 
         (g.ϕ*g.c / g.Δt) +
-          (θ / (g.μ * g.Δx^2)) * (ps(x+0.5g.Δx, y) + ps(x-0.5g.Δx, y)) +
-          (θ / (g.μ * g.Δy^2)) * (ps(x, y+0.5g.Δy) + ps(x, y-0.5g.Δy)),
-        -(θ / (g.μ * g.Δx^2)) * ps(x+0.5g.Δx, y),
-        -(θ / (g.μ * g.Δx^2)) * ps(x-0.5g.Δx, y),
-        -(θ / (g.μ * g.Δy^2)) * ps(x, y+0.5g.Δy),
-        -(θ / (g.μ * g.Δy^2)) * ps(x, y-0.5g.Δy)
+          (θ / (g.μ * g.Δx^2)) * (10^logps(x+0.5g.Δx, y) + 10^logps(x-0.5g.Δx, y)) +
+          (θ / (g.μ * g.Δy^2)) * (10^logps(x, y+0.5g.Δy) + 10^logps(x, y-0.5g.Δy)),
+        -(θ / (g.μ * g.Δx^2)) * 10^logps(x+0.5g.Δx, y),
+        -(θ / (g.μ * g.Δx^2)) * 10^logps(x-0.5g.Δx, y),
+        -(θ / (g.μ * g.Δy^2)) * 10^logps(x, y+0.5g.Δy),
+        -(θ / (g.μ * g.Δy^2)) * 10^logps(x, y-0.5g.Δy)
     )
 
     return
@@ -154,15 +156,15 @@ end
 
 function construct_A(
     g::SteadyStateGrid, 
-    ps::AbstractMatrix, 
+    logps::AbstractMatrix, 
     bcs::Dict{Symbol, BoundaryCondition}
 )::SparseMatrixCSC
 
     is = Int[]
     js = Int[]
-    vs = Vector{typeof(ps[1, 1])}(undef, 0)
+    vs = Vector{typeof(logps[1, 1])}(undef, 0)
 
-    ps = interpolate((g.xs, g.ys), ps, Gridded(Linear()))
+    logps = interpolate((g.xs, g.ys), logps, Gridded(Linear()))
 
     for i ∈ 1:g.nu 
 
@@ -179,7 +181,7 @@ function construct_A(
         
         else
         
-            add_interior_point!(is, js, vs, i, x, y, g, ps)
+            add_interior_point!(is, js, vs, i, x, y, g, logps)
         
         end
 
@@ -191,15 +193,15 @@ end
 
 function construct_A(
     g::TransientGrid, 
-    ps::AbstractMatrix, 
+    logps::AbstractMatrix, 
     bcs::Dict{Symbol, BoundaryCondition}
 )::SparseMatrixCSC
 
-    ps = interpolate((g.xs, g.ys), ps, Gridded(Linear()))
+    logps = interpolate((g.xs, g.ys), logps, Gridded(Linear()))
 
     is = Int[]
     js = Int[]
-    vs = Vector{typeof(ps[1, 1])}(undef, 0)
+    vs = Vector{typeof(logps[1, 1])}(undef, 0)
 
     # Form the matrix associated with the previous points
     push!(is, collect(1:g.nu)...)
@@ -207,25 +209,16 @@ function construct_A(
     push!(vs, fill(1.0, g.nu)...)
 
     # Form the matrix of current points
-    for i ∈ 1:g.nu 
+    for i ∈ g.is_corner 
+        add_corner_point!(is, js, vs, g.nu+i)
+    end
 
-        x, y = get_coordinates(i, g)
+    for (i, b) ∈ zip(g.is_bounds, g.bs_bounds)
+        add_boundary_point!(is, js, vs, g.nu+i, g, bcs[b])
+    end
 
-        if in_corner(x, y, g)
-
-            add_corner_point!(is, js, vs, g.nu+i)
-
-        elseif on_boundary(x, y, g)
-
-            bc = get_boundary(x, y, g, bcs)
-            add_boundary_point!(is, js, vs, g.nu+i, g, bc)
-        
-        else
-        
-            add_interior_point!(is, js, vs, g.nu+i, x, y, g, ps)
-        
-        end
-
+    for i ∈ g.is_inner
+        add_interior_point!(is, js, vs, g.nu+i, g, logps)
     end
 
     return sparse(is, js, vs, 2g.nu, 2g.nu)
@@ -234,15 +227,15 @@ end
 
 function construct_b(
     g::SteadyStateGrid, 
-    ps::AbstractMatrix,
+    logps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
     q::Function
 )::SparseVector
 
     is = Int[]
-    vs = Vector{typeof(ps[1, 1])}(undef, 0)
+    vs = Vector{typeof(logps[1, 1])}(undef, 0)
 
-    ps = interpolate((g.xs, g.ys), ps, Gridded(Linear()))
+    logps = interpolate((g.xs, g.ys), logps, Gridded(Linear()))
 
     for i ∈ 1:g.nu 
 
@@ -254,7 +247,7 @@ function construct_b(
 
             bc = get_boundary(x, y, g, bcs)
             if bc.type == :neumann
-                push!(vs, bc.func(x, y) / ps(x, y))
+                push!(vs, bc.func(x, y) / logps(x, y))
             else 
                 push!(vs, bc.func(x, y))
             end
@@ -274,7 +267,7 @@ end
 
 function construct_b(
     g::TransientGrid, 
-    ps::AbstractMatrix,
+    logps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
     u_p::AbstractMatrix,
     q::Function,
@@ -282,38 +275,33 @@ function construct_b(
 )::SparseVector
 
     is = Int[]
-    vs = Vector{typeof(ps[1, 1])}(undef, 0)
+    vs = Vector{typeof(logps[1, 1])}(undef, 0)
 
-    ps = interpolate((g.xs, g.ys), ps, Gridded(Linear()))
+    logps = interpolate((g.xs, g.ys), logps, Gridded(Linear()))
 
     push!(is, collect(1:g.nu)...)
     push!(vs, u_p...)
 
-    for i ∈ 1:g.nu 
-
-        x, y = get_coordinates(i, g)
-
-        if on_boundary(x, y, g) && !in_corner(x, y, g)
-
-            push!(is, i+g.nu)
-
-            bc = get_boundary(x, y, g, bcs)
-            if bc.type == :neumann
-                push!(vs, bc.func(x, y) / ps(x, y))
-            else 
-                push!(vs, bc.func(x, y))
-            end
-
-        else
-
-            # Add source term
-            push!(is, i+g.nu)
-            if t == 1
-                push!(vs, θ * q(x, y, g.ts[t+1]))
-            else
-                push!(vs, (1-θ) * q(x, y, g.ts[t]) + θ * q(x, y, g.ts[t+1]))
-            end
+    for (i, b) ∈ zip(g.is_bounds, g.bs_bounds)
         
+        push!(is, i+g.nu)
+
+        if bcs[b].type == :neumann
+            push!(vs, bcs[b].func(g.ixs[i], g.iys[i]) / 10^logps(g.ixs[i], g.iys[i]))
+        else 
+            push!(vs, bcs[b].func(g.ixs[i], g.iys[i]))
+        end
+
+    end
+
+    # Add source term
+    for i ∈ g.is_inner
+
+        push!(is, i+g.nu)
+        if t == 1
+            push!(vs, θ * q(g.ixs[i], g.iys[i], g.ts[t+1]))
+        else
+            push!(vs, (1-θ) * q(g.ixs[i], g.iys[i], g.ts[t]) + θ * q(g.ixs[i], g.iys[i], g.ts[t+1]))
         end
 
     end
@@ -341,7 +329,7 @@ end
 
 function SciMLBase.solve(
     g::TransientGrid,
-    ps::AbstractMatrix,
+    logps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
     q::Function
 )::AbstractArray
@@ -351,11 +339,11 @@ function SciMLBase.solve(
     us = zeros(Real, g.nx, g.ny, g.nt+1)
     us[:,:,1] = u0
 
-    A = construct_A(g, ps, bcs)
+    A = construct_A(g, logps, bcs)
 
     for t ∈ 1:g.nt
 
-        b = construct_b(g, ps, bcs, us[:,:,t], q, t)
+        b = construct_b(g, logps, bcs, us[:,:,t], q, t)
         u = solve(LinearProblem(A, b))
         us[:,:,t+1] = reshape(u[g.nu+1:end], g.nx, g.ny)
 

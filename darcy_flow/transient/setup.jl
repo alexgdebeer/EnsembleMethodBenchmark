@@ -17,7 +17,7 @@ xmin, xmax = 0.0, 1000.0
 ymin, ymax = 0.0, 1000.0
 
 Δx_c, Δy_c = 20.0, 20.0
-Δx_f, Δy_f = 20.0, 20.0
+Δx_f, Δy_f = 10.0, 10.0
 
 tmax = 120.0
 Δt = 4.0
@@ -93,7 +93,7 @@ true_field = MaternField(grid_f, logp_mu, σ_bounds, l_bounds)
 logps_t = transform(true_field, vec(θs_t))
 ps_t = 10.0 .^ logps_t
 
-us_t = @time solve(grid_f, ps_t, bcs, q_f)
+us_t = @time solve(grid_f, logps_t, bcs, q_f)
 
 # ----------------
 # Data generation / likelihood
@@ -143,8 +143,8 @@ us_o += rand(MvNormal(Γ))
 # ----------------
 
 function F(θs::AbstractVector)
-    ps = 10.0 .^ transform(p, θs)
-    return vec(solve(grid_c, ps, bcs, q_c))
+    logps = transform(p, θs)
+    return vec(solve(grid_c, logps, bcs, q_c))
 end
 
 function G(us::AbstractVector)
@@ -158,7 +158,7 @@ if ANIMATE
 
     # Rescale pressures and extract pressures at well of interest
     us_t ./= 1.0e6
-    well_us = us_t[16,16,:]
+    well_us = us_t[16,48,:]
 
     anim = @animate for i ∈ axes(us_t, 3)
 
