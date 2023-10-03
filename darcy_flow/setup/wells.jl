@@ -33,9 +33,7 @@ struct BumpWell
     x::Real
     y::Real
     r::Real
-    t0::Real
-    t1::Real
-    q::Real
+    qs::Tuple
     a::Real
     
     function BumpWell(
@@ -43,13 +41,11 @@ struct BumpWell
         x::Real, 
         y::Real, 
         r::Real,
-        t0::Real,
-        t1::Real, 
-        q::Real
+        qs::Tuple
     )
 
         a = normalising_constant(g, x, y, r)
-        return new(x, y, r, t0, t1, q, a)
+        return new(x, y, r, qs, a)
     
     end
 
@@ -69,11 +65,7 @@ function well_rate(w::DeltaWell, x::Real, y::Real, t::Real)::Real
     
 end
 
-function well_rate(w::BumpWell, x::Real, y::Real, t::Real)::Real
-
-    if t < w.t0 || t > w.t1
-        return 0.0
-    end
+function well_rate(w::BumpWell, x::Real, y::Real, p::Int)::Real
 
     r_sq = (x - w.x)^2 + (y - w.y)^2
 
@@ -81,6 +73,6 @@ function well_rate(w::BumpWell, x::Real, y::Real, t::Real)::Real
         return 0.0
     end
 
-    return w.q * exp(-1/(w.r^2-r_sq)) / w.a
+    return w.qs[p] * exp(-1/(w.r^2-r_sq)) / w.a
 
 end

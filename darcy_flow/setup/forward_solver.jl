@@ -278,11 +278,28 @@ function construct_b(
     g::TransientGrid, 
     logps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
-    u_p::AbstractMatrix,
-    P::AbstractMatrix,
     q::Function,
-    t::Real
+    t::Int
 )::SparseVector
+
+    p = -1
+    p_prev = -1
+    initial = false
+
+    if t ∈ g.well_periods
+        
+        p = findfirst(x->x==t, g.well_periods)
+        p_prev = p-1
+        if p == 1
+            initial = true
+        end
+
+    elseif t-1 ∈ g.well_periods
+        
+        p = findfirst(x->x==t-1, g.well_periods)
+        p_prev = p
+    
+    end
 
     is = Int[]
     vs = Vector{typeof(logps[1, 1])}(undef, 0)
@@ -305,15 +322,15 @@ function construct_b(
     for i ∈ g.is_inner
 
         push!(is, i)
-        if t == 1
-            push!(vs, θ * q(g.ixs[i], g.iys[i], g.ts[t+1]))
+        if initial === true
+            push!(vs, θ * q(g.ixs[i], g.iys[i], p)) # Previous extraction was 0...?
         else
-            push!(vs, (1-θ) * q(g.ixs[i], g.iys[i], g.ts[t]) + θ * q(g.ixs[i], g.iys[i], g.ts[t+1]))
+            push!(vs, (1-θ) * q(g.ixs[i], g.iys[i], p_prev) + θ * q(g.ixs[i], g.iys[i], p))
         end
 
     end
 
-    return sparsevec(is, vs, g.nu) - P*vec(u_p)
+    return sparsevec(is, vs, g.nu)
 
 end
 
@@ -347,12 +364,16 @@ function SciMLBase.solve(
     us[:,:,1] = u0
 
     P, A = construct_A(g, logps, bcs)
+    b = construct_b(g, logps, bcs, q, 1)
 
     for t ∈ 1:g.nt
 
-        b = construct_b(g, logps, bcs, us[:,:,t], P, q, t)
-        u = solve(LinearProblem(A, b))
+        u = solve(LinearProblem(A, b-P*vec(us[:,:,t])))
         us[:,:,t+1] = reshape(u, g.nx, g.ny)
+
+        if t ∈ g.well_periods || t+1 ∈ g.well_periods
+            b = construct_b(g, logps, bcs, q, t+1)
+        end
 
     end
 

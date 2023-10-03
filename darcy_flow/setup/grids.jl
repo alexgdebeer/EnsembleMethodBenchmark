@@ -77,6 +77,8 @@ struct TransientGrid <: Grid
     nt::Int
     nu::Int
 
+    well_periods::Tuple
+
     μ::Real 
     ϕ::Real
     c::Real
@@ -86,9 +88,10 @@ struct TransientGrid <: Grid
         ys::AbstractVector,
         tmax::Real,
         Δt::Real,
+        well_periods::Tuple,
         μ::Real=1.0,
         ϕ::Real=1.0,
-        c::Real=1.0
+        c::Real=1.0,
     )::TransientGrid 
 
         function add_point_type!(i, x, y)
@@ -145,6 +148,7 @@ struct TransientGrid <: Grid
             Δx, Δy, Δt, 
             is_corner, is_bounds, bs_bounds, is_inner,
             nx, ny, nt, nu,
+            well_periods,
             μ, ϕ, c
         )
 

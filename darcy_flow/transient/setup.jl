@@ -34,37 +34,45 @@ q_is_c = 00.0 / (Δx_c * Δy_c)       # Injector rate, (m^3 / day) / m^3
 q_ps_f = 30.0 / (Δx_f * Δy_f)       # Producer rate, (m^3 / day) / m^3
 q_is_f = 00.0 / (Δx_f * Δy_f)       # Injector rate, (m^3 / day) / m^3
 
-grid_c = TransientGrid(xmin:Δx_c:xmax, ymin:Δy_c:ymax, tmax, Δt, μ, ϕ, c)
-grid_f = TransientGrid(xmin:Δx_f:xmax, ymin:Δy_f:ymax, tmax, Δt, μ, ϕ, c)
+# Indices of timesteps at which well rates change
+well_periods = (1, 11, 21) # 0, 40, 80
 
-well_r = 30.0
+grid_c = TransientGrid(xmin:Δx_c:xmax, ymin:Δy_c:ymax, tmax, Δt, well_periods, μ, ϕ, c)
+grid_f = TransientGrid(xmin:Δx_f:xmax, ymin:Δy_f:ymax, tmax, Δt, well_periods, μ, ϕ, c)
 
-# Define well positions
-well_cs = [
+well_radius = 30.0
+
+well_centres = [
     (150, 150), (150, 500), (150, 850),
     (500, 150), (500, 500), (500, 850),
     (850, 150), (850, 500), (850, 850)
 ]
 
-# Define times wells are active during
-well_ts = [
-    (00, 40), (40, 80), (00, 40),
-    (40, 80), (00, 40), (40, 80),
-    (00, 40), (40, 80), (00, 40)
+# Well rates during each time period
+well_rates_c = [
+    (-q_ps_c, 0, 0), (0, -q_ps_c, 0), (-q_ps_c, 0, 0),
+    (0, -q_ps_c, 0), (-q_ps_c, 0, 0), (0, -q_ps_c, 0),
+    (-q_ps_c, 0, 0), (0, -q_ps_c, 0), (-q_ps_c, 0, 0)
+]
+
+well_rates_f = [
+    (-q_ps_f, 0, 0), (0, -q_ps_f, 0), (-q_ps_f, 0, 0),
+    (0, -q_ps_f, 0), (-q_ps_f, 0, 0), (0, -q_ps_f, 0),
+    (-q_ps_f, 0, 0), (0, -q_ps_f, 0), (-q_ps_f, 0, 0)
 ]
 
 wells_c = [
-    BumpWell(grid_c, cs..., well_r, ts..., -q_ps_c) 
-    for (cs, ts) ∈ zip(well_cs, well_ts)
+    BumpWell(grid_c, cs..., well_radius, qs) 
+    for (cs, qs) ∈ zip(well_centres, well_rates_c)
 ]
 
 wells_f = [
-    BumpWell(grid_f, cs..., well_r, ts..., -q_ps_f) 
-    for (cs, ts) ∈ zip(well_cs, well_ts)
+    BumpWell(grid_f, cs..., well_radius, qs) 
+    for (cs, qs) ∈ zip(well_centres, well_rates_f)
 ]
 
-q_c(x, y, t) = sum(well_rate(w, x, y, t) for w ∈ wells_c)
-q_f(x, y, t) = sum(well_rate(w, x, y, t) for w ∈ wells_f)
+q_c(x, y, period) = sum(well_rate(w, x, y, period) for w ∈ wells_c)
+q_f(x, y, period) = sum(well_rate(w, x, y, period) for w ∈ wells_f)
 
 bcs = Dict(
     :x0 => BoundaryCondition(:x0, :neumann, (x, y) -> 0.0), 
@@ -91,7 +99,6 @@ p = MaternField(grid_c, logp_mu, σ_bounds, l_bounds)
 true_field = MaternField(grid_f, logp_mu, σ_bounds, l_bounds)
 θs_t = rand(true_field)
 logps_t = transform(true_field, vec(θs_t))
-ps_t = 10.0 .^ logps_t
 
 us_t = @time solve(grid_f, logps_t, bcs, q_f)
 
