@@ -22,9 +22,7 @@ struct DeltaWell
 
     x::Real 
     y::Real
-    t0::Real 
-    t1::Real
-    q::Real
+    qs::Tuple
 
 end
 
@@ -51,14 +49,10 @@ struct BumpWell
 
 end
 
-function well_rate(w::DeltaWell, x::Real, y::Real, t::Real)::Real 
-
-    if t < w.t0 || t > w.t1
-        return 0.0
-    end
+function well_rate(w::DeltaWell, x::Real, y::Real, p::Real)::Real 
 
     if abs(w.x - x) ≤ 1e-8 && abs(w.y - y) ≤ 1e-8
-        return w.q 
+        return w.qs[p]
     end
 
     return 0.0
