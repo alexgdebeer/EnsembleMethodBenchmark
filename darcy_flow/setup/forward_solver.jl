@@ -4,6 +4,7 @@ using LinearSolve
 using SparseArrays
 
 # TODO: bring the steady-state solve into line with the transient solve
+# TODO: modify the transient solve to only modify b at the times it needs to be
 
 # Implicit solve parameter (Crank-Nicolson)
 const θ = 0.5
@@ -112,22 +113,28 @@ function add_interior_point!(
 end
 
 function add_interior_point!(
-    is::Vector{Int}, 
-    js::Vector{Int}, 
-    vs::Vector{<:Real}, 
+    A_is::Vector{Int}, 
+    A_js::Vector{Int}, 
+    A_vs::Vector{<:Real},
+    P_is::Vector{Int},
+    P_js::Vector{Int},
+    P_vs::Vector{<:Real}, 
     i::Int,
     g::TransientGrid, 
     logps::Interpolations.GriddedInterpolation
 )::Nothing
 
-    x, y = g.ixs[i%g.nu], g.iys[i%g.nu]
+    x, y = g.ixs[i], g.iys[i]
 
-    push!(is, fill(i, 10)...)
+    push!(P_is, fill(i, 5)...)
+    push!(A_is, fill(i, 5)...)
 
-    # Add the coefficients for points at the previous time
-    push!(js, i-g.nu, i-g.nu+1, i-g.nu-1, i-g.nu+g.nx, i-g.nu-g.nx)
+    push!(P_js, i, i+1, i-1, i+g.nx, i-g.nx)
+    push!(A_js, i, i+1, i-1, i+g.nx, i-g.nx)
+
+    # Previous timestep
     push!(
-        vs, 
+        P_vs, 
         -(g.ϕ*g.c / g.Δt) +
           ((1-θ) / (g.μ * g.Δx^2)) * (10^logps(x+0.5g.Δx, y) + 10^logps(x-0.5g.Δx, y)) +
           ((1-θ) / (g.μ * g.Δy^2)) * (10^logps(x, y+0.5g.Δy) + 10^logps(x, y-0.5g.Δy)),
@@ -137,10 +144,9 @@ function add_interior_point!(
         -((1-θ) / (g.μ * g.Δy^2)) * 10^logps(x, y-0.5g.Δy)
     )
 
-    # Add the coefficients for points at the current time
-    push!(js, i, i+1, i-1, i+g.nx, i-g.nx)
+    # Current timestep
     push!(
-        vs, 
+        A_vs, 
         (g.ϕ*g.c / g.Δt) +
           (θ / (g.μ * g.Δx^2)) * (10^logps(x+0.5g.Δx, y) + 10^logps(x-0.5g.Δx, y)) +
           (θ / (g.μ * g.Δy^2)) * (10^logps(x, y+0.5g.Δy) + 10^logps(x, y-0.5g.Δy)),
@@ -195,33 +201,36 @@ function construct_A(
     g::TransientGrid, 
     logps::AbstractMatrix, 
     bcs::Dict{Symbol, BoundaryCondition}
-)::SparseMatrixCSC
+)::Tuple{SparseMatrixCSC, SparseMatrixCSC}
 
     logps = interpolate((g.xs, g.ys), logps, Gridded(Linear()))
 
-    is = Int[]
-    js = Int[]
-    vs = Vector{typeof(logps[1, 1])}(undef, 0)
+    # Previous timestep
+    P_is = Int[]
+    P_js = Int[]
+    P_vs = Vector{typeof(logps[1, 1])}(undef, 0)
 
-    # Form the matrix associated with the previous points
-    push!(is, collect(1:g.nu)...)
-    push!(js, collect(1:g.nu)...)
-    push!(vs, fill(1.0, g.nu)...)
+    # Current timestep
+    A_is = Int[]
+    A_js = Int[]
+    A_vs = Vector{typeof(logps[1, 1])}(undef, 0)
 
-    # Form the matrix of current points
     for i ∈ g.is_corner 
-        add_corner_point!(is, js, vs, g.nu+i)
+        add_corner_point!(A_is, A_js, A_vs, i)
     end
 
     for (i, b) ∈ zip(g.is_bounds, g.bs_bounds)
-        add_boundary_point!(is, js, vs, g.nu+i, g, bcs[b])
+        add_boundary_point!(A_is, A_js, A_vs, i, g, bcs[b])
     end
 
     for i ∈ g.is_inner
-        add_interior_point!(is, js, vs, g.nu+i, g, logps)
+        add_interior_point!(A_is, A_js, A_vs, P_is, P_js, P_vs, i, g, logps)
     end
 
-    return sparse(is, js, vs, 2g.nu, 2g.nu)
+    P = sparse(P_is, P_js, P_vs, g.nu, g.nu)
+    A = sparse(A_is, A_js, A_vs, g.nu, g.nu)
+
+    return P, A
 
 end
 
@@ -270,6 +279,7 @@ function construct_b(
     logps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
     u_p::AbstractMatrix,
+    P::AbstractMatrix,
     q::Function,
     t::Real
 )::SparseVector
@@ -279,12 +289,9 @@ function construct_b(
 
     logps = interpolate((g.xs, g.ys), logps, Gridded(Linear()))
 
-    push!(is, collect(1:g.nu)...)
-    push!(vs, u_p...)
-
     for (i, b) ∈ zip(g.is_bounds, g.bs_bounds)
         
-        push!(is, i+g.nu)
+        push!(is, i)
 
         if bcs[b].type == :neumann
             push!(vs, bcs[b].func(g.ixs[i], g.iys[i]) / 10^logps(g.ixs[i], g.iys[i]))
@@ -297,7 +304,7 @@ function construct_b(
     # Add source term
     for i ∈ g.is_inner
 
-        push!(is, i+g.nu)
+        push!(is, i)
         if t == 1
             push!(vs, θ * q(g.ixs[i], g.iys[i], g.ts[t+1]))
         else
@@ -306,7 +313,7 @@ function construct_b(
 
     end
 
-    return sparsevec(is, vs, 2g.nu)
+    return sparsevec(is, vs, g.nu) - P*vec(u_p)
 
 end
 
@@ -336,16 +343,16 @@ function SciMLBase.solve(
 
     u0 = reshape([bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys], g.nx, g.ny)
 
-    us = zeros(Real, g.nx, g.ny, g.nt+1)
+    us = zeros(typeof(logps[1, 1]), g.nx, g.ny, g.nt+1)
     us[:,:,1] = u0
 
-    A = construct_A(g, logps, bcs)
+    P, A = construct_A(g, logps, bcs)
 
     for t ∈ 1:g.nt
 
-        b = construct_b(g, logps, bcs, us[:,:,t], q, t)
+        b = construct_b(g, logps, bcs, us[:,:,t], P, q, t)
         u = solve(LinearProblem(A, b))
-        us[:,:,t+1] = reshape(u[g.nu+1:end], g.nx, g.ny)
+        us[:,:,t+1] = reshape(u, g.nx, g.ny)
 
     end
 
