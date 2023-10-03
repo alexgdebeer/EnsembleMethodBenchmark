@@ -101,6 +101,7 @@ true_field = MaternField(grid_f, logp_mu, σ_bounds, l_bounds)
 logps_t = transform(true_field, vec(θs_t))
 
 us_t = @time solve(grid_f, logps_t, bcs, q_f)
+us_t = reshape(us_t, grid_f.nx, grid_f.ny, grid_f.nt+1)
 
 # ----------------
 # Data generation / likelihood
@@ -133,7 +134,7 @@ ys_o = [
     150, 500, 850
 ]
 
-ts_o = [3, 5, 7, 9, 11, 13, 15, 17] # Measure every 10 days for the first 80 days
+ts_o = [3, 5, 7, 9, 11, 13, 15, 17] # TODO: update
 
 n_obs = length(xs_o) * length(ts_o)
 
@@ -151,13 +152,22 @@ us_o += rand(MvNormal(Γ))
 
 function F(θs::AbstractVector)
     logps = transform(p, θs)
-    return vec(solve(grid_c, logps, bcs, q_c))
+    return solve(grid_c, logps, bcs, q_c)
 end
 
 function G(us::AbstractVector)
     us = reshape(us, grid_c.nx, grid_c.ny, grid_c.nt+1)
     return get_observations(grid_c, us, ts_o, xs_o, ys_o)
 end
+
+# Generate a large number of samples
+# θs_sample = rand(p, 100)
+
+# for θ ∈ eachcol(θs_sample)
+
+#     us = F(θ)
+
+# end
 
 @info "Setup complete"
 

@@ -338,18 +338,16 @@ function SciMLBase.solve(
     q::Function
 )::AbstractArray
 
-    us = zeros(typeof(logps[1, 1]), g.nx, g.ny, g.nt+1)
-    
-    u0 = reshape([bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys], g.nx, g.ny)
-    us[:,:,1] = u0
+    u0 = [bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys]
+    us = zeros(typeof(logps[1, 1]), g.nx * g.ny, g.nt+1)
+    us[:, 1] = u0
 
     P, A = construct_A(g, logps, bcs)
     b = construct_b(g, logps, bcs, q, 1)
 
     for t ∈ 1:g.nt
 
-        u = solve(LinearProblem(A, b-P*vec(us[:,:,t])))
-        us[:,:,t+1] = reshape(u, g.nx, g.ny)
+        us[:, t+1] = solve(LinearProblem(A, b-P*us[:, t]))
 
         if t ∈ g.well_periods || t+1 ∈ g.well_periods
             b = construct_b(g, logps, bcs, q, t+1)
