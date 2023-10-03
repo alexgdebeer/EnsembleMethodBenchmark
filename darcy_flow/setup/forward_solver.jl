@@ -3,9 +3,6 @@ using LinearAlgebra
 using LinearSolve
 using SparseArrays
 
-# TODO: bring the steady-state solve into line with the transient solve
-# TODO: modify the transient solve to only modify b at the times it needs to be
-
 # Implicit solve parameter (Crank-Nicolson)
 const θ = 0.5
 
@@ -88,12 +85,12 @@ function add_interior_point!(
     is::Vector{Int}, 
     js::Vector{Int}, 
     vs::Vector{<:Real}, 
-    i::Int, 
-    x::Real, 
-    y::Real, 
+    i::Int,
     g::SteadyStateGrid, 
     logps::Interpolations.GriddedInterpolation
 )::Nothing
+
+    x, y = g.ixs[i], g.iys[i]
 
     push!(is, i, i, i, i, i)
     push!(js, i, i+1, i-1, i+g.nx, i-g.nx)
@@ -126,8 +123,8 @@ function add_interior_point!(
 
     x, y = g.ixs[i], g.iys[i]
 
-    push!(P_is, fill(i, 5)...)
-    push!(A_is, fill(i, 5)...)
+    push!(P_is, i, i, i, i, i)
+    push!(A_is, i, i, i, i, i)
 
     push!(P_js, i, i+1, i-1, i+g.nx, i-g.nx)
     push!(A_js, i, i+1, i-1, i+g.nx, i-g.nx)
@@ -172,25 +169,16 @@ function construct_A(
 
     logps = interpolate((g.xs, g.ys), logps, Gridded(Linear()))
 
-    for i ∈ 1:g.nu 
+    for i ∈ g.is_corner
+        add_corner_point!(is, js, vs, i)
+    end
 
-        x, y = get_coordinates(i, g)
+    for (i, b) ∈ zip(g.is_bounds, g.bs_bounds)
+        add_boundary_point!(is, js, vs, i, g, bcs[b])
+    end
 
-        if in_corner(x, y, g)
-
-            add_corner_point!(is, js, vs, i)
-
-        elseif on_boundary(x, y, g)
-
-            bc = get_boundary(x, y, g, bcs)
-            add_boundary_point!(is, js, vs, i, g, bc)
-        
-        else
-        
-            add_interior_point!(is, js, vs, i, x, y, g, logps)
-        
-        end
-
+    for i ∈ g.is_inner
+        add_interior_point!(is, js, vs, i, g, logps)
     end
 
     return sparse(is, js, vs, g.nu, g.nu)
@@ -246,27 +234,23 @@ function construct_b(
 
     logps = interpolate((g.xs, g.ys), logps, Gridded(Linear()))
 
-    for i ∈ 1:g.nu 
+    for (i, b) ∈ zip(g.is_bounds, g.bs_bounds)
+        
+        push!(is, i)
 
-        x, y = get_coordinates(i, g)
-
-        if on_boundary(x, y, g)
-
-            push!(is, i)
-
-            bc = get_boundary(x, y, g, bcs)
-            if bc.type == :neumann
-                push!(vs, bc.func(x, y) / logps(x, y))
-            else 
-                push!(vs, bc.func(x, y))
-            end
-
+        if bcs[b].type == :neumann
+            push!(vs, bcs[b].func(g.ixs[i], g.iys[i]) / 
+                         10^logps(g.ixs[i], g.iys[i]))
         else 
-
-            push!(is, i)
-            push!(vs, q(x, y))
-
+            push!(vs, bcs[b].func(g.ixs[i], g.iys[i]))
         end
+
+    end
+
+    for i ∈ g.is_inner
+
+        push!(is, i)
+        push!(vs, q(g.ixs[i], g.iys[i]))
 
     end
 
@@ -287,18 +271,12 @@ function construct_b(
     initial = false
 
     if t ∈ g.well_periods
-        
         p = findfirst(x->x==t, g.well_periods)
         p_prev = p-1
-        if p == 1
-            initial = true
-        end
-
+        initial = p == 1
     elseif t-1 ∈ g.well_periods
-        
         p = findfirst(x->x==t-1, g.well_periods)
         p_prev = p
-    
     end
 
     is = Int[]
@@ -319,7 +297,6 @@ function construct_b(
 
     end
 
-    # Add source term
     for i ∈ g.is_inner
 
         push!(is, i)
