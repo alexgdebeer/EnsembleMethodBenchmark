@@ -311,7 +311,8 @@ function construct_b(
         push!(is, i)
 
         if bcs[b].type == :neumann
-            push!(vs, bcs[b].func(g.ixs[i], g.iys[i]) / 10^logps(g.ixs[i], g.iys[i]))
+            push!(vs, bcs[b].func(g.ixs[i], g.iys[i]) / 
+                         10^logps(g.ixs[i], g.iys[i]))
         else 
             push!(vs, bcs[b].func(g.ixs[i], g.iys[i]))
         end
@@ -322,10 +323,12 @@ function construct_b(
     for i ∈ g.is_inner
 
         push!(is, i)
+
         if initial === true
-            push!(vs, θ * q(g.ixs[i], g.iys[i], p)) # Previous extraction was 0...?
+            push!(vs, θ * q(g.ixs[i], g.iys[i], p))
         else
-            push!(vs, (1-θ) * q(g.ixs[i], g.iys[i], p_prev) + θ * q(g.ixs[i], g.iys[i], p))
+            push!(vs, (1-θ) * q(g.ixs[i], g.iys[i], p_prev) + 
+                          θ * q(g.ixs[i], g.iys[i], p))
         end
 
     end
@@ -358,9 +361,9 @@ function SciMLBase.solve(
     q::Function
 )::AbstractArray
 
-    u0 = reshape([bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys], g.nx, g.ny)
-
     us = zeros(typeof(logps[1, 1]), g.nx, g.ny, g.nt+1)
+    
+    u0 = reshape([bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys], g.nx, g.ny)
     us[:,:,1] = u0
 
     P, A = construct_A(g, logps, bcs)
