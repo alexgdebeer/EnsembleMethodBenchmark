@@ -358,3 +358,38 @@ function SciMLBase.solve(
     return us
 
 end
+
+"""Solve with reduced-order model."""
+function SciMLBase.solve(
+    g::TransientGrid,
+    logps::AbstractMatrix,
+    bcs::Dict{Symbol, BoundaryCondition},
+    q::Function,
+    mu::AbstractVector,
+    V_r::AbstractMatrix
+)::AbstractArray
+
+    u0 = [bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys]
+    us = zeros(typeof(logps[1, 1]), g.nx * g.ny, g.nt+1)
+    us[:, 1] = u0
+
+    P, A = construct_A(g, logps, bcs)
+    A_r = V_r' * A * V_r
+    
+    b = construct_b(g, logps, bcs, q, 1)
+
+    for t ∈ 1:g.nt
+
+        b_r = V_r' * (b - P * us[:, t] - A * mu)
+        us_r = solve(LinearProblem(A_r, b_r))
+        us[:, t+1] = mu + V_r * us_r
+
+        if t ∈ g.well_periods || t+1 ∈ g.well_periods
+            b = construct_b(g, logps, bcs, q, t+1)
+        end
+
+    end
+
+    return us
+
+end

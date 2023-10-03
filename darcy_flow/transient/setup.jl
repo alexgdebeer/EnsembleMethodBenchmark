@@ -1,7 +1,9 @@
 using Distributions
 using Interpolations
 using LaTeXStrings
+using LinearAlgebra
 using Random: seed!
+using Statistics
 
 include("../setup/setup.jl")
 
@@ -161,13 +163,25 @@ function G(us::AbstractVector)
 end
 
 # Generate a large number of samples
-# θs_sample = rand(p, 100)
+θs_sample = rand(p, 100)
+us_sample = reduce(hcat, [@time F(θ)[:, 2:end] for θ ∈ eachcol(θs_sample)])
 
-# for θ ∈ eachcol(θs_sample)
+mu = vec(mean(us_sample, dims=2))
+Γ = cov(us_sample')
 
-#     us = F(θ)
+eigendecomp = eigen(Γ, sortby=(λ -> -λ))
+Λ, V = eigendecomp.values, eigendecomp.vectors
 
-# end
+# Extract basis
+N_r = findfirst(cumsum(Λ)/sum(Λ) .> 0.999)
+V_r = V[:, 1:N_r]
+
+function F_r(θs::AbstractVector)
+    logps = transform(p, θs)
+    return solve(grid_c, logps, bcs, q_c, mu, V_r)
+end
+
+us_sample_r = reduce(hcat, [@time F_r(θ)[:,2:end] for θ ∈ eachcol(θs_sample)])
 
 @info "Setup complete"
 
