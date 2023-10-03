@@ -17,3 +17,5 @@ Extract the eigenvectors corresponding to the n largest eigenvalues
 Form basis and pass into forward problem
 Solve forward problem with reduced basis (making sure to project 
 states back into original state space somewhere in there)
+Run the reduced model on the same inputs the full model was run on and 
+build the covariance of the errors (see other Lipponen paper?)
