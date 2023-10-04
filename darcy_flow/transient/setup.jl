@@ -88,7 +88,7 @@ bcs = Dict(
 # Prior generation
 # ----------------
 
-logp_mu = -14.0
+logp_mu = -13.5
 σ_bounds = (0.25, 0.75)
 l_bounds = (100, 400)
 
@@ -183,11 +183,11 @@ V_r = V[:, 1:N_r]
 
 us_sample_r = reduce(hcat, [@time F_r(θ)[:,2:end] for θ ∈ eachcol(θs_sample)])
 
-us_sample_1 = F(θs_sample[:,1])
-us_sample_1 = reshape(us_sample_1, grid_c.nx, grid_c.ny, grid_c.nt+1)
+us_sample_ex = F(θs_sample[:, 2])
+us_sample_ex = reshape(us_sample_ex, grid_c.nx, grid_c.ny, grid_c.nt+1)
 
-us_sample_1r = F_r(θs_sample[:,1])
-us_sample_1r = reshape(us_sample_1r, grid_c.nx, grid_c.ny, grid_c.nt+1)
+us_sample_ex_r = F_r(θs_sample[:, 2])
+us_sample_ex_r = reshape(us_sample_ex_r, grid_c.nx, grid_c.ny, grid_c.nt+1)
 
 # Different bases for each time period???
 
@@ -202,7 +202,7 @@ function animate(us, grid, well_inds, fname)
 
         plot(
             heatmap(
-                grid.xs, grid.ys, rotl90(us[:,:,i]), 
+                grid.xs, grid.ys, us[:, :, i]', 
                 clims=extrema(us[2:end-1, 2:end-1, :]), 
                 cmap=:turbo, 
                 size=(500, 500),
@@ -217,7 +217,7 @@ function animate(us, grid, well_inds, fname)
                 ylims=extrema(well_us),
                 xlabel="Day",
                 ylabel="Pressure (MPa)",
-                title="Pressure in well at (150, 500)",
+                title="Pressure in well at (500, 150)",
                 legend=:none
             ),
             size=(1000, 400),
@@ -230,5 +230,5 @@ function animate(us, grid, well_inds, fname)
 
 end
 
-animate(us_sample_1, grid_c, (13, 41), "darcy_flow")
-animate(us_sample_1r, grid_c, (13, 41), "darcy_flow_reduced")
+animate(us_sample_ex, grid_c, (41, 13), "darcy_flow_ex")
+animate(us_sample_ex_r, grid_c, (41, 13), "darcy_flow_ex_reduced")
