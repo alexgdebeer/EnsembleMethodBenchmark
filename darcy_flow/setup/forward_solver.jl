@@ -3,8 +3,7 @@ using LinearAlgebra
 using LinearSolve
 using SparseArrays
 
-# Implicit solve parameter (Crank-Nicolson)
-const θ = 0.5
+const θ = 0.5 # Implicit solve parameter (Crank-Nicolson)
 
 function add_corner_point!(
     is::Vector{Int}, 
@@ -349,7 +348,6 @@ function SciMLBase.solve(
 
 end
 
-"""Solve with reduced-order model."""
 function SciMLBase.solve(
     g::TransientGrid,
     logps::AbstractMatrix,
