@@ -226,7 +226,7 @@ function construct_b(
     g::SteadyStateGrid, 
     logps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
-    q::Function
+    Q::AbstractVector
 )::SparseVector
 
     is = Int[]
@@ -247,14 +247,8 @@ function construct_b(
 
     end
 
-    for i ∈ g.is_inner
-
-        push!(is, i)
-        push!(vs, q(g.ixs[i], g.iys[i]))
-
-    end
-
-    return sparsevec(is, vs, g.nu)
+    b = sparsevec(is, vs, g.nu) + Q
+    return b
 
 end
 
@@ -314,11 +308,11 @@ function SciMLBase.solve(
     g::SteadyStateGrid,
     ps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
-    q::Function
+    Q::AbstractVector
 )::AbstractMatrix
 
     A = construct_A(g, ps, bcs)
-    b = construct_b(g, ps, bcs, q)
+    b = construct_b(g, ps, bcs, Q)
 
     us = solve(LinearProblem(A, b))
     us = reshape(us, g.nx, g.ny)
