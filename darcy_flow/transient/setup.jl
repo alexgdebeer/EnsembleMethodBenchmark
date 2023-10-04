@@ -1,5 +1,4 @@
 using Distributions
-using Interpolations
 using LaTeXStrings
 using LinearAlgebra
 using Random: seed!
@@ -102,8 +101,8 @@ true_field = MaternField(grid_f, logp_mu, σ_bounds, l_bounds)
 θs_t = rand(true_field)
 logps_t = transform(true_field, vec(θs_t))
 
-us_t = @time solve(grid_f, logps_t, bcs, Q_f)
-us_t = reshape(us_t, grid_f.nx, grid_f.ny, grid_f.nt+1)
+us_t = solve(grid_f, logps_t, bcs, Q_f)
+us_t = reshape(us_t, grid_f.nu, grid_f.nt+1)
 
 # ----------------
 # Data generation / likelihood
@@ -124,27 +123,22 @@ function get_observations(grid, us, ts_o, xs_o, ys_o)
 
 end
 
-xs_o = [
-    150, 150, 150, 
-    500, 500, 500, 
-    850, 850, 850
-]
+xs_obs = [c[1] for c ∈ well_centres]
+ys_obs = [c[2] for c ∈ well_centres]
 
-ys_o = [
-    150, 500, 850, 
-    150, 500, 850, 
-    150, 500, 850
-]
+ts_obs = [3, 5, 7, 9, 11, 13, 15, 17] # TODO: update
 
-ts_o = [3, 5, 7, 9, 11, 13, 15, 17] # TODO: update
+n_obs = length(xs_obs) * length(ts_obs)
 
-n_obs = length(xs_o) * length(ts_o)
+# Generate observation operators for the fine and coarse grids
+B_f = build_observation_operator(grid_f, xs_obs, ys_obs)
+B_c = build_observation_operator(grid_c, xs_obs, ys_obs)
 
-σ_ϵ = u0 * 0.01
+σ_ϵ = u0 * 0.01 # TODO: think about this one...
 Γ = σ_ϵ^2 * Matrix(1.0I, n_obs, n_obs)
 
-us_o = get_observations(grid_f, us_t, ts_o, xs_o, ys_o)
-us_o += rand(MvNormal(Γ))
+us_obs = vcat([B_f * us_t[:, t] for t ∈ ts_obs]...)
+us_obs += rand(MvNormal(Γ)) # TODO: tidy?
 
 # L = MvNormal(us_o, Γ_ϵ)
 
@@ -163,16 +157,19 @@ function F_r(θs::AbstractVector)
 end
 
 function G(us::AbstractVector)
-    us = reshape(us, grid_c.nx, grid_c.ny, grid_c.nt+1)
-    return get_observations(grid_c, us, ts_o, xs_o, ys_o)
+    us = reshape(us, grid_c.nu, grid_c.nt+1)
+    return vcat([B_c * us[:, t] for t ∈ ts_obs]...)
 end
 
 # Generate a large number of samples
-θs_sample = rand(p, 100)
-us_sample = reduce(hcat, [@time F(θ)[:, 2:end] for θ ∈ eachcol(θs_sample)])
+θs_samp = rand(p, 100)
+us_samp = hcat([@time F(θ) for θ ∈ eachcol(θs_samp)]...)
+us_samp_reshaped = hcat([
+    reshape(u, grid_c.nu, grid_c.nt+1)[:, 2:end] for u ∈ eachcol(us_samp)
+]...)' # Initial condition doesn't matter
 
-mu = vec(mean(us_sample, dims=2))
-Γ = cov(us_sample')
+mu = vec(mean(us_samp_reshaped, dims=1))
+Γ = cov(us_samp_reshaped) # TODO: tidy?
 
 eigendecomp = eigen(Γ, sortby=(λ -> -λ))
 Λ, V = eigendecomp.values, eigendecomp.vectors
@@ -181,15 +178,7 @@ eigendecomp = eigen(Γ, sortby=(λ -> -λ))
 N_r = findfirst(cumsum(Λ)/sum(Λ) .> 0.999)
 V_r = V[:, 1:N_r]
 
-us_sample_r = reduce(hcat, [@time F_r(θ)[:,2:end] for θ ∈ eachcol(θs_sample)])
-
-us_sample_ex = F(θs_sample[:, 2])
-us_sample_ex = reshape(us_sample_ex, grid_c.nx, grid_c.ny, grid_c.nt+1)
-
-us_sample_ex_r = F_r(θs_sample[:, 2])
-us_sample_ex_r = reshape(us_sample_ex_r, grid_c.nx, grid_c.ny, grid_c.nt+1)
-
-# Different bases for each time period???
+us_samp_r = hcat([@time F_r(θ) for θ ∈ eachcol(θs_samp)]...)
 
 @info "Setup complete"
 
@@ -230,5 +219,16 @@ function animate(us, grid, well_inds, fname)
 
 end
 
-animate(us_sample_ex, grid_c, (41, 13), "darcy_flow_ex")
-animate(us_sample_ex_r, grid_c, (41, 13), "darcy_flow_ex_reduced")
+ys_samp = hcat([G(u) for u ∈ eachcol(us_samp)]...)
+ys_samp_r = hcat([G(u) for u ∈ eachcol(us_samp_r)]...)
+
+# TODO: fix this...
+
+# us_samp_ex = F(θs_samp[:, 2])
+# us_samp_ex = reshape(us_samp_ex, grid_c.nx, grid_c.ny, grid_c.nt+1)
+
+# us_samp_ex_r = F_r(θs_samp[:, 2])
+# us_samp_ex_r = reshape(us_samp_ex_r, grid_c.nx, grid_c.ny, grid_c.nt+1)
+
+# animate(us_samp_ex, grid_c, (41, 13), "darcy_flow_ex")
+# animate(us_samp_ex_r, grid_c, (41, 13), "darcy_flow_ex_reduced")

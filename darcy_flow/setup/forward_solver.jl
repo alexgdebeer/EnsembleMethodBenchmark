@@ -308,14 +308,12 @@ function SciMLBase.solve(
     ps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
     Q::AbstractVector
-)::AbstractMatrix
+)::AbstractVector
 
     A = construct_A(g, ps, bcs)
     b = construct_b(g, ps, bcs, Q)
 
     us = solve(LinearProblem(A, b))
-    us = reshape(us, g.nx, g.ny)
-
     return us
 
 end
@@ -325,7 +323,7 @@ function SciMLBase.solve(
     logps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
     Qs::AbstractMatrix
-)::AbstractArray
+)::AbstractVector
 
     u0 = [bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys]
     us = zeros(typeof(logps[1, 1]), g.nx * g.ny, g.nt+1)
@@ -344,7 +342,7 @@ function SciMLBase.solve(
 
     end
 
-    return us
+    return vec(us)
 
 end
 
@@ -355,7 +353,7 @@ function SciMLBase.solve(
     Qs::AbstractMatrix,
     mu::AbstractVector,
     V_r::AbstractMatrix
-)::AbstractArray
+)::AbstractVector
 
     u0 = [bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys]
     us = zeros(typeof(logps[1, 1]), g.nx * g.ny, g.nt+1)
@@ -378,6 +376,6 @@ function SciMLBase.solve(
 
     end
 
-    return us
+    return vec(us)
 
 end
