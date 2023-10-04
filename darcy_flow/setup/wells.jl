@@ -18,14 +18,6 @@ function normalising_constant(g::Grid, x::Real, y::Real, r::Real)::Real
 
 end
 
-struct DeltaWell 
-
-    x::Real 
-    y::Real
-    qs::Tuple
-
-end
-
 struct BumpWell
 
     x::Real
@@ -47,16 +39,6 @@ struct BumpWell
     
     end
 
-end
-
-function well_rate(w::DeltaWell, x::Real, y::Real, p::Real)::Real 
-
-    if abs(w.x - x) ≤ 1e-8 && abs(w.y - y) ≤ 1e-8
-        return w.qs[p]
-    end
-
-    return 0.0
-    
 end
 
 function well_rate(w::BumpWell, x::Real, y::Real, p::Int)::Real
