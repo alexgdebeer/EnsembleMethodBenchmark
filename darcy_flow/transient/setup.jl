@@ -18,7 +18,7 @@ ANIMATE = true
 xmin, xmax = 0.0, 1000.0
 ymin, ymax = 0.0, 1000.0
 
-Δx_c, Δy_c = 20.0, 20.0
+Δx_c, Δy_c = 12.5, 12.5
 Δx_f, Δy_f = 10.0, 10.0
 
 tmax = 120.0
@@ -157,6 +157,11 @@ function F(θs::AbstractVector)
     return solve(grid_c, logps, bcs, Q_c)
 end
 
+function F_r(θs::AbstractVector)
+    logps = transform(p, θs)
+    return solve(grid_c, logps, bcs, Q_c, mu, V_r)
+end
+
 function G(us::AbstractVector)
     us = reshape(us, grid_c.nx, grid_c.ny, grid_c.nt+1)
     return get_observations(grid_c, us, ts_o, xs_o, ys_o)
@@ -176,32 +181,29 @@ eigendecomp = eigen(Γ, sortby=(λ -> -λ))
 N_r = findfirst(cumsum(Λ)/sum(Λ) .> 0.999)
 V_r = V[:, 1:N_r]
 
-function F_r(θs::AbstractVector)
-    logps = transform(p, θs)
-    return solve(grid_c, logps, bcs, Q_c, mu, V_r)
-end
-
 us_sample_r = reduce(hcat, [@time F_r(θ)[:,2:end] for θ ∈ eachcol(θs_sample)])
 
-us_sample_test = F_r(θs_sample[:,1])
-us_sample_test = reshape(us_sample_test, grid_c.nx, grid_c.ny, grid_c.nt+1)
+us_sample_1 = F(θs_sample[:,1])
+us_sample_1 = reshape(us_sample_1, grid_c.nx, grid_c.ny, grid_c.nt+1)
+
+us_sample_1r = F_r(θs_sample[:,1])
+us_sample_1r = reshape(us_sample_1r, grid_c.nx, grid_c.ny, grid_c.nt+1)
 
 # Different bases for each time period???
 
 @info "Setup complete"
 
-if ANIMATE
+function animate(us, grid, well_inds, fname)
 
-    # Rescale pressures and extract pressures at well of interest
-    us_sample_test ./= 1.0e6
-    well_us = us_sample_test[8, 24,:]
+    us ./= 1.0e6
+    well_us = us[well_inds...,:]
 
-    anim = @animate for i ∈ axes(us_sample_test, 3)
+    anim = @animate for i ∈ axes(us, 3)
 
         plot(
             heatmap(
-                grid_c.xs, grid_c.ys, us_sample_test[:,:,i]', 
-                clims=extrema(us_sample_test[2:end-1, 2:end-1, :]), 
+                grid.xs, grid.ys, rotl90(us[:,:,i]), 
+                clims=extrema(us[2:end-1, 2:end-1, :]), 
                 cmap=:turbo, 
                 size=(500, 500),
                 title="Reservoir pressure vs time",
@@ -215,7 +217,7 @@ if ANIMATE
                 ylims=extrema(well_us),
                 xlabel="Day",
                 ylabel="Pressure (MPa)",
-                title="Pressure in well at (200, 200)",
+                title="Pressure in well at (150, 500)",
                 legend=:none
             ),
             size=(1000, 400),
@@ -224,6 +226,9 @@ if ANIMATE
 
     end
 
-    gif(anim, "pressure_plots_approx.gif", fps=4)
+    gif(anim, "$fname.gif", fps=4)
 
 end
+
+animate(us_sample_1, grid_c, (13, 41), "darcy_flow")
+animate(us_sample_1r, grid_c, (13, 41), "darcy_flow_reduced")
