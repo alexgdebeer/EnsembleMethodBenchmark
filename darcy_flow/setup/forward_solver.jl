@@ -262,7 +262,7 @@ function construct_b(
     g::TransientGrid, 
     logps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
-    q::Function,
+    Qs::AbstractMatrix,
     t::Int
 )::SparseVector
 
@@ -297,20 +297,16 @@ function construct_b(
 
     end
 
-    for i ∈ g.is_inner
+    b = sparsevec(is, vs, g.nu)
 
-        push!(is, i)
-
-        if initial === true
-            push!(vs, θ * q(g.ixs[i], g.iys[i], p))
-        else
-            push!(vs, (1-θ) * q(g.ixs[i], g.iys[i], p_prev) + 
-                          θ * q(g.ixs[i], g.iys[i], p))
-        end
-
+    # Add forcing term
+    if initial 
+        b += θ * Qs[:, 1]
+    else 
+        b += (1-θ) * Qs[:, p_prev] + θ * Qs[:, p]
     end
 
-    return sparsevec(is, vs, g.nu)
+    return b
 
 end
 
@@ -335,7 +331,7 @@ function SciMLBase.solve(
     g::TransientGrid,
     logps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
-    q::Function
+    Qs::AbstractMatrix
 )::AbstractArray
 
     u0 = [bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys]
@@ -343,14 +339,14 @@ function SciMLBase.solve(
     us[:, 1] = u0
 
     P, A = construct_A(g, logps, bcs)
-    b = construct_b(g, logps, bcs, q, 1)
+    b = construct_b(g, logps, bcs, Qs, 1)
 
     for t ∈ 1:g.nt
 
         us[:, t+1] = solve(LinearProblem(A, b-P*us[:, t]))
 
         if t ∈ g.well_periods || t+1 ∈ g.well_periods
-            b = construct_b(g, logps, bcs, q, t+1)
+            b = construct_b(g, logps, bcs, Qs, t+1)
         end
 
     end
@@ -364,7 +360,7 @@ function SciMLBase.solve(
     g::TransientGrid,
     logps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
-    q::Function,
+    Qs::AbstractMatrix,
     mu::AbstractVector,
     V_r::AbstractMatrix
 )::AbstractArray
@@ -375,8 +371,8 @@ function SciMLBase.solve(
 
     P, A = construct_A(g, logps, bcs)
     A_r = V_r' * A * V_r
-    
-    b = construct_b(g, logps, bcs, q, 1)
+
+    b = construct_b(g, logps, bcs, Qs, 1)
 
     for t ∈ 1:g.nt
 
@@ -385,7 +381,7 @@ function SciMLBase.solve(
         us[:, t+1] = mu + V_r * us_r
 
         if t ∈ g.well_periods || t+1 ∈ g.well_periods
-            b = construct_b(g, logps, bcs, q, t+1)
+            b = construct_b(g, logps, bcs, Qs, t+1)
         end
 
     end

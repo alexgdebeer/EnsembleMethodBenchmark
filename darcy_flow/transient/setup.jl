@@ -73,8 +73,8 @@ wells_f = [
     for (cs, qs) ∈ zip(well_centres, well_rates_f)
 ]
 
-q_c(x, y, period) = sum(well_rate(w, x, y, period) for w ∈ wells_c)
-q_f(x, y, period) = sum(well_rate(w, x, y, period) for w ∈ wells_f)
+Q_c = sum([w.Q for w ∈ wells_c])
+Q_f = sum([w.Q for w ∈ wells_f])
 
 bcs = Dict(
     :x0 => BoundaryCondition(:x0, :neumann, (x, y) -> 0.0), 
@@ -102,7 +102,7 @@ true_field = MaternField(grid_f, logp_mu, σ_bounds, l_bounds)
 θs_t = rand(true_field)
 logps_t = transform(true_field, vec(θs_t))
 
-us_t = @time solve(grid_f, logps_t, bcs, q_f)
+us_t = @time solve(grid_f, logps_t, bcs, Q_f)
 us_t = reshape(us_t, grid_f.nx, grid_f.ny, grid_f.nt+1)
 
 # ----------------
@@ -154,7 +154,7 @@ us_o += rand(MvNormal(Γ))
 
 function F(θs::AbstractVector)
     logps = transform(p, θs)
-    return solve(grid_c, logps, bcs, q_c)
+    return solve(grid_c, logps, bcs, Q_c)
 end
 
 function G(us::AbstractVector)
@@ -178,25 +178,30 @@ V_r = V[:, 1:N_r]
 
 function F_r(θs::AbstractVector)
     logps = transform(p, θs)
-    return solve(grid_c, logps, bcs, q_c, mu, V_r)
+    return solve(grid_c, logps, bcs, Q_c, mu, V_r)
 end
 
 us_sample_r = reduce(hcat, [@time F_r(θ)[:,2:end] for θ ∈ eachcol(θs_sample)])
+
+us_sample_test = F_r(θs_sample[:,1])
+us_sample_test = reshape(us_sample_test, grid_c.nx, grid_c.ny, grid_c.nt+1)
+
+# Different bases for each time period???
 
 @info "Setup complete"
 
 if ANIMATE
 
     # Rescale pressures and extract pressures at well of interest
-    us_t ./= 1.0e6
-    well_us = us_t[16,48,:]
+    us_sample_test ./= 1.0e6
+    well_us = us_sample_test[8, 24,:]
 
-    anim = @animate for i ∈ axes(us_t, 3)
+    anim = @animate for i ∈ axes(us_sample_test, 3)
 
         plot(
             heatmap(
-                grid_f.xs, grid_f.ys, us_t[:,:,i]', 
-                clims=extrema(us_t[2:end-1, 2:end-1, :]), 
+                grid_c.xs, grid_c.ys, us_sample_test[:,:,i]', 
+                clims=extrema(us_sample_test[2:end-1, 2:end-1, :]), 
                 cmap=:turbo, 
                 size=(500, 500),
                 title="Reservoir pressure vs time",
@@ -219,6 +224,6 @@ if ANIMATE
 
     end
 
-    gif(anim, "pressure_plots.gif", fps=4)
+    gif(anim, "pressure_plots_approx.gif", fps=4)
 
 end
