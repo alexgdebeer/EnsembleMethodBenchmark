@@ -16,12 +16,15 @@ ANIMATE = true
 
 xmin, xmax = 0.0, 1000.0
 ymin, ymax = 0.0, 1000.0
-
-Δx_c, Δy_c = 12.5, 12.5
-Δx_f, Δy_f = 10.0, 10.0
-
 tmax = 120.0
-Δt = 4.0
+
+Δx_c, Δy_c = 12.5, 12.5 # 80 * 80
+Δx_f, Δy_f = 8.0, 8.0   # 120 * 120
+Δt_f = 2.0
+Δt_c = 4.0
+
+# Times at which the rates of one or more wells change
+well_change_times = [0, 40, 80]
 
 # General parameters
 ϕ = 0.30                            # Porosity
@@ -30,16 +33,13 @@ c = 2.0e-4 / 6895.0                 # Compressibility (Pa^-1)
 u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 
 q_ps_c = 30.0 / (Δx_c * Δy_c)       # Producer rate, (m^3 / day) / m^3
-q_is_c = 00.0 / (Δx_c * Δy_c)       # Injector rate, (m^3 / day) / m^3 
+q_is_c = 00.0 / (Δx_c * Δy_c)       # Injector rate, (m^3 / day) / m^3 # TODO: probably remove this...
 
 q_ps_f = 30.0 / (Δx_f * Δy_f)       # Producer rate, (m^3 / day) / m^3
 q_is_f = 00.0 / (Δx_f * Δy_f)       # Injector rate, (m^3 / day) / m^3
 
-# Indices of timesteps at which well rates change
-well_periods = (1, 11, 21) # 0, 40, 80
-
-grid_c = TransientGrid(xmin:Δx_c:xmax, ymin:Δy_c:ymax, tmax, Δt, well_periods, μ, ϕ, c)
-grid_f = TransientGrid(xmin:Δx_f:xmax, ymin:Δy_f:ymax, tmax, Δt, well_periods, μ, ϕ, c)
+grid_c = TransientGrid(xmin:Δx_c:xmax, ymin:Δy_c:ymax, tmax, Δt_c, well_change_times, μ, ϕ, c)
+grid_f = TransientGrid(xmin:Δx_f:xmax, ymin:Δy_f:ymax, tmax, Δt_f, well_change_times, μ, ϕ, c)
 
 well_radius = 30.0
 
@@ -83,6 +83,21 @@ bcs = Dict(
     :t0 => BoundaryCondition(:t0, :initial, (x, y) -> u0)
 )
 
+# Observation locations and times
+xs_obs = [c[1] for c ∈ well_centres]
+ys_obs = [c[2] for c ∈ well_centres]
+ts_obs = [8, 16, 24, 32, 40, 48, 56, 64, 72, 80]
+
+# Operators that map between the output states and the data
+B_f = build_observation_operator(grid_f, xs_obs, ys_obs)
+B_c = build_observation_operator(grid_c, xs_obs, ys_obs)
+
+# Indices of time periods at which data is collected
+ts_obs_inds_f = [findfirst(grid_f.ts .>= t) for t ∈ ts_obs]
+ts_obs_inds_c = [findfirst(grid_c.ts .>= t) for t ∈ ts_obs]
+
+n_obs = length(xs_obs) * length(ts_obs)
+
 # ----------------
 # Prior generation
 # ----------------
@@ -108,37 +123,12 @@ us_t = reshape(us_t, grid_f.nu, grid_f.nt+1)
 # Data generation / likelihood
 # ----------------
 
-function get_observations(grid, us, ts_o, xs_o, ys_o)
-
-    us_o = []
-
-    for t ∈ ts_o
-
-        u = interpolate((grid.xs, grid.ys), us[:,:,t], Gridded(Linear()))
-        append!(us_o, [u(x, y) for (x, y) ∈ zip(xs_o, ys_o)])
-
-    end
-
-    return us_o
-
-end
-
-xs_obs = [c[1] for c ∈ well_centres]
-ys_obs = [c[2] for c ∈ well_centres]
-
-ts_obs = [3, 5, 7, 9, 11, 13, 15, 17] # TODO: update
-
-n_obs = length(xs_obs) * length(ts_obs)
-
-# Generate observation operators for the fine and coarse grids
-B_f = build_observation_operator(grid_f, xs_obs, ys_obs)
-B_c = build_observation_operator(grid_c, xs_obs, ys_obs)
-
+# Define covariance of the observations
 σ_ϵ = u0 * 0.01 # TODO: think about this one...
-Γ = σ_ϵ^2 * Matrix(1.0I, n_obs, n_obs)
+Γ = σ_ϵ^2 * Matrix(1.0I, n_obs, n_obs) 
 
-us_obs = vcat([B_f * us_t[:, t] for t ∈ ts_obs]...)
-us_obs += rand(MvNormal(Γ)) # TODO: tidy?
+us_obs = vcat([B_f * us_t[:, t] for t ∈ ts_obs_inds_f]...)
+us_obs += rand(MvNormal(Γ))
 
 # L = MvNormal(us_o, Γ_ϵ)
 
@@ -158,8 +148,10 @@ end
 
 function G(us::AbstractVector)
     us = reshape(us, grid_c.nu, grid_c.nt+1)
-    return vcat([B_c * us[:, t] for t ∈ ts_obs]...)
+    return vcat([B_c * us[:, t] for t ∈ ts_obs_inds_c]...)
 end
+
+# POD stuff
 
 # Generate a large number of samples
 θs_samp = rand(p, 100)
@@ -223,6 +215,8 @@ ys_samp = hcat([G(u) for u ∈ eachcol(us_samp)]...)
 ys_samp_r = hcat([G(u) for u ∈ eachcol(us_samp_r)]...)
 
 # TODO: fix this...
+# TODO: use a different set of θ to test things on...? Might be biased currently 
+# TODO: can I construct a better interpolation operator for the pressures?
 
 # us_samp_ex = F(θs_samp[:, 2])
 # us_samp_ex = reshape(us_samp_ex, grid_c.nx, grid_c.ny, grid_c.nt+1)

@@ -263,12 +263,12 @@ function construct_b(
     p_prev = -1
     initial = false
 
-    if t ∈ g.well_periods
-        p = findfirst(x->x==t, g.well_periods)
+    if t ∈ g.well_change_inds
+        p = findfirst(g.well_change_inds .== t)
         p_prev = p-1
         initial = p == 1
-    elseif t-1 ∈ g.well_periods
-        p = findfirst(x->x==t-1, g.well_periods)
+    elseif t-1 ∈ g.well_change_inds
+        p = findfirst(g.well_change_inds .== t-1)
         p_prev = p
     end
 
@@ -336,7 +336,7 @@ function SciMLBase.solve(
 
         us[:, t+1] = solve(LinearProblem(A, b-P*us[:, t]))
 
-        if t ∈ g.well_periods || t+1 ∈ g.well_periods
+        if t ∈ g.well_change_inds || t+1 ∈ g.well_change_inds
             b = construct_b(g, logps, bcs, Qs, t+1)
         end
 
@@ -370,7 +370,7 @@ function SciMLBase.solve(
         us_r = solve(LinearProblem(A_r, b_r))
         us[:, t+1] = mu + V_r * us_r
 
-        if t ∈ g.well_periods || t+1 ∈ g.well_periods
+        if t ∈ g.well_change_inds || t+1 ∈ g.well_change_inds
             b = construct_b(g, logps, bcs, Qs, t+1)
         end
 
