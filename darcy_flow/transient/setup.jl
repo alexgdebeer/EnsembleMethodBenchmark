@@ -11,8 +11,8 @@ seed!(16)
 # Reservoir properties 
 # ----------------
 
-ϕ = 0.30                            # Porosity
 μ = 0.5 * 1e-3 / (3600.0 * 24.0)    # Viscosity (Pa⋅day)
+ϕ = 0.30                            # Porosity
 c = 2.0e-4 / 6895.0                 # Compressibility (Pa^-1)
 u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 
@@ -149,15 +149,12 @@ end
 # POD
 # ----------------
 
-θs_samp, us_samp = generate_pod_samples(p, 100)
-μ_u, V_r = compute_pod_basis(grid_c, us_samp, 0.999)
-
-# us_samp_r = hcat([@time F_r(θ) for θ ∈ eachcol(θs_samp)]...)
-# ys_samp = hcat([G(u) for u ∈ eachcol(us_samp)]...)
-# ys_samp_r = hcat([G(u) for u ∈ eachcol(us_samp_r)]...)
+us_samp = generate_pod_samples(p, 100)
+μ_u, V_r = compute_pod_basis(grid_c, us_samp, 0.9995)
 
 function animate(us, grid, well_inds, fname)
 
+    us = reshape(us, grid.nx, grid.ny, :)
     us ./= 1.0e6
     well_us = us[well_inds...,:]
 
@@ -174,7 +171,7 @@ function animate(us, grid, well_inds, fname)
                 ylabel=L"y \, \textrm{(m)}"
             ),
             plot(
-                grid_f.ts[1:i], well_us[1:i], 
+                grid.ts[1:i], well_us[1:i], 
                 size=(500, 500), 
                 xlims=(0, tmax),
                 ylims=extrema(well_us),
@@ -193,16 +190,21 @@ function animate(us, grid, well_inds, fname)
 
 end
 
-# TODO: fix this...
-# TODO: check whether other studies used a different set of θ to test model on
-# TODO: can I construct a better interpolation operator for the pressures?
-# TODO: test the timestepping for the finer model (try a couple of runs with e.g. 2 days and 4 days)
+TEST_POD = true
 
-# us_samp_ex = F(θs_samp[:, 2])
-# us_samp_ex = reshape(us_samp_ex, grid_c.nx, grid_c.ny, grid_c.nt+1)
+if TEST_POD
 
-# us_samp_ex_r = F_r(θs_samp[:, 2])
-# us_samp_ex_r = reshape(us_samp_ex_r, grid_c.nx, grid_c.ny, grid_c.nt+1)
+    θs_test = rand(p, 100)
 
-# animate(us_samp_ex, grid_c, (41, 13), "darcy_flow_ex")
-# animate(us_samp_ex_r, grid_c, (41, 13), "darcy_flow_ex_reduced")
+    us_test = [@time F(θ) for θ ∈ eachcol(θs_test)]
+    us_test_r = [@time F_r(θ) for θ ∈ eachcol(θs_test)]
+
+    ys_test = hcat([G(u) for u ∈ us_test]...)
+    ys_test_r = hcat([G(u) for u ∈ us_test_r]...)
+
+    animate(us_test[1], grid_c, (41, 13), "darcy_flow_ex")
+    animate(us_test_r[1], grid_c, (41, 13), "darcy_flow_ex_reduced")
+
+end
+
+# animate(us_t, grid_f, (100, 100), "fine_grid")

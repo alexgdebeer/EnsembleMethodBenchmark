@@ -2,14 +2,14 @@ using LinearAlgebra
 using Statistics
 
 function generate_pod_samples(
-    p, # TODO: add type annotation
+    p,
     N::Int
-)::Tuple{AbstractMatrix, AbstractMatrix}
+)::AbstractMatrix
 
     θs = rand(p, N)
     us = hcat([@time F(θ) for θ ∈ eachcol(θs)]...)
 
-    return θs, us
+    return us
 
 end
 
