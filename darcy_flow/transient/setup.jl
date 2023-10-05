@@ -7,10 +7,17 @@ include("../setup/setup.jl")
 
 seed!(16)
 
-ANIMATE = true
+# ----------------
+# Reservoir properties 
+# ----------------
+
+ϕ = 0.30                            # Porosity
+μ = 0.5 * 1e-3 / (3600.0 * 24.0)    # Viscosity (Pa⋅day)
+c = 2.0e-4 / 6895.0                 # Compressibility (Pa^-1)
+u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 
 # ----------------
-# Coarse and fine grid setup
+# Grid and boundary conditions
 # ----------------
 
 xmin, xmax = 0.0, 1000.0
@@ -22,23 +29,25 @@ tmax = 120.0
 Δt_f = 2.0
 Δt_c = 4.0
 
-# Times at which the rates of one or more wells change
-well_change_times = [0, 40, 80]
+well_change_times = [0, 40, 80] # TODO: not sure if this should be stored in the grid or not
 
-# General parameters
-ϕ = 0.30                            # Porosity
-μ = 0.5 * 1e-3 / (3600.0 * 24.0)    # Viscosity (Pa⋅day)
-c = 2.0e-4 / 6895.0                 # Compressibility (Pa^-1)
-u0 = 20 * 1.0e6                     # Initial pressure (Pa)
-
-q_ps_c = 30.0 / (Δx_c * Δy_c)       # Producer rate, (m^3 / day) / m^3
-q_is_c = 00.0 / (Δx_c * Δy_c)       # Injector rate, (m^3 / day) / m^3 # TODO: probably remove this...
-
-q_ps_f = 30.0 / (Δx_f * Δy_f)       # Producer rate, (m^3 / day) / m^3
-q_is_f = 00.0 / (Δx_f * Δy_f)       # Injector rate, (m^3 / day) / m^3
+q_c = 30.0 / (Δx_c * Δy_c)          # Producer rate, (m^3 / day) / m^3
+q_f = 30.0 / (Δx_f * Δy_f)          # Producer rate, (m^3 / day) / m^3
 
 grid_c = TransientGrid(xmin:Δx_c:xmax, ymin:Δy_c:ymax, tmax, Δt_c, well_change_times, μ, ϕ, c)
 grid_f = TransientGrid(xmin:Δx_f:xmax, ymin:Δy_f:ymax, tmax, Δt_f, well_change_times, μ, ϕ, c)
+
+bcs = Dict(
+    :x0 => BoundaryCondition(:x0, :neumann, (x, y) -> 0.0), 
+    :x1 => BoundaryCondition(:x1, :neumann, (x, y) -> 0.0),
+    :y0 => BoundaryCondition(:y0, :neumann, (x, y) -> 0.0), 
+    :y1 => BoundaryCondition(:y1, :neumann, (x, y) -> 0.0),
+    :t0 => BoundaryCondition(:t0, :initial, (x, y) -> u0)
+)
+
+# ----------------
+# Well parameters 
+# ----------------
 
 well_radius = 30.0
 
@@ -48,17 +57,16 @@ well_centres = [
     (850, 150), (850, 500), (850, 850)
 ]
 
-# Well rates during each time period
 well_rates_c = [
-    (-q_ps_c, 0, 0), (0, -q_ps_c, 0), (-q_ps_c, 0, 0),
-    (0, -q_ps_c, 0), (-q_ps_c, 0, 0), (0, -q_ps_c, 0),
-    (-q_ps_c, 0, 0), (0, -q_ps_c, 0), (-q_ps_c, 0, 0)
+    (-q_c, 0, 0), (0, -q_c, 0), (-q_c, 0, 0),
+    (0, -q_c, 0), (-q_c, 0, 0), (0, -q_c, 0),
+    (-q_c, 0, 0), (0, -q_c, 0), (-q_c, 0, 0)
 ]
 
 well_rates_f = [
-    (-q_ps_f, 0, 0), (0, -q_ps_f, 0), (-q_ps_f, 0, 0),
-    (0, -q_ps_f, 0), (-q_ps_f, 0, 0), (0, -q_ps_f, 0),
-    (-q_ps_f, 0, 0), (0, -q_ps_f, 0), (-q_ps_f, 0, 0)
+    (-q_f, 0, 0), (0, -q_f, 0), (-q_f, 0, 0),
+    (0, -q_f, 0), (-q_f, 0, 0), (0, -q_f, 0),
+    (-q_f, 0, 0), (0, -q_f, 0), (-q_f, 0, 0)
 ]
 
 wells_c = [
@@ -74,31 +82,8 @@ wells_f = [
 Q_c = sum([w.Q for w ∈ wells_c])
 Q_f = sum([w.Q for w ∈ wells_f])
 
-bcs = Dict(
-    :x0 => BoundaryCondition(:x0, :neumann, (x, y) -> 0.0), 
-    :x1 => BoundaryCondition(:x1, :neumann, (x, y) -> 0.0),
-    :y0 => BoundaryCondition(:y0, :neumann, (x, y) -> 0.0), 
-    :y1 => BoundaryCondition(:y1, :neumann, (x, y) -> 0.0),
-    :t0 => BoundaryCondition(:t0, :initial, (x, y) -> u0)
-)
-
-# Observation locations and times
-xs_obs = [c[1] for c ∈ well_centres]
-ys_obs = [c[2] for c ∈ well_centres]
-ts_obs = [8, 16, 24, 32, 40, 48, 56, 64, 72, 80]
-
-# Operators that map between the output states and the data
-B_f = build_observation_operator(grid_f, xs_obs, ys_obs)
-B_c = build_observation_operator(grid_c, xs_obs, ys_obs)
-
-# Indices of time periods at which data is collected
-ts_obs_inds_f = [findfirst(grid_f.ts .>= t) for t ∈ ts_obs]
-ts_obs_inds_c = [findfirst(grid_c.ts .>= t) for t ∈ ts_obs]
-
-n_obs = length(xs_obs) * length(ts_obs)
-
 # ----------------
-# Prior generation
+# Prior 
 # ----------------
 
 logp_mu = -13.5
@@ -108,7 +93,7 @@ l_bounds = (100, 400)
 p = MaternField(grid_c, logp_mu, σ_bounds, l_bounds)
 
 # ----------------
-# Truth generation
+# Truth
 # ----------------
 
 true_field = MaternField(grid_f, logp_mu, σ_bounds, l_bounds)
@@ -119,8 +104,21 @@ us_t = solve(grid_f, logps_t, bcs, Q_f)
 us_t = reshape(us_t, grid_f.nu, grid_f.nt+1)
 
 # ----------------
-# Data generation / likelihood
+# Data
 # ----------------
+
+xs_obs = [c[1] for c ∈ well_centres]
+ys_obs = [c[2] for c ∈ well_centres]
+ts_obs = [8, 16, 24, 32, 40, 48, 56, 64, 72, 80]
+
+# Operators that map between the output states and the data
+B_f = build_observation_operator(grid_f, xs_obs, ys_obs)
+B_c = build_observation_operator(grid_c, xs_obs, ys_obs)
+
+ts_obs_inds_f = [findfirst(grid_f.ts .>= t) for t ∈ ts_obs]
+ts_obs_inds_c = [findfirst(grid_c.ts .>= t) for t ∈ ts_obs]
+
+n_obs = length(xs_obs) * length(ts_obs)
 
 σ_ϵ = u0 * 0.01 # TODO: think about this (currently like this so the data are informative)
 Γ = σ_ϵ^2 * Matrix(1.0I, n_obs, n_obs) 
@@ -196,7 +194,7 @@ function animate(us, grid, well_inds, fname)
 end
 
 # TODO: fix this...
-# TODO: use a different set of θ to test things on...? Might be biased currently 
+# TODO: check whether other studies used a different set of θ to test model on
 # TODO: can I construct a better interpolation operator for the pressures?
 # TODO: test the timestepping for the finer model (try a couple of runs with e.g. 2 days and 4 days)
 
