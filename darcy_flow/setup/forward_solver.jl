@@ -351,7 +351,7 @@ function SciMLBase.solve(
     logps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
     Qs::AbstractMatrix,
-    mu::AbstractVector,
+    μ::AbstractVector,
     V_r::AbstractMatrix
 )::AbstractVector
 
@@ -366,9 +366,9 @@ function SciMLBase.solve(
 
     for t ∈ 1:g.nt
 
-        b_r = V_r' * (b - P * us[:, t] - A * mu)
+        b_r = V_r' * (b - P * us[:, t] - A * μ)
         us_r = solve(LinearProblem(A_r, b_r))
-        us[:, t+1] = mu + V_r * us_r
+        us[:, t+1] = μ + V_r * us_r
 
         if t ∈ g.well_change_inds || t+1 ∈ g.well_change_inds
             b = construct_b(g, logps, bcs, Qs, t+1)

@@ -2,7 +2,6 @@ using Distributions
 using LaTeXStrings
 using LinearAlgebra
 using Random: seed!
-using Statistics
 
 include("../setup/setup.jl")
 
@@ -123,14 +122,11 @@ us_t = reshape(us_t, grid_f.nu, grid_f.nt+1)
 # Data generation / likelihood
 # ----------------
 
-# Define covariance of the observations
-σ_ϵ = u0 * 0.01 # TODO: think about this one...
+σ_ϵ = u0 * 0.01 # TODO: think about this (currently like this so the data are informative)
 Γ = σ_ϵ^2 * Matrix(1.0I, n_obs, n_obs) 
 
 us_obs = vcat([B_f * us_t[:, t] for t ∈ ts_obs_inds_f]...)
 us_obs += rand(MvNormal(Γ))
-
-# L = MvNormal(us_o, Γ_ϵ)
 
 # ----------------
 # Model functions
@@ -143,7 +139,7 @@ end
 
 function F_r(θs::AbstractVector)
     logps = transform(p, θs)
-    return solve(grid_c, logps, bcs, Q_c, mu, V_r)
+    return solve(grid_c, logps, bcs, Q_c, μ_u, V_r)
 end
 
 function G(us::AbstractVector)
@@ -151,28 +147,16 @@ function G(us::AbstractVector)
     return vcat([B_c * us[:, t] for t ∈ ts_obs_inds_c]...)
 end
 
-# POD stuff
+# ----------------
+# POD
+# ----------------
 
-# Generate a large number of samples
-θs_samp = rand(p, 100)
-us_samp = hcat([@time F(θ) for θ ∈ eachcol(θs_samp)]...)
-us_samp_reshaped = hcat([
-    reshape(u, grid_c.nu, grid_c.nt+1)[:, 2:end] for u ∈ eachcol(us_samp)
-]...)' # Initial condition doesn't matter
+θs_samp, us_samp = generate_pod_samples(p, 100)
+μ_u, V_r = compute_pod_basis(grid_c, us_samp, 0.999)
 
-mu = vec(mean(us_samp_reshaped, dims=1))
-Γ = cov(us_samp_reshaped) # TODO: tidy?
-
-eigendecomp = eigen(Γ, sortby=(λ -> -λ))
-Λ, V = eigendecomp.values, eigendecomp.vectors
-
-# Extract basis
-N_r = findfirst(cumsum(Λ)/sum(Λ) .> 0.999)
-V_r = V[:, 1:N_r]
-
-us_samp_r = hcat([@time F_r(θ) for θ ∈ eachcol(θs_samp)]...)
-
-@info "Setup complete"
+# us_samp_r = hcat([@time F_r(θ) for θ ∈ eachcol(θs_samp)]...)
+# ys_samp = hcat([G(u) for u ∈ eachcol(us_samp)]...)
+# ys_samp_r = hcat([G(u) for u ∈ eachcol(us_samp_r)]...)
 
 function animate(us, grid, well_inds, fname)
 
@@ -211,12 +195,10 @@ function animate(us, grid, well_inds, fname)
 
 end
 
-ys_samp = hcat([G(u) for u ∈ eachcol(us_samp)]...)
-ys_samp_r = hcat([G(u) for u ∈ eachcol(us_samp_r)]...)
-
 # TODO: fix this...
 # TODO: use a different set of θ to test things on...? Might be biased currently 
 # TODO: can I construct a better interpolation operator for the pressures?
+# TODO: test the timestepping for the finer model (try a couple of runs with e.g. 2 days and 4 days)
 
 # us_samp_ex = F(θs_samp[:, 2])
 # us_samp_ex = reshape(us_samp_ex, grid_c.nx, grid_c.ny, grid_c.nt+1)
