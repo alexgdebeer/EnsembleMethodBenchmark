@@ -1,5 +1,8 @@
 include("grids.jl")
 include("wells.jl")
-include("forward_solver.jl")
+
 include("matern_fields.jl")
-include("data_generation.jl")
+include("pod.jl")
+include("forward_solver.jl")
+
+include("observations.jl")

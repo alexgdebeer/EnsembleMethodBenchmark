@@ -116,7 +116,7 @@ struct TransientGrid <: Grid
     nt::Int
     nu::Int
 
-    well_periods::Tuple
+    well_change_inds::AbstractVector
 
     μ::Real 
     ϕ::Real
@@ -127,7 +127,7 @@ struct TransientGrid <: Grid
         ys::AbstractVector,
         tmax::Real,
         Δt::Real,
-        well_periods::Tuple,
+        well_change_times::AbstractVector,
         μ::Real=1.0,
         ϕ::Real=1.0,
         c::Real=1.0,
@@ -154,7 +154,7 @@ struct TransientGrid <: Grid
 
         end
 
-        ts = 0.0:Δt:tmax 
+        ts = 0:Δt:tmax 
 
         xmin, xmax = extrema(xs)
         ymin, ymax = extrema(ys)
@@ -179,6 +179,8 @@ struct TransientGrid <: Grid
             add_point_type!(i, x, y)
         end
 
+        well_change_inds = [findfirst(ts .>= t) for t ∈ well_change_times]
+    
         return new(
             xs, ys, ts, 
             ixs, iys,
@@ -187,7 +189,7 @@ struct TransientGrid <: Grid
             Δx, Δy, Δt, 
             is_corner, is_bounds, bs_bounds, is_inner,
             nx, ny, nt, nu,
-            well_periods,
+            well_change_inds,
             μ, ϕ, c
         )
 

@@ -1,72 +1,61 @@
-"""Calculates the value to scale a bump function by, such that the 
-values of the function on a grid sum to 1."""
-function normalising_constant(g::Grid, x::Real, y::Real, r::Real)::Real
-
-    a = 0.0
-
-    for gx ∈ g.xs, gy ∈ g.ys
-
-        r_sq = (gx - x)^2 + (gy - y)^2
-    
-        if r_sq < r^2
-            a += exp(-1/(r^2-r_sq))
-        end
-    
-    end
-
-    return a
-
-end
-
-struct DeltaWell 
-
-    x::Real 
-    y::Real
-    qs::Tuple
-
-end
+using SparseArrays
 
 struct BumpWell
 
-    x::Real
-    y::Real
-    r::Real
+    cx::Real
+    cy::Real
+    
     qs::Tuple
-    a::Real
+    Q::AbstractMatrix
     
     function BumpWell(
         g::Grid, 
-        x::Real, 
-        y::Real, 
+        cx::Real, 
+        cy::Real, 
         r::Real,
         qs::Tuple
     )
 
-        a = normalising_constant(g, x, y, r)
-        return new(x, y, r, qs, a)
+        """Calculates the value to scale the bump function by, such that 
+        the values of the function on the model grid sum to 1."""
+        function normalising_constant(
+            g::Grid, 
+            cx::Real, 
+            cy::Real, 
+            r::Real
+        )::Real
+        
+            Z = 0.0
+            for (x, y) ∈ zip(g.ixs, g.iys)
+                if (r_sq = (x-cx)^2 + (y-cy)^2) < r^2
+                    Z += exp(-1/(r^2-r_sq))
+                end
+            end
+        
+            return Z
+        
+        end
+
+        Z = normalising_constant(g, cx, cy, r)
+        
+        Q_i = Int[]
+        Q_j = Int[]
+        Q_v = Float64[]
+
+        for (i, (x, y)) ∈ enumerate(zip(g.ixs, g.iys))
+            if (dist_sq = (x-cx)^2 + (y-cy)^2) < r^2
+                for (j, q) ∈ enumerate(qs)
+                    push!(Q_i, i)
+                    push!(Q_j, j)
+                    push!(Q_v, q * exp(-1/(r^2-dist_sq)) / Z)
+                end
+            end
+        end
+        
+        Q = sparse(Q_i, Q_j, Q_v, g.nu, length(qs))
+
+        return new(cx, cy, qs, Q)
     
     end
-
-end
-
-function well_rate(w::DeltaWell, x::Real, y::Real, p::Real)::Real 
-
-    if abs(w.x - x) ≤ 1e-8 && abs(w.y - y) ≤ 1e-8
-        return w.qs[p]
-    end
-
-    return 0.0
-    
-end
-
-function well_rate(w::BumpWell, x::Real, y::Real, p::Int)::Real
-
-    r_sq = (x - w.x)^2 + (y - w.y)^2
-
-    if r_sq ≥ w.r^2
-        return 0.0
-    end
-
-    return w.qs[p] * exp(-1/(w.r^2-r_sq)) / w.a
 
 end

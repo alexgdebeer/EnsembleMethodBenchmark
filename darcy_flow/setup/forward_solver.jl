@@ -3,8 +3,7 @@ using LinearAlgebra
 using LinearSolve
 using SparseArrays
 
-# Implicit solve parameter (Crank-Nicolson)
-const θ = 0.5
+const θ = 0.5 # Implicit solve parameter (Crank-Nicolson)
 
 function add_corner_point!(
     is::Vector{Int}, 
@@ -226,7 +225,7 @@ function construct_b(
     g::SteadyStateGrid, 
     logps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
-    q::Function
+    Q::AbstractVector
 )::SparseVector
 
     is = Int[]
@@ -247,14 +246,8 @@ function construct_b(
 
     end
 
-    for i ∈ g.is_inner
-
-        push!(is, i)
-        push!(vs, q(g.ixs[i], g.iys[i]))
-
-    end
-
-    return sparsevec(is, vs, g.nu)
+    b = sparsevec(is, vs, g.nu) + Q
+    return b
 
 end
 
@@ -262,7 +255,7 @@ function construct_b(
     g::TransientGrid, 
     logps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
-    q::Function,
+    Qs::AbstractMatrix,
     t::Int
 )::SparseVector
 
@@ -270,12 +263,12 @@ function construct_b(
     p_prev = -1
     initial = false
 
-    if t ∈ g.well_periods
-        p = findfirst(x->x==t, g.well_periods)
+    if t ∈ g.well_change_inds
+        p = findfirst(g.well_change_inds .== t)
         p_prev = p-1
         initial = p == 1
-    elseif t-1 ∈ g.well_periods
-        p = findfirst(x->x==t-1, g.well_periods)
+    elseif t-1 ∈ g.well_change_inds
+        p = findfirst(g.well_change_inds .== t-1)
         p_prev = p
     end
 
@@ -297,20 +290,16 @@ function construct_b(
 
     end
 
-    for i ∈ g.is_inner
+    b = sparsevec(is, vs, g.nu)
 
-        push!(is, i)
-
-        if initial === true
-            push!(vs, θ * q(g.ixs[i], g.iys[i], p))
-        else
-            push!(vs, (1-θ) * q(g.ixs[i], g.iys[i], p_prev) + 
-                          θ * q(g.ixs[i], g.iys[i], p))
-        end
-
+    # Add forcing term
+    if initial 
+        b += θ * Qs[:, 1]
+    else 
+        b += (1-θ) * Qs[:, p_prev] + θ * Qs[:, p]
     end
 
-    return sparsevec(is, vs, g.nu)
+    return b
 
 end
 
@@ -318,15 +307,13 @@ function SciMLBase.solve(
     g::SteadyStateGrid,
     ps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
-    q::Function
-)::AbstractMatrix
+    Q::AbstractVector
+)::AbstractVector
 
     A = construct_A(g, ps, bcs)
-    b = construct_b(g, ps, bcs, q)
+    b = construct_b(g, ps, bcs, Q)
 
     us = solve(LinearProblem(A, b))
-    us = reshape(us, g.nx, g.ny)
-
     return us
 
 end
@@ -335,28 +322,60 @@ function SciMLBase.solve(
     g::TransientGrid,
     logps::AbstractMatrix,
     bcs::Dict{Symbol, BoundaryCondition},
-    q::Function
-)::AbstractArray
+    Qs::AbstractMatrix
+)::AbstractVector
 
-    us = zeros(typeof(logps[1, 1]), g.nx, g.ny, g.nt+1)
-    
-    u0 = reshape([bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys], g.nx, g.ny)
-    us[:,:,1] = u0
+    u0 = [bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys]
+    us = zeros(typeof(logps[1, 1]), g.nx * g.ny, g.nt+1)
+    us[:, 1] = u0
 
     P, A = construct_A(g, logps, bcs)
-    b = construct_b(g, logps, bcs, q, 1)
+    b = construct_b(g, logps, bcs, Qs, 1)
 
     for t ∈ 1:g.nt
 
-        u = solve(LinearProblem(A, b-P*vec(us[:,:,t])))
-        us[:,:,t+1] = reshape(u, g.nx, g.ny)
+        us[:, t+1] = solve(LinearProblem(A, b-P*us[:, t]))
 
-        if t ∈ g.well_periods || t+1 ∈ g.well_periods
-            b = construct_b(g, logps, bcs, q, t+1)
+        if t ∈ g.well_change_inds || t+1 ∈ g.well_change_inds
+            b = construct_b(g, logps, bcs, Qs, t+1)
         end
 
     end
 
-    return us
+    return vec(us)
+
+end
+
+function SciMLBase.solve(
+    g::TransientGrid,
+    logps::AbstractMatrix,
+    bcs::Dict{Symbol, BoundaryCondition},
+    Qs::AbstractMatrix,
+    μ::AbstractVector,
+    V_r::AbstractMatrix
+)::AbstractVector
+
+    u0 = [bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys]
+    us = zeros(typeof(logps[1, 1]), g.nx * g.ny, g.nt+1)
+    us[:, 1] = u0
+
+    P, A = construct_A(g, logps, bcs)
+    A_r = V_r' * A * V_r
+
+    b = construct_b(g, logps, bcs, Qs, 1)
+
+    for t ∈ 1:g.nt
+
+        b_r = V_r' * (b - P * us[:, t] - A * μ)
+        us_r = solve(LinearProblem(A_r, b_r))
+        us[:, t+1] = μ + V_r * us_r
+
+        if t ∈ g.well_change_inds || t+1 ∈ g.well_change_inds
+            b = construct_b(g, logps, bcs, Qs, t+1)
+        end
+
+    end
+
+    return vec(us)
 
 end
