@@ -1,30 +1,39 @@
 using SparseArrays
 using LinearAlgebra
 
+include("darcy_flow/setup/setup.jl")
+
+mf = MaternField(grid_f, logp_mu, σ_bounds, l_bounds)
+θs = rand(mf)
+us = transform(mf, vec(θs))
+
 # Define cell centres
 xmin, xmax = 0, 10
 Δ = 1.0
 
-xs = (xmin+0.5Δ):Δ:(xmax-0.5Δ) 
+xs = xmin:Δ:xmax 
 
 nx = length(xs)
-nu = nx^2                   # Number of cell centres
-nf = (nx+1)^2               # Number of faces
+nu = nx^2
 
-# Form short central difference operator (assuming Neumann points end 
-# up the same as all other points)
-is = repeat(1:nx, inner=2)
-js = vcat([[i, i+1] for i ∈ 1:nx]...)
-vs = repeat([-1, 1], outer=nx)
+is = Int[]
+js = Int[]
+vs = Float64[]
 
-D = sparse(is, js, vs, nx, nx+1) / Δ # Row for every centre, column for every face (in 1d)
+# Neumann points
+push!(is, 1, 1, nx, nx)
+push!(js, 1, 2, nx-1, nx)
+push!(vs, -1, 1, -1, 1)
+
+# Inner points
+for i ∈ 2:(nx-1)
+    push!(is, i, i)
+    push!(js, i-1, i+1)
+    push!(vs, -0.5, 0.5)
+end
+
+D = sparse(is, js, vs, nx, nx) / Δ
 Id = sparse(I, nx, nx)
 
 # Gradient operator (TODO: check for correctness)
 ∇h = [kron(Id, D); kron(D, Id)]
-
-# Weighting matrix
-# rows = cell faces 
-# columns = cell centres 
-
-# Each row should be the 
