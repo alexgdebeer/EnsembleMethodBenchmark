@@ -332,6 +332,8 @@ function SciMLBase.solve(
     P, A = construct_A(g, logps, bcs)
     b = construct_b(g, logps, bcs, Qs, 1)
 
+    display(Matrix(A[400:420, 400:420]))
+
     for t ∈ 1:g.nt
 
         us[:, t+1] = solve(LinearProblem(A, b-P*us[:, t]))
@@ -369,6 +371,78 @@ function SciMLBase.solve(
         b_r = V_r' * (b - P * us[:, t] - A * μ)
         us_r = solve(LinearProblem(A_r, b_r))
         us[:, t+1] = μ + V_r * us_r
+
+        if t ∈ g.well_change_inds || t+1 ∈ g.well_change_inds
+            b = construct_b(g, logps, bcs, Qs, t+1)
+        end
+
+    end
+
+    return vec(us)
+
+end
+
+function build_matrices(nx, Δx)
+
+    # Short central difference operator
+
+    # Inner points
+    D_i = repeat(2:nx, inner=2)
+    D_j = vcat([[i-1, i] for i ∈ 2:nx]...)
+    D_v = repeat([-1, 1], outer=(nx-1))
+
+    # Neumann boundaries (TODO: check these...)
+    push!(D_i, 1, 1, nx+1, nx+1)
+    push!(D_j, 1, 2, nx-1, nx)
+    push!(D_v, -1, 1, -1, 1)
+
+    D = sparse(D_i, D_j, D_v, nx+1, nx) / Δx
+
+    # Interpolation operator
+    W_i = repeat(2:nx, inner=2)
+    W_j = vcat([[i-1, i] for i ∈ 2:nx]...)
+    W_v = fill(0.5, 2*(nx-1))
+
+    push!(W_i, 1, nx+1)
+    push!(W_j, 1, nx)
+    push!(W_v, 1, 1)
+
+    W = sparse(W_i, W_j, W_v, nx+1, nx)
+
+    Id = sparse(I, nx, nx)
+    ∇h = [kron(Id, D); kron(D, Id)]
+    A = [kron(Id, W); kron(W, Id)]
+
+    return ∇h, A
+
+end
+
+function solve_alt(
+    g::TransientGrid, 
+    logps::AbstractMatrix, 
+    bcs::Dict{Symbol, BoundaryCondition},
+    Qs::AbstractMatrix
+)::AbstractVector 
+
+
+    u0 = [bcs[:t0].func(x, y) for x ∈ g.xs for y ∈ g.ys]
+    us = zeros(g.nx * g.ny, g.nt+1)
+    us[:, 1] = u0
+
+    ∇h, W = build_matrices(g.nx, g.Δx)
+    Id = sparse(I, g.nu, g.nu)
+
+    A = -∇h' * (1/g.μ) * spdiagm(W * 10 .^ vec(logps)) * ∇h
+
+    C = g.ϕ * g.c
+
+    display(Matrix(A[400:420, 400:420]))
+
+    b = construct_b(g, logps, bcs, Qs, 1)
+
+    for t ∈ 1:g.nt
+
+        us[:, t+1] = solve(LinearProblem(C * Id/g.Δt - A, b + C * Id/g.Δt * us[:, t]))
 
         if t ∈ g.well_change_inds || t+1 ∈ g.well_change_inds
             b = construct_b(g, logps, bcs, Qs, t+1)

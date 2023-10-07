@@ -100,6 +100,8 @@ true_field = MaternField(grid_f, logp_mu, σ_bounds, l_bounds)
 θs_t = rand(true_field)
 logps_t = transform(true_field, vec(θs_t))
 
+# logps_t = -0*ones(grid_f.nx, grid_f.ny)
+
 us_t = solve(grid_f, logps_t, bcs, Q_f)
 us_t = reshape(us_t, grid_f.nu, grid_f.nt+1)
 
@@ -149,8 +151,8 @@ end
 # POD
 # ----------------
 
-us_samp = generate_pod_samples(p, 100)
-μ_u, V_r = compute_pod_basis(grid_c, us_samp, 0.9995)
+# us_samp = generate_pod_samples(p, 100)
+# μ_u, V_r = compute_pod_basis(grid_c, us_samp, 0.9995)
 
 function animate(us, grid, well_inds, fname)
 
@@ -190,7 +192,7 @@ function animate(us, grid, well_inds, fname)
 
 end
 
-TEST_POD = true
+TEST_POD = false
 
 if TEST_POD
 
@@ -207,4 +209,4 @@ if TEST_POD
 
 end
 
-# animate(us_t, grid_f, (100, 100), "fine_grid")
+animate(us_t, grid_f, (100, 100), "fine_grid")
