@@ -32,7 +32,7 @@ struct MaternField
 
         return new(
             g, mu, σ_bounds, l_bounds,
-            build_fd_matrices(g)..., g.nu + 2
+            build_fd_matrices(g)..., g.nx^2 + 2
         )
 
     end
@@ -75,11 +75,11 @@ function transform(
     λ = 1.42l
 
     A = f.I - l^2*(f.X+f.Y) + f.D + λ*f.N
-    b = √((α*l^2)/(f.g.Δx*f.g.Δy)) * W[3:end]
+    b = √((α*l^2)/(f.g.Δx^2)) * W[3:end]
     b[[f.corner_pts..., f.boundary_pts...]] .= 0
 
     X = solve(LinearProblem(A, b)).u
-    X = reshape(X, f.g.nx, f.g.ny)
+    X = reshape(X, f.g.nx, f.g.nx)
     fill_corners!(X)
     return f.mu .+ X
 
@@ -93,37 +93,6 @@ function Base.rand(
 
 end
 
-function get_coordinates(
-    i::Int,
-    g::Grid
-)::Tuple{Real, Real}
-
-    x = g.xs[(i-1)%g.nx+1] 
-    y = g.ys[Int(ceil(i/g.nx))]
-    return x, y
-
-end
-
-function in_corner(
-    x::Real, 
-    y::Real, 
-    g::Grid
-)::Bool
-
-    return x ∈ [g.xmin, g.xmax] && y ∈ [g.ymin, g.ymax]
-
-end
-
-function on_boundary(
-    x::Real, 
-    y::Real, 
-    g::Grid
-)::Bool
-
-    return x ∈ [g.xmin, g.xmax] || y ∈ [g.ymin, g.ymax]
-
-end
-
 function get_point_types(
     g::Grid
 )::Tuple{AbstractVector, AbstractVector, AbstractVector}
@@ -132,13 +101,11 @@ function get_point_types(
     boundary_pts = Int[]
     interior_pts = Int[]
 
-    for i ∈ 1:g.nu
+    for i ∈ 1:(g.nx^2)
 
-        x, y = get_coordinates(i, g)
-
-        if in_corner(x, y, g) 
+        if (i == 1) || (i == g.nx) || (i == g.nx^2-g.nx+1) || (i == g.nx^2) 
             push!(corner_pts, i)
-        elseif on_boundary(x, y, g)
+        elseif (i < g.nx) || (i > g.nx^2-g.nx) || (i % g.nx == 1) || (i % g.nx == 0)
             push!(boundary_pts, i)
         else
             push!(interior_pts, i)
@@ -147,21 +114,6 @@ function get_point_types(
     end
 
     return corner_pts, boundary_pts, interior_pts
-
-end
-
-function get_boundary(
-    x::Real, 
-    y::Real, 
-    g::Grid
-)::Symbol
-
-    x == g.xmin && return :x0
-    x == g.xmax && return :x1
-    y == g.ymin && return :y0
-    y == g.ymax && return :y1
-
-    error("Point ($x, $y) is not on a boundary.")
 
 end
 
@@ -208,7 +160,7 @@ function add_interior_points!(
 
         push!(Y_i, i, i, i)
         push!(Y_j, i-g.nx, i, i+g.nx)
-        push!(Y_v, 1.0 / g.Δy^2, -2.0 / g.Δy^2, 1.0 / g.Δy^2)
+        push!(Y_v, 1.0 / g.Δx^2, -2.0 / g.Δx^2, 1.0 / g.Δx^2)
 
     end
 
@@ -227,10 +179,28 @@ function add_boundary_points!(
     g::Grid
 )::Nothing
 
+    function get_boundary(
+        i::Int,
+        g::Grid
+    )::Symbol
+
+        if i < g.nx 
+            return :y0
+        elseif i > g.nx^2-g.nx 
+            return :y1
+        elseif i % g.nx == 1 
+            return :x0
+        elseif i % g.nx == 0 
+            return :x1
+        end
+
+        error("Point ($x, $y) is not on a boundary.")
+
+    end
+
     for i ∈ boundary_pts
 
-        x, y = get_coordinates(i, g)
-        boundary = get_boundary(x, y, g)
+        boundary = get_boundary(i, g)
 
         push!(D_i, i)
         push!(D_j, i)
@@ -240,17 +210,15 @@ function add_boundary_points!(
 
         if boundary == :x0
             push!(N_j, i, i+1, i+2)
-            push!(N_v, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)
         elseif boundary == :x1
             push!(N_j, i, i-1, i-2)
-            push!(N_v, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)
         elseif boundary == :y0
             push!(N_j, i, i+g.nx, i+2g.nx)
-            push!(N_v, 3.0 / 2g.Δy, -4.0 / 2g.Δy, 1.0 / 2g.Δy)
         elseif boundary == :y1 
             push!(N_j, i, i-g.nx, i-2g.nx)
-            push!(N_v, 3.0 / 2g.Δy, -4.0 / 2g.Δy, 1.0 / 2g.Δy)
         end
+        
+        push!(N_v, 3.0 / 2g.Δx, -4.0 / 2g.Δx, 1.0 / 2g.Δx)
 
     end
 
@@ -289,12 +257,12 @@ function build_fd_matrices(
         boundary_pts, g
     )
 
-    I = sparse(I_i, I_j, I_v, g.nu, g.nu)
-    X = sparse(X_i, X_j, X_v, g.nu, g.nu)
-    Y = sparse(Y_i, Y_j, Y_v, g.nu, g.nu)
+    I = sparse(I_i, I_j, I_v, g.nx^2, g.nx^2)
+    X = sparse(X_i, X_j, X_v, g.nx^2, g.nx^2)
+    Y = sparse(Y_i, Y_j, Y_v, g.nx^2, g.nx^2)
     
-    D = sparse(D_i, D_j, D_v, g.nu, g.nu)
-    N = sparse(N_i, N_j, N_v, g.nu, g.nu)
+    D = sparse(D_i, D_j, D_v, g.nx^2, g.nx^2)
+    N = sparse(N_i, N_j, N_v, g.nx^2, g.nx^2)
 
     return I, X, Y, D, N, corner_pts, boundary_pts
 

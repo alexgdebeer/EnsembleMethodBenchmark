@@ -20,34 +20,23 @@ u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 # Grid and boundary conditions
 # ----------------
 
-xmin, xmax = 0.0, 1000.0
-ymin, ymax = 0.0, 1000.0
+xmax = 1000.0                       # Dimension in x and y directions
 tmax = 120.0
 
-Δx_c, Δy_c = 12.5, 12.5 # 80 * 80
-Δx_f, Δy_f = 8.0, 8.0   # 120 * 120
-Δt_f = 2.0
+Δx_c = 12.5
+Δx_f = 8.0
 Δt_c = 4.0
+Δt_f = 2.0
 
-well_change_times = [0, 40, 80] # TODO: not sure if this should be stored in the grid or not
-
-q_c = 30.0 / (Δx_c * Δy_c)          # Producer rate, (m^3 / day) / m^3
-q_f = 30.0 / (Δx_f * Δy_f)          # Producer rate, (m^3 / day) / m^3
-
-grid_c = TransientGrid(xmin:Δx_c:xmax, ymin:Δy_c:ymax, tmax, Δt_c, well_change_times, μ, ϕ, c)
-grid_f = TransientGrid(xmin:Δx_f:xmax, ymin:Δy_f:ymax, tmax, Δt_f, well_change_times, μ, ϕ, c)
-
-bcs = Dict(
-    :x0 => BoundaryCondition(:x0, :neumann, (x, y) -> 0.0), 
-    :x1 => BoundaryCondition(:x1, :neumann, (x, y) -> 0.0),
-    :y0 => BoundaryCondition(:y0, :neumann, (x, y) -> 0.0), 
-    :y1 => BoundaryCondition(:y1, :neumann, (x, y) -> 0.0),
-    :t0 => BoundaryCondition(:t0, :initial, (x, y) -> u0)
-)
+grid_c = Grid(xmax, tmax, Δx_c, Δt_c, ϕ, μ, c, u0)
+grid_f = Grid(xmax, tmax, Δx_f, Δt_f, ϕ, μ, c, u0)
 
 # ----------------
 # Well parameters 
 # ----------------
+
+q_c = 30.0 / Δx_c^2                 # Producer rate, (m^3 / day) / m^3
+q_f = 30.0 / Δx_f^2                 # Producer rate, (m^3 / day) / m^3
 
 well_radius = 30.0
 
@@ -69,18 +58,51 @@ well_rates_f = [
     (-q_f, 0, 0), (0, -q_f, 0), (-q_f, 0, 0)
 ]
 
+well_change_times = [0, 40, 80] # First set on, second set on, all off
+
 wells_c = [
-    BumpWell(grid_c, cs..., well_radius, qs) 
-    for (cs, qs) ∈ zip(well_centres, well_rates_c)
+    BumpWell(grid_c, centre..., well_radius, rates) 
+    for (centre, rates) ∈ zip(well_centres, well_rates_c)
 ]
 
 wells_f = [
-    BumpWell(grid_f, cs..., well_radius, qs) 
-    for (cs, qs) ∈ zip(well_centres, well_rates_f)
+    BumpWell(grid_f, centre..., well_radius, rates) 
+    for (centre, rates) ∈ zip(well_centres, well_rates_f)
 ]
 
-Q_c = sum([w.Q for w ∈ wells_c])
-Q_f = sum([w.Q for w ∈ wells_f])
+function build_Q(
+    g::Grid,
+    wells::AbstractVector{BumpWell},
+    well_change_times::AbstractVector 
+)
+
+    Q_i = Int[]
+    Q_j = Int[]
+    Q_v = Float64[]
+
+    # Find the well time period each time is within
+    time_inds = [findlast(well_change_times .<= t + 1e-8) for t ∈ g.ts]
+
+    for (i, (x, y)) ∈ enumerate(zip(g.cxs, g.cys))
+        for w ∈ wells 
+            if (dist_sq = (x-w.cx)^2 + (y-w.cy)^2) < w.r^2
+                for (j, q) ∈ enumerate(w.rates[time_inds])
+                    push!(Q_i, i)
+                    push!(Q_j, j)
+                    push!(Q_v, q * exp(-1/(q^2-dist_sq)) / w.Z)
+                end
+            end
+        end
+    end
+
+    Q = sparse(Q_i, Q_j, Q_v, g.nx^2, g.nt+1)
+    return Q
+
+end
+
+# Build matrix of forcing vectors
+Q_c = build_Q(grid_c, wells_c, well_change_times)
+Q_f = build_Q(grid_f, wells_f, well_change_times)
 
 # ----------------
 # Prior 
@@ -88,7 +110,7 @@ Q_f = sum([w.Q for w ∈ wells_f])
 
 logp_mu = -13.5
 σ_bounds = (0.25, 0.75)
-l_bounds = (100, 400)
+l_bounds = (200, 400)
 
 p = MaternField(grid_c, logp_mu, σ_bounds, l_bounds)
 
@@ -100,10 +122,8 @@ true_field = MaternField(grid_f, logp_mu, σ_bounds, l_bounds)
 θs_t = rand(true_field)
 logps_t = transform(true_field, vec(θs_t))
 
-# logps_t = -0*ones(grid_f.nx, grid_f.ny)
-
-us_t = solve(grid_f, logps_t, bcs, Q_f)
-us_t = reshape(us_t, grid_f.nu, grid_f.nt+1)
+us_t = solve(grid_f, vec(logps_t), Q_f)
+us_t = reshape(us_t, grid_f.nx^2, grid_f.nt+1)
 
 # ----------------
 # Data
@@ -134,16 +154,16 @@ us_obs += rand(MvNormal(Γ))
 
 function F(θs::AbstractVector)
     logps = transform(p, θs)
-    return solve(grid_c, logps, bcs, Q_c)
+    return solve(grid_c, vec(logps), Q_c) # TODO: tidy
 end
 
 function F_r(θs::AbstractVector)
     logps = transform(p, θs)
-    return solve(grid_c, logps, bcs, Q_c, μ_u, V_r)
+    return solve(grid_c, vec(logps), Q_c, μ_u, V_r)
 end
 
 function G(us::AbstractVector)
-    us = reshape(us, grid_c.nu, grid_c.nt+1)
+    us = reshape(us, grid_c.nx^2, grid_c.nt+1)
     return vcat([B_c * us[:, t] for t ∈ ts_obs_inds_c]...)
 end
 
@@ -151,12 +171,12 @@ end
 # POD
 # ----------------
 
-# us_samp = generate_pod_samples(p, 100)
-# μ_u, V_r = compute_pod_basis(grid_c, us_samp, 0.9995)
+us_samp = generate_pod_samples(p, 100)
+μ_u, V_r = compute_pod_basis(grid_c, us_samp, 0.999)
 
 function animate(us, grid, well_inds, fname)
 
-    us = reshape(us, grid.nx, grid.ny, :)
+    us = reshape(us, grid.nx, grid.nx, :)
     us ./= 1.0e6
     well_us = us[well_inds...,:]
 
@@ -164,7 +184,7 @@ function animate(us, grid, well_inds, fname)
 
         plot(
             heatmap(
-                grid.xs, grid.ys, us[:, :, i]', 
+                grid.xs, grid.xs, us[:, :, i]', 
                 clims=extrema(us[2:end-1, 2:end-1, :]), 
                 cmap=:turbo, 
                 size=(500, 500),
@@ -192,7 +212,7 @@ function animate(us, grid, well_inds, fname)
 
 end
 
-TEST_POD = false
+TEST_POD = true
 
 if TEST_POD
 

@@ -19,12 +19,12 @@ function build_observation_operator(
     for (i, (x, y)) ∈ enumerate(zip(x_obs, y_obs))
 
         ix0 = findfirst(g.xs.>x) - 1
-        iy0 = findfirst(g.ys.>y) - 1
+        iy0 = findfirst(g.xs.>y) - 1
         ix1 = ix0 + 1
         iy1 = iy0 + 1
 
         x0, x1 = g.xs[ix0], g.xs[ix1]
-        y0, y1 = g.ys[iy0], g.ys[iy1]
+        y0, y1 = g.xs[iy0], g.xs[iy1]
 
         inds = [(ix0, iy0), (ix0, iy1), (ix1, iy0), (ix1, iy1)]
         cell_inds = [get_cell_index(g, i...) for i ∈ inds]
@@ -42,6 +42,6 @@ function build_observation_operator(
 
     end
 
-    return sparse(is, js, vs, n_obs, g.nu)
+    return sparse(is, js, vs, n_obs, g.nx^2)
 
 end

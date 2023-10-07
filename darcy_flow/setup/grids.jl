@@ -1,206 +1,91 @@
-abstract type Grid end
+using LinearAlgebra
+using SparseArrays
 
-struct SteadyStateGrid <: Grid
+function build_∇h(nx::Real, Δx::Real)::SparseMatrixCSC
+
+    # Inner points
+    ∇hi_i = repeat(2:nx, inner=2)
+    ∇hi_j = vcat([[i-1, i] for i ∈ 2:nx]...)
+    ∇hi_v = repeat([-1, 1], outer=(nx-1))
+
+    # Neumann boundaries (TODO: check)
+    push!(∇hi_i, 1, 1, nx+1, nx+1)
+    push!(∇hi_j, 1, 2, nx-1, nx)
+    push!(∇hi_v, -1, 1, -1, 1)
+
+    ∇hi = sparse(∇hi_i, ∇hi_j, ∇hi_v, nx+1, nx) / Δx
+    Ii = sparse(I, nx, nx)
+
+    ∇h = [kron(Ii, ∇hi); kron(∇hi, Ii)]
+    return ∇h
+
+end
+
+function build_A(nx::Real)::SparseMatrixCSC
+
+    Ai_i = repeat(2:nx, inner=2)
+    Ai_j = vcat([[i-1, i] for i ∈ 2:nx]...)
+    Ai_v = fill(0.5, 2*(nx-1))
+
+    push!(Ai_i, 1, nx+1)
+    push!(Ai_j, 1, nx)
+    push!(Ai_v, 1, 1)
+
+    Ai = sparse(Ai_i, Ai_j, Ai_v, nx+1, nx)
+    Ii = sparse(I, nx, nx)
+
+    A = [kron(Ii, Ai); kron(Ai, Ii)]
+    return A
+
+end
+
+struct Grid 
 
     xs::AbstractVector
-    ys::AbstractVector
-
-    xmin::Real
-    xmax::Real
-    ymin::Real
-    ymax::Real
-
-    Δx::Real
-    Δy::Real
-
-    is_corner::AbstractVector 
-    is_bounds::AbstractVector 
-    bs_bounds::AbstractVector
-    is_inner::AbstractVector
-
-    nx::Int
-    ny::Int
-    nu::Int
-
-    μ::Real
-
-    function SteadyStateGrid(
-        xs::AbstractVector,
-        ys::AbstractVector,
-        μ::Real=1.0,
-    )::SteadyStateGrid 
-
-        function add_point_type!(i, x, y)
-
-            if x ∈ [xmin, xmax] && y ∈ [ymin, ymax]
-                push!(is_corner, i)
-                return
-            end
-
-            if x ∈ [xmin, xmax] || y ∈ [ymin, ymax]
-                x == xmin && push!(bs_bounds, :x0)
-                x == xmax && push!(bs_bounds, :x1)
-                y == ymin && push!(bs_bounds, :y0)
-                y == ymax && push!(bs_bounds, :y1)
-                push!(is_bounds, i)
-                return
-            end
-            
-            push!(is_inner, i)
-            return
-
-        end
-        
-        xmin, xmax = extrema(xs)
-        ymin, ymax = extrema(ys)
-
-        Δx = xs[2] - xs[1]
-        Δy = ys[2] - ys[1]
-
-        nx = length(xs)
-        ny = length(ys)
-        nu = nx * ny
-
-        ixs = repeat(xs, outer=ny)
-        iys = repeat(ys, inner=nx)
-
-        is_corner = []
-        is_bounds = []
-        bs_bounds = []
-        is_inner  = []
-
-        for (i, (x, y)) ∈ enumerate(zip(ixs, iys))
-            add_point_type!(i, x, y)
-        end
-
-        return new(
-            xs, ys, 
-            xmin, xmax, 
-            ymin, ymax, 
-            Δx, Δy, 
-            is_corner, is_bounds, bs_bounds, is_inner,
-            nx, ny, nu,
-            μ
-        )
-
-    end
-
-end
-
-struct TransientGrid <: Grid
-    
-    xs::AbstractVector 
-    ys::AbstractVector 
     ts::AbstractVector
 
-    ixs::AbstractVector 
-    iys::AbstractVector
-
-    xmin::Real 
-    xmax::Real 
-    ymin::Real 
-    ymax::Real
-    tmax::Real
+    cxs::AbstractVector 
+    cys::AbstractVector
     
     Δx::Real 
-    Δy::Real 
-    Δt::Real 
+    Δt::Real
 
-    is_corner::AbstractVector 
-    is_bounds::AbstractVector 
-    bs_bounds::AbstractVector
-    is_inner::AbstractVector
+    nx::Real 
+    nt::Real 
 
-    nx::Int 
-    ny::Int 
-    nt::Int
-    nu::Int
+    ∇h::SparseMatrixCSC
+    A::SparseMatrixCSC
 
-    well_change_inds::AbstractVector
-
-    μ::Real 
-    ϕ::Real
+    ϕ::Real 
+    μ::Real
     c::Real
+    u0::Real
 
-    function TransientGrid(
-        xs::AbstractVector,
-        ys::AbstractVector,
+    function Grid(
+        xmax::Real,
         tmax::Real,
+        Δx::Real,
         Δt::Real,
-        well_change_times::AbstractVector,
-        μ::Real=1.0,
         ϕ::Real=1.0,
+        μ::Real=1.0,
         c::Real=1.0,
-    )::TransientGrid 
+        u0::Real=1.0
+    )
 
-        function add_point_type!(i, x, y)
+        nx = Int(round(xmax / Δx))
+        nt = Int(round(tmax / Δt))
 
-            if x ∈ [xmin, xmax] && y ∈ [ymin, ymax]
-                push!(is_corner, i)
-                return
-            end
+        xs = LinRange(0.5Δx, xmax-0.5Δx, nx)
+        ts = LinRange(0, tmax, nt+1)
 
-            if x ∈ [xmin, xmax] || y ∈ [ymin, ymax]
-                x == xmin && push!(bs_bounds, :x0)
-                x == xmax && push!(bs_bounds, :x1)
-                y == ymin && push!(bs_bounds, :y0)
-                y == ymax && push!(bs_bounds, :y1)
-                push!(is_bounds, i)
-                return
-            end
-            
-            push!(is_inner, i)
-            return
+        cxs = repeat(xs, outer=nx)
+        cys = repeat(xs, inner=nx)
 
-        end
+        ∇h = build_∇h(nx, Δx)
+        A = build_A(nx)
 
-        ts = 0:Δt:tmax 
-
-        xmin, xmax = extrema(xs)
-        ymin, ymax = extrema(ys)
-
-        Δx = xs[2] - xs[1]
-        Δy = ys[2] - ys[1]
-
-        nx = length(xs)
-        ny = length(ys)
-        nt = length(ts)-1
-        nu = nx * ny
-
-        ixs = repeat(xs, outer=ny)
-        iys = repeat(ys, inner=nx)
-
-        is_corner = []
-        is_bounds = []
-        bs_bounds = []
-        is_inner  = []
-
-        for (i, (x, y)) ∈ enumerate(zip(ixs, iys))
-            add_point_type!(i, x, y)
-        end
-
-        well_change_inds = [findfirst(ts .>= t) for t ∈ well_change_times]
-    
-        return new(
-            xs, ys, ts, 
-            ixs, iys,
-            xmin, xmax, 
-            ymin, ymax, tmax, 
-            Δx, Δy, Δt, 
-            is_corner, is_bounds, bs_bounds, is_inner,
-            nx, ny, nt, nu,
-            well_change_inds,
-            μ, ϕ, c
-        )
+        return new(xs, ts, cxs, cys, Δx, Δt, nx, nt, ∇h, A, ϕ, μ, c, u0)
 
     end
 
-end
-
-struct BoundaryCondition
-
-    name::Symbol
-    type::Symbol
-    func::Function
-    
 end

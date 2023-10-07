@@ -19,7 +19,7 @@ function compute_pod_basis(
     var_to_retain::Real
 )::Tuple{AbstractVector, AbstractMatrix}
 
-    us_reshaped = reshape(us, g.nu, :)'
+    us_reshaped = reshape(us, g.nx^2, :)'
 
     μ = vec(mean(us_reshaped, dims=1))
     Γ = cov(us_reshaped)

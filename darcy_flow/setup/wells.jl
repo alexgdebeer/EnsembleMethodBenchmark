@@ -1,19 +1,18 @@
-using SparseArrays
-
 struct BumpWell
 
     cx::Real
     cy::Real
-    
-    qs::Tuple
-    Q::AbstractMatrix
+    r::Real
+
+    rates::Tuple
+    Z::Real
     
     function BumpWell(
         g::Grid, 
         cx::Real, 
         cy::Real, 
         r::Real,
-        qs::Tuple
+        rates::Tuple
     )
 
         """Calculates the value to scale the bump function by, such that 
@@ -26,7 +25,7 @@ struct BumpWell
         )::Real
         
             Z = 0.0
-            for (x, y) ∈ zip(g.ixs, g.iys)
+            for (x, y) ∈ zip(g.cxs, g.cys)
                 if (r_sq = (x-cx)^2 + (y-cy)^2) < r^2
                     Z += exp(-1/(r^2-r_sq))
                 end
@@ -37,24 +36,8 @@ struct BumpWell
         end
 
         Z = normalising_constant(g, cx, cy, r)
-        
-        Q_i = Int[]
-        Q_j = Int[]
-        Q_v = Float64[]
 
-        for (i, (x, y)) ∈ enumerate(zip(g.ixs, g.iys))
-            if (dist_sq = (x-cx)^2 + (y-cy)^2) < r^2
-                for (j, q) ∈ enumerate(qs)
-                    push!(Q_i, i)
-                    push!(Q_j, j)
-                    push!(Q_v, q * exp(-1/(r^2-dist_sq)) / Z)
-                end
-            end
-        end
-        
-        Q = sparse(Q_i, Q_j, Q_v, g.nu, length(qs))
-
-        return new(cx, cy, qs, Q)
+        return new(cx, cy, r, rates, Z)
     
     end
 
