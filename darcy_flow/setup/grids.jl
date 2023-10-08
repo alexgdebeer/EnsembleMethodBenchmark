@@ -1,6 +1,7 @@
 using LinearAlgebra
 using SparseArrays
 
+"""Builds gradient operator."""
 function build_∇h(nx::Real, Δx::Real)::SparseMatrixCSC
 
     # Inner points
@@ -21,6 +22,7 @@ function build_∇h(nx::Real, Δx::Real)::SparseMatrixCSC
 
 end
 
+"""Builds operator that interpolates between cells and faces."""
 function build_A(nx::Real)::SparseMatrixCSC
 
     Ai_i = repeat(2:nx, inner=2)

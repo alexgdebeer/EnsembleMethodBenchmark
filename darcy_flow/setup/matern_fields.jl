@@ -64,7 +64,7 @@ end
 function transform(
     f::MaternField, 
     W::AbstractVector
-)::AbstractMatrix
+)::AbstractVector
 
     σ = gauss_to_unif(W[1], f.σ_bounds...)
     l = gauss_to_unif(W[2], f.l_bounds...)
@@ -81,7 +81,7 @@ function transform(
     X = solve(LinearProblem(A, b)).u
     X = reshape(X, f.g.nx, f.g.nx)
     fill_corners!(X)
-    return f.mu .+ X
+    return vec(f.mu .+ X)
 
 end
 

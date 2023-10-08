@@ -5,7 +5,7 @@ using Random: seed!
 
 include("../setup/setup.jl")
 
-seed!(16)
+seed!(0)
 
 # ----------------
 # Reservoir properties 
@@ -20,7 +20,7 @@ u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 # Grid and boundary conditions
 # ----------------
 
-xmax = 1000.0                       # Dimension in x and y directions
+xmax = 1000.0
 tmax = 120.0
 
 Δx_c = 12.5
@@ -35,10 +35,11 @@ grid_f = Grid(xmax, tmax, Δx_f, Δt_f, ϕ, μ, c, u0)
 # Well parameters 
 # ----------------
 
-q_c = 30.0 / Δx_c^2                 # Producer rate, (m^3 / day) / m^3
-q_f = 30.0 / Δx_f^2                 # Producer rate, (m^3 / day) / m^3
+q_c = 30.0 / Δx_c^2                 # Extraction rate, (m^3 / day) / m^3
+q_f = 30.0 / Δx_f^2                 # Extraction rate, (m^3 / day) / m^3
 
 well_radius = 30.0
+well_change_times = [0, 40, 80]
 
 well_centres = [
     (150, 150), (150, 500), (150, 850),
@@ -58,49 +59,16 @@ well_rates_f = [
     (-q_f, 0, 0), (0, -q_f, 0), (-q_f, 0, 0)
 ]
 
-well_change_times = [0, 40, 80] # First set on, second set on, all off
-
 wells_c = [
-    BumpWell(grid_c, centre..., well_radius, rates) 
+    Well(grid_c, centre..., well_radius, rates) 
     for (centre, rates) ∈ zip(well_centres, well_rates_c)
 ]
 
 wells_f = [
-    BumpWell(grid_f, centre..., well_radius, rates) 
+    Well(grid_f, centre..., well_radius, rates) 
     for (centre, rates) ∈ zip(well_centres, well_rates_f)
 ]
 
-function build_Q(
-    g::Grid,
-    wells::AbstractVector{BumpWell},
-    well_change_times::AbstractVector 
-)
-
-    Q_i = Int[]
-    Q_j = Int[]
-    Q_v = Float64[]
-
-    # Find the well time period each time is within
-    time_inds = [findlast(well_change_times .<= t + 1e-8) for t ∈ g.ts]
-
-    for (i, (x, y)) ∈ enumerate(zip(g.cxs, g.cys))
-        for w ∈ wells 
-            if (dist_sq = (x-w.cx)^2 + (y-w.cy)^2) < w.r^2
-                for (j, q) ∈ enumerate(w.rates[time_inds])
-                    push!(Q_i, i)
-                    push!(Q_j, j)
-                    push!(Q_v, q * exp(-1/(q^2-dist_sq)) / w.Z)
-                end
-            end
-        end
-    end
-
-    Q = sparse(Q_i, Q_j, Q_v, g.nx^2, g.nt+1)
-    return Q
-
-end
-
-# Build matrix of forcing vectors
 Q_c = build_Q(grid_c, wells_c, well_change_times)
 Q_f = build_Q(grid_f, wells_f, well_change_times)
 
@@ -122,7 +90,7 @@ true_field = MaternField(grid_f, logp_mu, σ_bounds, l_bounds)
 θs_t = rand(true_field)
 logps_t = transform(true_field, vec(θs_t))
 
-us_t = solve(grid_f, vec(logps_t), Q_f)
+us_t = solve(grid_f, logps_t, Q_f)
 us_t = reshape(us_t, grid_f.nx^2, grid_f.nt+1)
 
 # ----------------
@@ -134,8 +102,8 @@ ys_obs = [c[2] for c ∈ well_centres]
 ts_obs = [8, 16, 24, 32, 40, 48, 56, 64, 72, 80]
 
 # Operators that map between the output states and the data
-B_f = build_observation_operator(grid_f, xs_obs, ys_obs)
-B_c = build_observation_operator(grid_c, xs_obs, ys_obs)
+B_f = build_B(grid_f, xs_obs, ys_obs)
+B_c = build_B(grid_c, xs_obs, ys_obs)
 
 ts_obs_inds_f = [findfirst(grid_f.ts .>= t) for t ∈ ts_obs]
 ts_obs_inds_c = [findfirst(grid_c.ts .>= t) for t ∈ ts_obs]
@@ -154,12 +122,12 @@ us_obs += rand(MvNormal(Γ))
 
 function F(θs::AbstractVector)
     logps = transform(p, θs)
-    return solve(grid_c, vec(logps), Q_c) # TODO: tidy
+    return solve(grid_c, logps, Q_c)
 end
 
 function F_r(θs::AbstractVector)
     logps = transform(p, θs)
-    return solve(grid_c, vec(logps), Q_c, μ_u, V_r)
+    return solve(grid_c, logps, Q_c, μ_u, V_r)
 end
 
 function G(us::AbstractVector)
@@ -212,7 +180,7 @@ function animate(us, grid, well_inds, fname)
 
 end
 
-TEST_POD = true
+TEST_POD = false
 
 if TEST_POD
 
