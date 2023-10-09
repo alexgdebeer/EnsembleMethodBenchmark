@@ -11,7 +11,7 @@ function animate(us, grid, well_inds, fname)
         plot(
             heatmap(
                 grid.xs, grid.xs, us[:, :, i]', 
-                clims=extrema(us[2:end-1, 2:end-1, :]), 
+                clims=extrema(us), 
                 cmap=:turbo, 
                 size=(500, 500),
                 title="Reservoir pressure vs time",

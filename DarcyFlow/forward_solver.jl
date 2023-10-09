@@ -135,7 +135,7 @@ function SciMLBase.solve(
     us = zeros(g.nx^2, g.nt)
     us[:, 1] .= g.u0
 
-    A = -g.∇h' * (1/g.μ) * spdiagm(g.A * exp.(lnps)) * g.∇h
+    A = -g.∇h' * (1/g.μ) * spdiagm((g.A * exp.(lnps)) .^ -1) * g.∇h
     Id = (g.ϕ * g.c / g.Δt) * sparse(I, g.nx^2, g.nx^2)
     M = Id - A
 
@@ -160,7 +160,7 @@ function SciMLBase.solve(
     us = zeros(g.nx^2, g.nt)
     us[:, 1] .= g.u0
 
-    A = -g.∇h' * (1/g.μ) * spdiagm(g.A * exp.(lnps)) * g.∇h
+    A = -g.∇h' * (1/g.μ) * spdiagm((g.A * exp.(lnps)) .^ -1) * g.∇h
     Id = (g.ϕ * g.c / g.Δt) * sparse(I, g.nx^2, g.nx^2)
 
     M = Id - A 

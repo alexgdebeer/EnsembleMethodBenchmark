@@ -76,7 +76,7 @@ Q_f = build_Q(grid_f, wells_f, well_change_times)
 # Prior 
 # ----------------
 
-lnp_mu = -31
+lnp_mu = 31
 σ_bounds = (0.5, 1.5)
 l_bounds = (200, 400)
 
