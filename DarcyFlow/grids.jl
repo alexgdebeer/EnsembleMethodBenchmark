@@ -4,17 +4,17 @@ using SparseArrays
 """Builds gradient operator."""
 function build_∇h(nx::Real, Δx::Real)::SparseMatrixCSC
 
-    # Inner points
-    ∇hi_i = repeat(2:nx, inner=2)
-    ∇hi_j = vcat([[i-1, i] for i ∈ 2:nx]...)
-    ∇hi_v = repeat([-1, 1], outer=(nx-1))
+    # Inner points (TODO: figure out why centred differences don't seem to work very well)
+    ∇hi_i = repeat(2:(nx-1), inner=2)
+    ∇hi_j = vcat([[i-1, i+1] for i ∈ 2:(nx-1)]...)
+    ∇hi_v = repeat([-1/2, 1/2], outer=(nx-2))
 
-    # Neumann boundaries (TODO: check)
-    push!(∇hi_i, 1, 1, nx+1, nx+1)
-    push!(∇hi_j, 1, 2, nx-1, nx)
-    push!(∇hi_v, -1, 1, -1, 1)
+    # Neumann boundaries (TODO: check these)
+    push!(∇hi_i, 1, 1, 1, nx, nx, nx)
+    push!(∇hi_j, 1, 2, 3, nx-2, nx-1, nx)
+    push!(∇hi_v, -3/2, 2, -1/2, 1/2, -2, 3/2)
 
-    ∇hi = sparse(∇hi_i, ∇hi_j, ∇hi_v, nx+1, nx) / Δx
+    ∇hi = sparse(∇hi_i, ∇hi_j, ∇hi_v, nx, nx) / Δx
     Ii = sparse(I, nx, nx)
 
     ∇h = [kron(Ii, ∇hi); kron(∇hi, Ii)]
@@ -22,22 +22,10 @@ function build_∇h(nx::Real, Δx::Real)::SparseMatrixCSC
 
 end
 
-"""Builds operator that interpolates between cells and faces."""
+"""Builds operator that duplicates permeabilities."""
 function build_A(nx::Real)::SparseMatrixCSC
 
-    Ai_i = repeat(2:nx, inner=2)
-    Ai_j = vcat([[i-1, i] for i ∈ 2:nx]...)
-    Ai_v = fill(0.5, 2*(nx-1))
-
-    push!(Ai_i, 1, nx+1)
-    push!(Ai_j, 1, nx)
-    push!(Ai_v, 1, 1)
-
-    Ai = sparse(Ai_i, Ai_j, Ai_v, nx+1, nx)
-    Ii = sparse(I, nx, nx)
-
-    A = [kron(Ii, Ai); kron(Ai, Ii)]
-    return A
+    return [sparse(I, nx^2, nx^2); sparse(I, nx^2, nx^2)]
 
 end
 
@@ -74,11 +62,11 @@ struct Grid
         u0::Real=1.0
     )
 
-        nx = Int(round(xmax / Δx))
-        nt = Int(round(tmax / Δt))
+        nx = Int(round(xmax / Δx))+1
+        nt = Int(round(tmax / Δt))+1
 
-        xs = LinRange(0.5Δx, xmax-0.5Δx, nx)
-        ts = LinRange(0, tmax, nt+1)
+        xs = LinRange(0, xmax, nx)
+        ts = LinRange(0, tmax, nt)
 
         cxs = repeat(xs, outer=nx)
         cys = repeat(xs, inner=nx)

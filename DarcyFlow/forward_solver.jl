@@ -128,18 +128,18 @@ end
 """Solves the full model."""
 function SciMLBase.solve(
     g::Grid, 
-    logps::AbstractVector, 
+    lnps::AbstractVector, 
     Q::AbstractMatrix
 )::AbstractVector
 
-    us = zeros(g.nx^2, g.nt+1)
+    us = zeros(g.nx^2, g.nt)
     us[:, 1] .= g.u0
 
-    A = -g.∇h' * (1/g.μ) * spdiagm((g.A * 10 .^ -logps) .^ -1) * g.∇h
+    A = -g.∇h' * (1/g.μ) * spdiagm(g.A * exp.(lnps)) * g.∇h
     Id = (g.ϕ * g.c / g.Δt) * sparse(I, g.nx^2, g.nx^2)
     M = Id - A
 
-    for t ∈ 1:g.nt
+    for t ∈ 1:(g.nt-1)
         b = Q[:, t+1] + (g.ϕ * g.c / g.Δt) * us[:, t]
         us[:, t+1] = solve(LinearProblem(M, b))
     end
@@ -151,22 +151,22 @@ end
 """Solves the reduced-order model."""
 function SciMLBase.solve(
     g::Grid, 
-    logps::AbstractVector, 
+    lnps::AbstractVector, 
     Q::AbstractMatrix,
     μ::AbstractVector,
     V_r::AbstractMatrix
 )::AbstractVector
 
-    us = zeros(g.nx^2, g.nt+1)
+    us = zeros(g.nx^2, g.nt)
     us[:, 1] .= g.u0
 
-    A = -g.∇h' * (1/g.μ) * spdiagm((g.A * 10 .^ -logps) .^ -1) * g.∇h
+    A = -g.∇h' * (1/g.μ) * spdiagm(g.A * exp.(lnps)) * g.∇h
     Id = (g.ϕ * g.c / g.Δt) * sparse(I, g.nx^2, g.nx^2)
 
     M = Id - A 
     M_r = V_r' * M * V_r
 
-    for t ∈ 1:g.nt
+    for t ∈ 1:(g.nt-1)
 
         b_r = V_r' * (Q[:, t+1] + (g.ϕ * g.c / g.Δt) * us[:, t] - M * μ)
 

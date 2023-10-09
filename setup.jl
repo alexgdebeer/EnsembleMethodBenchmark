@@ -76,22 +76,22 @@ Q_f = build_Q(grid_f, wells_f, well_change_times)
 # Prior 
 # ----------------
 
-logp_mu = -13.5
-σ_bounds = (0.25, 0.75)
+lnp_mu = -31
+σ_bounds = (0.5, 1.5)
 l_bounds = (200, 400)
 
-p = MaternField(grid_c, logp_mu, σ_bounds, l_bounds)
+p = MaternField(grid_c, lnp_mu, σ_bounds, l_bounds)
 
 # ----------------
 # Truth
 # ----------------
 
-true_field = MaternField(grid_f, logp_mu, σ_bounds, l_bounds)
+true_field = MaternField(grid_f, lnp_mu, σ_bounds, l_bounds)
 θs_t = rand(true_field)
-logps_t = transform(true_field, vec(θs_t))
+lnps_t = transform(true_field, vec(θs_t))
 
-us_t = solve(grid_f, logps_t, Q_f)
-us_t = reshape(us_t, grid_f.nx^2, grid_f.nt+1)
+us_t = solve(grid_f, lnps_t, Q_f)
+us_t = reshape(us_t, grid_f.nx^2, grid_f.nt)
 
 # ----------------
 # Data
@@ -121,13 +121,13 @@ us_obs += rand(MvNormal(Γ))
 # ----------------
 
 function F(θs::AbstractVector)
-    logps = transform(p, θs)
-    return solve(grid_c, logps, Q_c)
+    lnps = transform(p, θs)
+    return solve(grid_c, lnps, Q_c)
 end
 
 function F_r(θs::AbstractVector)
-    logps = transform(p, θs)
-    return solve(grid_c, logps, Q_c, μ_u, V_r)
+    lnps = transform(p, θs)
+    return solve(grid_c, lnps, Q_c, μ_u, V_r)
 end
 
 function G(us::AbstractVector)
