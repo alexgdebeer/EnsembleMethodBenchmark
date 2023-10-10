@@ -135,12 +135,12 @@ function SciMLBase.solve(
     us = zeros(g.nx^2, g.nt)
     us[:, 1] .= g.u0
 
-    A = -g.∇h' * (1/g.μ) * spdiagm((g.A * exp.(-vec(lnps))) .^ -1) * g.∇h
-    Id = (g.ϕ * g.c / g.Δt) * sparse(I, g.nx^2, g.nx^2)
-    M = Id - A
+    A = (g.Δt / g.μ) * g.∇h' * spdiagm((g.A * exp.(-vec(lnps))) .^ -1) * g.∇h
+    Id = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2)
+    M = Id + A
 
     for t ∈ 1:(g.nt-1)
-        b = Q[:, t+1] + (g.ϕ * g.c / g.Δt) * us[:, t]
+        b = g.Δt * Q[:, t+1] + g.ϕ * g.c * us[:, t]
         us[:, t+1] = solve(LinearProblem(M, b))
     end
 
@@ -160,15 +160,15 @@ function SciMLBase.solve(
     us = zeros(g.nx^2, g.nt)
     us[:, 1] .= g.u0
 
-    A = -g.∇h' * (1/g.μ) * spdiagm((g.A * exp.(-vec(lnps))) .^ -1) * g.∇h
-    Id = (g.ϕ * g.c / g.Δt) * sparse(I, g.nx^2, g.nx^2)
+    A = (g.Δt / g.μ) * g.∇h' * spdiagm((g.A * exp.(-vec(lnps))) .^ -1) * g.∇h
+    Id = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2)
 
-    M = Id - A 
+    M = Id + A 
     M_r = V_r' * M * V_r
 
     for t ∈ 1:(g.nt-1)
 
-        b_r = V_r' * (Q[:, t+1] + (g.ϕ * g.c / g.Δt) * us[:, t] - M * μ)
+        b_r = V_r' * (g.Δt * Q[:, t+1] + g.ϕ * g.c * us[:, t] - M * μ)
 
         us_r = solve(LinearProblem(M_r, b_r))
         us[:, t+1] = μ + V_r * us_r

@@ -81,15 +81,14 @@ lnp_mu = -31
 l = 300
 ν = 1.0
 
-p = MaternFieldKL(grid_c, lnp_mu, σ, l, ν) # TODO: truncation?
+p = MaternFieldKL(grid_c, lnp_mu, σ, l, ν)
 
 # ----------------
 # Truth
 # ----------------
 
 true_field = MaternFieldKL(grid_f, lnp_mu, σ, l, ν)
-θs_t = rand(true_field)
-lnps_t = transform(true_field, θs_t)
+lnps_t = rand(true_field)
 
 us_t = solve(grid_f, lnps_t, Q_f)
 us_t = reshape(us_t, grid_f.nx^2, grid_f.nt)
@@ -121,13 +120,11 @@ us_obs += rand(MvNormal(Γ))
 # Model functions
 # ----------------
 
-function F(θs::AbstractVector)
-    lnps = transform(p, θs)
+function F(lnps::AbstractVector)
     return solve(grid_c, lnps, Q_c)
 end
 
-function F_r(θs::AbstractVector)
-    lnps = transform(p, θs)
+function F_r(lnps::AbstractVector)
     return solve(grid_c, lnps, Q_c, μ_u, V_r)
 end
 
