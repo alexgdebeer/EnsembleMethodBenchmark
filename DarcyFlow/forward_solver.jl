@@ -128,14 +128,14 @@ end
 """Solves the full model."""
 function SciMLBase.solve(
     g::Grid, 
-    lnps::AbstractVector, 
+    lnps::AbstractVecOrMat, 
     Q::AbstractMatrix
 )::AbstractVector
 
     us = zeros(g.nx^2, g.nt)
     us[:, 1] .= g.u0
 
-    A = -g.∇h' * (1/g.μ) * spdiagm((g.A * exp.(lnps)) .^ -1) * g.∇h
+    A = -g.∇h' * (1/g.μ) * spdiagm((g.A * exp.(-vec(lnps))) .^ -1) * g.∇h
     Id = (g.ϕ * g.c / g.Δt) * sparse(I, g.nx^2, g.nx^2)
     M = Id - A
 
@@ -151,7 +151,7 @@ end
 """Solves the reduced-order model."""
 function SciMLBase.solve(
     g::Grid, 
-    lnps::AbstractVector, 
+    lnps::AbstractVecOrMat, 
     Q::AbstractMatrix,
     μ::AbstractVector,
     V_r::AbstractMatrix
@@ -160,7 +160,7 @@ function SciMLBase.solve(
     us = zeros(g.nx^2, g.nt)
     us[:, 1] .= g.u0
 
-    A = -g.∇h' * (1/g.μ) * spdiagm((g.A * exp.(lnps)) .^ -1) * g.∇h
+    A = -g.∇h' * (1/g.μ) * spdiagm((g.A * exp.(-vec(lnps))) .^ -1) * g.∇h
     Id = (g.ϕ * g.c / g.Δt) * sparse(I, g.nx^2, g.nx^2)
 
     M = Id - A 

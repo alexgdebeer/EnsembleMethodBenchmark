@@ -23,8 +23,8 @@ u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 xmax = 1000.0
 tmax = 120.0
 
-Δx_c = 12.5
-Δx_f = 8.0
+Δx_c = 25.0
+Δx_f = 25.0
 Δt_c = 4.0
 Δt_f = 2.0
 
@@ -76,19 +76,20 @@ Q_f = build_Q(grid_f, wells_f, well_change_times)
 # Prior 
 # ----------------
 
-lnp_mu = 31
-σ_bounds = (0.5, 1.5)
-l_bounds = (200, 400)
+lnp_mu = -31
+σ = 1.0
+l = 300
+ν = 1.0
 
-p = MaternField(grid_c, lnp_mu, σ_bounds, l_bounds)
+p = MaternFieldKL(grid_c, lnp_mu, σ, l, ν) # TODO: truncation?
 
 # ----------------
 # Truth
 # ----------------
 
-true_field = MaternField(grid_f, lnp_mu, σ_bounds, l_bounds)
+true_field = MaternFieldKL(grid_f, lnp_mu, σ, l, ν)
 θs_t = rand(true_field)
-lnps_t = transform(true_field, vec(θs_t))
+lnps_t = transform(true_field, θs_t)
 
 us_t = solve(grid_f, lnps_t, Q_f)
 us_t = reshape(us_t, grid_f.nx^2, grid_f.nt)
@@ -159,4 +160,4 @@ if TEST_POD
 
 end
 
-animate(us_t, grid_f, (100, 100), "plots/animations/fine_grid")
+# animate(us_t, grid_f, (30, 30), "plots/animations/fine_grid")
