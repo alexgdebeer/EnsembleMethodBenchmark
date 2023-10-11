@@ -90,13 +90,12 @@ function SciMLBase.solve(
     A = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)) .^ -1) * g.∇h 
     B = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * A 
     
-    # Initial solve
-    b = g.Δt * Q[:, 1] .+ g.ϕ * g.c * g.u0
-    u[:, 1] = solve(LinearProblem(B, b))
+    prob = LinearProblem(B, g.Δt*Q[:, 1] .+ g.ϕ*g.c*g.u0)
+    u[:, 1] = solve(prob)
 
     for t ∈ 2:g.nt
-        b = g.Δt * Q[:, t] + g.ϕ * g.c * u[:, t-1]
-        u[:, t] = solve(LinearProblem(B, b))
+        prob = LinearProblem(B, g.Δt*Q[:, t] + g.ϕ*g.c*u[:, t-1])
+        u[:, t] = solve(prob)
     end
 
     return vec(u)

@@ -1,4 +1,5 @@
 using LinearAlgebra
+using LinearSolve
 using SparseArrays
 
 include("setup.jl")
@@ -22,8 +23,8 @@ function optimise(
 
         u = reshape(u, g.nx^2, g.nt)
 
-        DGθ = g.Δt * vcat([
-            (1.0 / g.μ) * g.∇h' * spdiagm(g.∇h * u[:, t]) * 
+        DGθ = (g.Δt / g.μ) * vcat([
+            g.∇h' * spdiagm(g.∇h * u[:, t]) * 
             spdiagm((g.A * exp.(-θ)).^-2) * g.A *
             spdiagm(exp.(-θ)) for t ∈ 1:g.nt
         ]...)
@@ -34,35 +35,33 @@ function optimise(
 
     function solve_adjoint(
         u::AbstractVector, 
-        Bθ::AbstractMatrix
+        Bθt::AbstractMatrix
     )::AbstractVector
 
         p = spzeros(g.nx^2, g.nt)
 
-        b = g.B' * Γ_ϵ_inv * sparsevec(g.B * u - y) 
+        b = -g.B' * Γ_ϵ_inv * sparsevec(g.B * u - y) 
         b = reshape(b, g.nx^2, g.nt)
 
-        # TODO: figure out why \ works but forming a LinearProblem doesn't
-        p[:, end] = Bθ' \ Vector(b[:, end])
+        prob = LinearProblem(Bθt, b[:, end])
+        p[:, end] = solve(prob)
 
         for t ∈ (g.nt-1):-1:1
-
-            bt = b[:, t] + g.ϕ * g.c * p[:, t+1]
-            p[:, t] = Bθ' \ Vector(bt)
-
+            prob = LinearProblem(Bθt, b[:, t] + g.ϕ * g.c * p[:, t+1])
+            p[:, t] = solve(prob)
         end
 
-        return vec(p)
+        return Vector(vec(p))
 
     end
     
     function compute_∇Lθ(
         θ::AbstractVector, 
         p::AbstractVector, 
-        DGθ::AbstractMatrix
+        DGθt::AbstractMatrix
     )::AbstractVector
 
-        return pr.Γ_inv * (θ - pr.μ) + DGθ' * p
+        return pr.Γ_inv * (θ - pr.μ) + DGθt * p
 
     end
 
@@ -74,52 +73,51 @@ function optimise(
         b = reshape(Vector(b), g.nx^2, g.nt)
         u = spzeros(g.nx^2, g.nt)
 
-        u[:, 1] = Bθ \ b[:, 1]
+        prob = LinearProblem(Bθ, b[:, 1])
+        u[:, 1] = solve(prob)
 
         for t ∈ 2:g.nt 
-
-            bt = b[:, t] + g.ϕ * g.c * u[:, t-1]
-            u[:, t] = Bθ \ Vector(bt)
-
+            prob = LinearProblem(Bθ, b[:, t] + g.ϕ*g.c*u[:, t-1])
+            u[:, t] = solve(prob)
         end
 
-        return vec(u)
+        return sparsevec(u)
 
     end
 
     function solve_adjoint_inc(
-        Bθ::AbstractMatrix,
+        Bθt::AbstractMatrix,
         b::AbstractVector 
     )::AbstractVector
 
-        b = reshape(Vector(b), g.nx^2, g.nt)
+        b = reshape(b, g.nx^2, g.nt)
         p = spzeros(g.nx^2, g.nt)
 
-        p[:, end] = Bθ' \ b[:, end]
+        prob = LinearProblem(Bθt, b[:, end])
+        p[:, end] = solve(prob)
 
-        # Backward solve this time because the A matrix is transposed
         for t ∈ (g.nt-1):-1:1
-
-            bt = b[:, t] + g.ϕ * g.c * p[:, t+1]
-            p[:, t] = Bθ' \ Vector(bt)
-
+            prob = LinearProblem(Bθt, b[:, t] + g.ϕ * g.c * p[:, t+1])
+            p[:, t] = solve(prob)
         end
 
-        return sparsevec(p)
+        return Vector(vec(p))
 
     end
 
     function compute_Hd(
         d::AbstractVector, 
         Bθ::AbstractMatrix, 
-        DGθ::AbstractMatrix 
+        Bθt::AbstractMatrix,
+        DGθ::AbstractMatrix,
+        DGθt::AbstractMatrix
     )::AbstractVector
 
         # Solve incremental forward and adjoint problems
         u_inc = solve_forward_inc(Bθ, DGθ * d)
-        p_inc = solve_adjoint_inc(Bθ, g.B' * Γ_ϵ_inv * g.B * u_inc)
+        p_inc = solve_adjoint_inc(Bθt, g.B' * Γ_ϵ_inv * g.B * u_inc)
 
-        return DGθ' * p_inc + pr.Γ_inv * d
+        return DGθt * p_inc + pr.Γ_inv * d
 
     end
 
@@ -131,20 +129,22 @@ function optimise(
     while true
         
         # 0. Form Aθ and Bθ at the current estimate of θ
-        Aθ = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(θ)) .^ -1) * g.∇h
+        Aθ = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)) .^ -1) * g.∇h
         Bθ = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ
+        Bθt = sparse(Bθ')
 
         # 1. Solve forward problem for u
-        u = @time solve(g, θ, Q)
+        u = solve(g, θ, Q)
 
         # 1.1. Compute gradient of ̃A(θ)u at current estimate of θ, u
         DGθ = compute_DGθ(θ, u)
+        DGθt = @time sparse(DGθ')
 
         # 2. Solve adjoint problem for p 
-        p = solve_adjoint(u, Bθ)
+        p = solve_adjoint(u, Bθt)
 
         # 3. Form gradient of Lagrangian w.r.t. θ
-        ∇Lθ = @time compute_∇Lθ(θ, p, DGθ)
+        ∇Lθ = compute_∇Lθ(θ, p, DGθt)
 
         # Begin inner CG loop
 
@@ -155,15 +155,10 @@ function optimise(
         d = -copy(∇Lθ)
         r = -copy(∇Lθ)
 
-        display(u)
-        display(DGθ)
-        display(p)
-        display(∇Lθ)
-
         i = 1
         while true
             
-            Hd = @time compute_Hd(d, Bθ, DGθ)
+            Hd = compute_Hd(d, Bθ, Bθt, DGθ, DGθt)
             
             # Compute step length and take a step 
             α = (r' * r) / (d' * Hd)
@@ -173,7 +168,7 @@ function optimise(
             r_prev = copy(r)
             r -= α * Hd
 
-            @info "Iteration $i."
+            @info "Iteration $i. ||r||^2: $(round(r'*r))"
             @info "Squared norm of residual: $(r' * r)"
 
             if (r' * r < ϵ^2 * ∇Lθ' * ∇Lθ) || (i > i_max)
@@ -191,6 +186,7 @@ function optimise(
 
         # Form new estimate of θ
         θ += δθ
+        display(θ)
 
     end
 
