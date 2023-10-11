@@ -41,6 +41,70 @@ function build_A(nx::Real)::SparseMatrixCSC
 
 end
 
+"""Builds the operator that maps from model states to observations."""
+function build_B(
+    xs::AbstractVector,
+    nx::Int,
+    nt::Int,
+    ny::Int,
+    nyi::Int,
+    x_obs::AbstractVector,
+    y_obs::AbstractVector,
+    t_obs_inds::AbstractVector 
+)::SparseMatrixCSC
+
+    function get_cell_index(xi::Int, yi::Int)
+        return xi + nx * yi # TODO: check this
+    end
+
+    is = Int[]
+    js = Int[]
+    vs = Float64[]
+
+    for (i, (x, y)) ∈ enumerate(zip(x_obs, y_obs))
+
+        ix0 = findfirst(xs .> x) - 1
+        iy0 = findfirst(xs .> y) - 1
+        ix1 = ix0 + 1
+        iy1 = iy0 + 1
+
+        x0, x1 = xs[ix0], xs[ix1]
+        y0, y1 = xs[iy0], xs[iy1]
+
+        inds = [(ix0, iy0), (ix0, iy1), (ix1, iy0), (ix1, iy1)]
+        cell_inds = [get_cell_index(i...) for i ∈ inds]
+
+        Z = (x1-x0) * (y1-y0)
+
+        push!(is, i, i, i, i)
+        push!(js, cell_inds...)
+        push!(vs,
+            (x1-x) * (y1-y) / Z, 
+            (x-x0) * (y1-y) / Z, 
+            (x1-x) * (y-y0) / Z, 
+            (x-x0) * (y-y0) / Z
+        )
+
+    end
+
+    Bi = sparse(is, js, vs, nyi, nx^2)
+
+    # Form full operator
+    B = spzeros(ny, nx^2 * nt)
+
+    for (i, t) ∈ enumerate(t_obs_inds)
+
+        ii = (i-1) * nyi
+        jj = (t-1) * nx^2
+        
+        B[(ii+1):(ii+nyi), (jj+1):(jj+nx^2)] = Bi
+
+    end
+
+    return B
+
+end
+
 struct Grid 
 
     xs::AbstractVector
@@ -52,11 +116,15 @@ struct Grid
     Δx::Real 
     Δt::Real
 
-    nx::Real 
-    nt::Real 
+    nx::Int 
+    nt::Int
+
+    ny::Int
+    nyi::Int
 
     ∇h::SparseMatrixCSC
     A::SparseMatrixCSC
+    B::SparseMatrixCSC
 
     ϕ::Real 
     μ::Real
@@ -68,6 +136,9 @@ struct Grid
         tmax::Real,
         Δx::Real,
         Δt::Real,
+        x_obs::AbstractVector,
+        y_obs::AbstractVector,
+        t_obs::AbstractVector,
         ϕ::Real=1.0,
         μ::Real=1.0,
         c::Real=1.0,
@@ -75,10 +146,13 @@ struct Grid
     )
 
         nx = Int(round(xmax / Δx))
-        nt = Int(round(tmax / Δt))+1
+        nt = Int(round(tmax / Δt))
+
+        nyi = length(x_obs)
+        ny = nyi * length(t_obs)
 
         xs = LinRange(0.5Δx, xmax-0.5Δx, nx)
-        ts = LinRange(0, tmax, nt)
+        ts = LinRange(Δt, tmax, nt)
 
         cxs = repeat(xs, outer=nx)
         cys = repeat(xs, inner=nx)
@@ -86,7 +160,10 @@ struct Grid
         ∇h = build_∇h(nx, Δx)
         A = build_A(nx)
 
-        return new(xs, ts, cxs, cys, Δx, Δt, nx, nt, ∇h, A, ϕ, μ, c, u0)
+        t_obs_inds = [findfirst(ts .>= t) for t ∈ t_obs]
+        B = build_B(xs, nx, nt, ny, nyi, x_obs, y_obs, t_obs_inds)
+
+        return new(xs, ts, cxs, cys, Δx, Δt, nx, nt, ny, nyi, ∇h, A, B, ϕ, μ, c, u0)
 
     end
 
