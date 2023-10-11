@@ -6,6 +6,7 @@ struct MaternFieldKL
 
     μ::AbstractVector
     Γ::AbstractMatrix
+    Γ_inv::AbstractMatrix
     d::MvNormal
 
     function MaternFieldKL(
@@ -26,7 +27,7 @@ struct MaternFieldKL
         Γ = σ^2 * (2.0^(1-ν) / gamma(ν)) .* (Δxs/l).^ν .* besselk.(ν, Δxs/l)
 
         d = MvNormal(μ, Γ)
-        return new(μ, Γ, d)
+        return new(μ, Γ, inv(Γ), d)
 
     end
 

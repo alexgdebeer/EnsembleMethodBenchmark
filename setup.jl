@@ -105,6 +105,8 @@ ts_obs = [8, 16, 24, 32, 40, 48, 56, 64, 72, 80]
 B_f = build_B(grid_f, xs_obs, ys_obs)
 B_c = build_B(grid_c, xs_obs, ys_obs)
 
+# TODO: combine the above and below with the grid?
+
 ts_obs_inds_f = [findfirst(grid_f.ts .>= t) for t ∈ ts_obs]
 ts_obs_inds_c = [findfirst(grid_c.ts .>= t) for t ∈ ts_obs]
 
