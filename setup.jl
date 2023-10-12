@@ -23,8 +23,8 @@ u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 xmax = 1000.0
 tmax = 120.0
 
-Δx_c = 40.0
-Δx_f = 40.0
+Δx_c = 20.0
+Δx_f = 20.0
 Δt_c = 4.0
 Δt_f = 2.0
 

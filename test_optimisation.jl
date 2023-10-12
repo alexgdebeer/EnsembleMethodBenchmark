@@ -119,8 +119,8 @@ function optimise(
     end
 
     # Convergence parameters for CG 
-    ϵ = 0.05
-    i_max = 1000
+    ϵ = 0.5
+    j_max = 100
 
     Lθ = cholesky(Hermitian(pr.Γ_inv)).U
     Lϵ = cholesky(Matrix(Γ_ϵ_inv)).U
@@ -130,6 +130,7 @@ function optimise(
     end
 
     # TODO: convergence test
+    i = 1
     while true
 
         @info "Beginning outer loop"
@@ -146,13 +147,18 @@ function optimise(
 
         # 1.1. Compute gradient of ̃A(θ)u at current estimate of θ, u
         DGθ = compute_DGθ(θ, u)
-        DGθt = @time sparse(DGθ')
+        DGθt = sparse(DGθ')
 
         # 2. Solve adjoint problem for p 
         p = solve_adjoint(u, Bθt)
 
         # 3. Form gradient of Lagrangian w.r.t. θ
-        ∇Lθ = @time compute_∇Lθ(θ, p, DGθt)
+        ∇Lθ = compute_∇Lθ(θ, p, DGθt)
+
+        @info "Norm of gradient: $(norm(∇Lθ))"
+        if norm(∇Lθ) < 2
+            return θ, u
+        end
 
         # Begin inner CG loop
 
@@ -163,10 +169,12 @@ function optimise(
         d = -copy(∇Lθ)
         r = -copy(∇Lθ)
 
-        i = 1
+        j = 1
         while true
             
             Hd = compute_Hd(d, Bθ, Bθt, DGθ, DGθt)
+            # TODO: compute this the expensive (but simple) way and see 
+            # whether the two line up
             
             # Compute step length and take a step 
             α = (r' * r) / (d' * Hd)
@@ -176,12 +184,12 @@ function optimise(
             r_prev = copy(r)
             r -= α * Hd
 
-            if i % 20 == 0
-                @info "Iteration $i. ||r||^2: $(r'*r)"
+            if j % 20 == 0
+                @info "Iteration $j. ||r||^2: $(r' * r)"
             end
 
             # TODO: convergence test
-            if i > i_max || r' * r < 1e-8  #(r' * r < ϵ^2 * ∇Lθ' * ∇Lθ) || (i > i_max)
+            if (r' * r < ϵ^2 * ∇Lθ' * ∇Lθ) || (j > j_max)
                 @info "Converged..."
                 break
             end
@@ -190,12 +198,13 @@ function optimise(
             β = (r' * r) / (r_prev' * r_prev)
             d = r + β * d
 
-            i += 1
+            j += 1
 
         end
 
         # Form new estimate of θ
         θ += δθ
+        i += 1
 
     end
 
@@ -203,4 +212,4 @@ function optimise(
 
 end
 # vec(rand(pr, 1))
-optimise(grid_c, pr, y_obs, Q_c, vec(rand(pr, 1)), Γ_ϵ_inv)
+θ_map, u_map = optimise(grid_c, pr, y_obs, Q_c, vec(rand(pr, 1)), Γ_ϵ_inv)
