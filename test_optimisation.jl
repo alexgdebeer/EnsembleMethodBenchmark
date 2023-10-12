@@ -7,6 +7,8 @@ include("setup.jl")
 # TODO: verify the correctness of the Jacobian (of the forward model 
 # w.r.t. θ) using finite differences
 
+using FiniteDiff # TEMP
+
 function optimise(
     g::Grid,
     pr, # Prior,
@@ -123,18 +125,57 @@ function optimise(
 
     # Convergence parameters for CG 
     ϵ = 0.05
-    i_max = 1_000
+    i_max = 1000
+
+    # # TEMP
+    # function A_full_u(θ)
+
+    #     print("1 ")
+
+    #     Aθ = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)).^-1) * g.∇h
+    #     Bθ = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ
+
+    #     A_full = blockdiag([Bθ for _ ∈ 1:g.nt]...)
+    #     iix = (g.nx^2+1):g.nx^2*g.nt 
+    #     iiy = 1:g.nx^2*(g.nt-1)
+    #     A_full[iix, iiy] = -g.ϕ * g.c * sparse(I, g.nx^2*(g.nt-1), g.nx^2*(g.nt-1))
+
+    #     return A_full * u
+
+    # end
+    
+    # u = solve(g, θ, Q)
+    # J = FiniteDiff.finite_difference_jacobian(A_full_u, θ)
+    
+    # DGθ = compute_DGθ(θ, u)
+    # DGθt = sparse(DGθ')
+
+    # display(J)
+    # display(Matrix(DGθ))
+    # display(J - Matrix(DGθ))
+
+    # # PMET
+    Lθ = cholesky(Hermitian(pr.Γ_inv)).U
+    Lϵ = cholesky(Matrix(Γ_ϵ_inv)).U
+
+    function log_posterior(θ, u)
+        return 0.5sum(Lϵ*(((g.B*u - y).^2))) + 0.5sum(Lθ*((θ-pr.μ).^2))
+    end
 
     # TODO: convergence test
     while true
+
+        @info "Beginning outer loop"
         
-        # 0. Form Aθ and Bθ at the current estimate of θ
-        Aθ = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)) .^ -1) * g.∇h
+        # Form Aθ and Bθ at the current estimate of θ
+        Aθ = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)).^-1) * g.∇h
         Bθ = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ
         Bθt = sparse(Bθ')
 
         # 1. Solve forward problem for u
         u = solve(g, θ, Q)
+
+        @info "Negative log-posterior: $(log_posterior(θ, u))"
 
         # 1.1. Compute gradient of ̃A(θ)u at current estimate of θ, u
         DGθ = compute_DGθ(θ, u)
@@ -144,7 +185,7 @@ function optimise(
         p = solve_adjoint(u, Bθt)
 
         # 3. Form gradient of Lagrangian w.r.t. θ
-        ∇Lθ = compute_∇Lθ(θ, p, DGθt)
+        ∇Lθ = @time compute_∇Lθ(θ, p, DGθt)
 
         # Begin inner CG loop
 
@@ -162,16 +203,17 @@ function optimise(
             
             # Compute step length and take a step 
             α = (r' * r) / (d' * Hd)
-            δθ += α * Hd 
+            δθ += α * d
 
             # Update residual vector
             r_prev = copy(r)
             r -= α * Hd
 
-            @info "Iteration $i. ||r||^2: $(round(r'*r))"
-            @info "Squared norm of residual: $(r' * r)"
+            if i % 20 == 0
+                @info "Iteration $i. ||r||^2: $(r'*r)"
+            end
 
-            if (r' * r < ϵ^2 * ∇Lθ' * ∇Lθ) || (i > i_max)
+            if i > i_max || r' * r < 1e-8  #(r' * r < ϵ^2 * ∇Lθ' * ∇Lθ) || (i > i_max)
                 @info "Converged..."
                 break
             end
@@ -193,5 +235,5 @@ function optimise(
     return θ
 
 end
-
+# vec(rand(pr, 1))
 optimise(grid_c, pr, y_obs, Q_c, vec(rand(pr, 1)), Γ_ϵ_inv)

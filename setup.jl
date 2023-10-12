@@ -23,8 +23,8 @@ u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 xmax = 1000.0
 tmax = 120.0
 
-Δx_c = 25.0
-Δx_f = 25.0
+Δx_c = 40.0
+Δx_f = 40.0
 Δt_c = 4.0
 Δt_f = 2.0
 
@@ -147,4 +147,4 @@ if TEST_POD
 
 end
 
-# animate(us_t, grid_f, (30, 30), "plots/animations/fine_grid")
+# animate(us_t, grid_f, (10, 10), "plots/animations/test")

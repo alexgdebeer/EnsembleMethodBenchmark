@@ -87,7 +87,7 @@ function SciMLBase.solve(
 
     u = zeros(g.nx^2, g.nt)
 
-    A = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)) .^ -1) * g.∇h 
+    A = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)).^-1) * g.∇h 
     B = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * A 
     
     prob = LinearProblem(B, g.Δt*Q[:, 1] .+ g.ϕ*g.c*g.u0)
