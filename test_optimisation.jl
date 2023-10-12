@@ -4,18 +4,13 @@ using SparseArrays
 
 include("setup.jl")
 
-# TODO: verify the correctness of the Jacobian (of the forward model 
-# w.r.t. θ) using finite differences
-
-using FiniteDiff # TEMP
-
 function optimise(
     g::Grid,
-    pr, # Prior,
-    y::AbstractVector, # Data
-    Q::AbstractMatrix, # Matrix of forcing terms
+    pr,
+    y::AbstractVector,
+    Q::AbstractMatrix,
     θ::AbstractVector, # Initial estimate of θ
-    Γ_ϵ_inv::AbstractMatrix # Covariance of errors
+    Γ_ϵ_inv::AbstractMatrix
 )
 
     function compute_DGθ(
@@ -127,34 +122,6 @@ function optimise(
     ϵ = 0.05
     i_max = 1000
 
-    # # TEMP
-    # function A_full_u(θ)
-
-    #     print("1 ")
-
-    #     Aθ = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)).^-1) * g.∇h
-    #     Bθ = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ
-
-    #     A_full = blockdiag([Bθ for _ ∈ 1:g.nt]...)
-    #     iix = (g.nx^2+1):g.nx^2*g.nt 
-    #     iiy = 1:g.nx^2*(g.nt-1)
-    #     A_full[iix, iiy] = -g.ϕ * g.c * sparse(I, g.nx^2*(g.nt-1), g.nx^2*(g.nt-1))
-
-    #     return A_full * u
-
-    # end
-    
-    # u = solve(g, θ, Q)
-    # J = FiniteDiff.finite_difference_jacobian(A_full_u, θ)
-    
-    # DGθ = compute_DGθ(θ, u)
-    # DGθt = sparse(DGθ')
-
-    # display(J)
-    # display(Matrix(DGθ))
-    # display(J - Matrix(DGθ))
-
-    # # PMET
     Lθ = cholesky(Hermitian(pr.Γ_inv)).U
     Lϵ = cholesky(Matrix(Γ_ϵ_inv)).U
 
@@ -213,6 +180,7 @@ function optimise(
                 @info "Iteration $i. ||r||^2: $(r'*r)"
             end
 
+            # TODO: convergence test
             if i > i_max || r' * r < 1e-8  #(r' * r < ϵ^2 * ∇Lθ' * ∇Lθ) || (i > i_max)
                 @info "Converged..."
                 break
@@ -228,7 +196,6 @@ function optimise(
 
         # Form new estimate of θ
         θ += δθ
-        display(θ)
 
     end
 
