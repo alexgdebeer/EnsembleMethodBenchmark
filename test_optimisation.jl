@@ -122,45 +122,31 @@ function optimise(
     ϵ = 0.5
     j_max = 100
 
-    Lθ = cholesky(Hermitian(pr.Γ_inv)).U
-    Lϵ = cholesky(Matrix(Γ_ϵ_inv)).U
-
-    function log_posterior(θ, u)
-        return 0.5sum(Lϵ*(((g.B*u - y).^2))) + 0.5sum(Lθ*((θ-pr.μ).^2))
-    end
-
     # TODO: convergence test
     i = 1
     while true
 
-        @info "Beginning outer loop"
+        @info "Beginning outer loop: iteration $i"
         
         # Form Aθ and Bθ at the current estimate of θ
         Aθ = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)).^-1) * g.∇h
         Bθ = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ
         Bθt = sparse(Bθ')
 
-        # 1. Solve forward problem for u
+        # Solve forward and adoint problems
         u = solve(g, θ, Q)
-
-        @info "Negative log-posterior: $(log_posterior(θ, u))"
-
-        # 1.1. Compute gradient of ̃A(θ)u at current estimate of θ, u
-        DGθ = compute_DGθ(θ, u)
-        DGθt = sparse(DGθ')
-
-        # 2. Solve adjoint problem for p 
         p = solve_adjoint(u, Bθt)
 
-        # 3. Form gradient of Lagrangian w.r.t. θ
+        # Compute Jacobian of forward problem and gradient of Lagrangian 
+        # w.r.t. θ
+        DGθ = compute_DGθ(θ, u)
+        DGθt = sparse(DGθ')
         ∇Lθ = compute_∇Lθ(θ, p, DGθt)
 
         @info "Norm of gradient: $(norm(∇Lθ))"
         if norm(∇Lθ) < 2
             return θ, u
         end
-
-        # Begin inner CG loop
 
         # Start δθ at 0 in the absence of the better guess
         δθ = spzeros(g.nx^2)
@@ -173,8 +159,6 @@ function optimise(
         while true
             
             Hd = compute_Hd(d, Bθ, Bθt, DGθ, DGθt)
-            # TODO: compute this the expensive (but simple) way and see 
-            # whether the two line up
             
             # Compute step length and take a step 
             α = (r' * r) / (d' * Hd)
@@ -182,13 +166,12 @@ function optimise(
 
             # Update residual vector
             r_prev = copy(r)
-            r -= α * Hd
+            r = r_prev - α * Hd
 
-            if j % 20 == 0
+            if j % 1 == 0
                 @info "Iteration $j. ||r||^2: $(r' * r)"
             end
 
-            # TODO: convergence test
             if (r' * r < ϵ^2 * ∇Lθ' * ∇Lθ) || (j > j_max)
                 @info "Converged..."
                 break
@@ -211,5 +194,5 @@ function optimise(
     return θ
 
 end
-# vec(rand(pr, 1))
+
 θ_map, u_map = optimise(grid_c, pr, y_obs, Q_c, vec(rand(pr, 1)), Γ_ϵ_inv)

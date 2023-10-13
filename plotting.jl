@@ -1,4 +1,5 @@
 using LaTeXStrings
+using Plots
 
 function animate(us, grid, well_inds, fname)
 
