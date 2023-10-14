@@ -3,13 +3,14 @@ using LinearAlgebra
 using LinearSolve
 using SparseArrays
 using SpecialFunctions: gamma
+# TODO: check Python code -- why is there no l^2 in the A equation?
 
 GRAD_2D = [-1.0 1.0 0.0; 
            -1.0 0.0 1.0]
 
-xmin = 1
+xmin = 0
 xmax = 10
-Δx = 0.1
+Δx = 0.5
 xs = xmin:Δx:xmax
 
 nx = length(xs)
@@ -26,7 +27,7 @@ for j ∈ 1:(nx-1), i ∈ 1:(nx-1)
 
 end
 
-points = hcat([[x, y] for x ∈ xs for y ∈ xs]...)
+points = hcat([[x, y] for y ∈ xs for x ∈ xs]...)
 elements = hcat(elements...)
 
 facets_x0 = hcat([[(i-1)*nx+1, i*nx+1] for i ∈ 1:(nx-1)]...)
@@ -44,23 +45,23 @@ M_i, M_j, M_v = Int[], Int[], Float64[]
 K_i, K_j, K_v = Int[], Int[], Float64[]
 N_i, N_j, N_v = Int[], Int[], Float64[]
 
-for e ∈ eachcol(elements)
+detT = Δx^2
+
+@time for (n, e) ∈ enumerate(eachcol(elements))
 
     for i ∈ 1:3
 
-        # TODO: can probably make specific to triangles
         T = hcat(points[:, e[i%3+1]] - points[:, e[i]],
                  points[:, e[(i+1)%3+1]] - points[:, e[i]])
 
-        detT = abs(det(T))
         invT = inv(T)
 
         for j ∈ 1:3
 
             push!(M_i, e[i])
             push!(M_j, e[j])
-            i == j && push!(M_v, detT/12)
-            i != j && push!(M_v, detT/24)
+            i == j && push!(M_v, Δx^2/12)
+            i != j && push!(M_v, Δx^2/24)
 
             push!(K_i, e[i])
             push!(K_j, e[j])
@@ -74,11 +75,9 @@ end
 
 for (fi, fj) ∈ eachcol(boundary_facets)
 
-    det = norm(points[:, fi] - points[:, fj])
-
-    push!(N_i, [fi, fj, fi, fj]...)
-    push!(N_j, [fi, fj, fj, fi]...)
-    push!(N_v, [det * 1/3, det * 1/3, det * 1/6, det * 1/6]...)
+    push!(N_i, fi, fj, fi, fj)
+    push!(N_j, fi, fj, fj, fi)
+    push!(N_v, Δx/3, Δx/3, Δx/6, Δx/6)
 
 end
 
@@ -88,15 +87,25 @@ N = sparse(N_i, N_j, N_v, nx^2, nx^2)
 L = sparse(cholesky(Hermitian(M)).L)
 
 σ = 1.0
-l = 2.0
-ν = 1
-λ = 1.42 * l
+l = 3
+ν = 1.0
 
 α = σ^2 * (4 * pi * gamma(ν+1)) / gamma(ν)
 
-W = rand(Normal(), nx^2)
+A = M + l^2 * K + l / 1.42 * N
 
-A = M + K + l^2 / λ * N
-b = √(α * l^2) * L * W
+n_samples = 1000
+XS = zeros(nx^2, n_samples)
 
-x = solve(LinearProblem(A, b))
+for i ∈ 1:n_samples
+
+    W = rand(Normal(), nx^2)
+    XS[:, i] = solve(LinearProblem(A, √(α * l^2) * L * W))
+
+    if i % 100 == 0
+        println(i)
+    end
+
+end
+
+σs = std(XS, dims=2)
