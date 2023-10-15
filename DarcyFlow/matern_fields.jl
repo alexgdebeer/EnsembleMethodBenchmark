@@ -1,43 +1,144 @@
 using Distributions
 using LinearAlgebra
-using SpecialFunctions
+using LinearSolve
+using SparseArrays
+using SpecialFunctions: gamma
+# TODO: check Python code -- why is there no l^2 in the A equation?
 
-struct MaternFieldKL
+# Gradients of basis functions
+∇s = [-1.0 1.0 0.0; -1.0 0.0 1.0]
+
+# Transformation matrix inverses
+Tinvs = Dict(
+    :lower => [[1.0 -1.0; 0.0 1.0], [0.0 1.0; -1.0 0.0], [-1.0 0.0; 1.0 -1.0]],
+    :upper => [[-1.0 1.0; 1.0 0.0], [1.0 0.0; 0.0 -1.0], [0.0 -1.0; -1.0 1.0]]
+)
+
+function gauss_to_unif(
+    x::Real, 
+    lb::Real, 
+    ub::Real
+)::Real
+
+    return lb + (ub - lb) * cdf(Normal(), x)
+
+end
+
+function build_fd_matrices(g::Grid)
+
+    grid_is = reshape(1:g.nx^2, g.nx, g.nx)
+    
+    elements = []
+    for j ∈ 1:(g.nx-1), i ∈ 1:(g.nx-1)
+        push!(elements, [grid_is[i, j], grid_is[i+1, j], grid_is[i+1, j+1]])
+        push!(elements, [grid_is[i, j], grid_is[i, j+1], grid_is[i+1, j+1]])
+    end
+    elements = hcat(elements...)
+    
+    facets_x0 = hcat([[(i-1)*g.nx+1, i*g.nx+1] for i ∈ 1:(g.nx-1)]...)
+    facets_x1 = hcat([[i*g.nx, (i+1)*g.nx] for i ∈ 1:(g.nx-1)]...)
+    facets_y0 = hcat([[i, i+1] for i ∈ 1:(g.nx-1)]...)
+    facets_y1 = hcat([[i, i+1] for i ∈ (g.nx^2-g.nx+1):(g.nx^2-1)]...)
+    
+    boundary_facets = hcat(facets_x0, facets_x1, facets_y0, facets_y1)
+    
+    M_i, M_j, M_v = Int[], Int[], Float64[]
+    K_i, K_j, K_v = Int[], Int[], Float64[]
+    N_i, N_j, N_v = Int[], Int[], Float64[]
+    
+    for (n, e) ∈ enumerate(eachcol(elements))
+    
+        for i ∈ 1:3
+    
+            element_type = n % 2 == 1 ? :lower : :upper
+            Tinv = 1/g.Δx * Tinvs[element_type][i]
+    
+            for j ∈ 1:3
+    
+                push!(M_i, e[i])
+                push!(M_j, e[j])
+                i == j && push!(M_v, g.Δx^2/12)
+                i != j && push!(M_v, g.Δx^2/24)
+    
+                push!(K_i, e[i])
+                push!(K_j, e[j])
+                push!(K_v, 1/2 * g.Δx^2 * ∇s[:, 1]' * Tinv * Tinv' * ∇s[:, (j-i+3)%3+1])
+    
+            end
+    
+        end
+    
+    end
+    
+    for (fi, fj) ∈ eachcol(boundary_facets)
+    
+        push!(N_i, fi, fj, fi, fj)
+        push!(N_j, fi, fj, fj, fi)
+        push!(N_v, g.Δx/3, g.Δx/3, g.Δx/6, g.Δx/6)
+    
+    end
+    
+    M = sparse(M_i, M_j, M_v, g.nx^2, g.nx^2)
+    K = sparse(K_i, K_j, K_v, g.nx^2, g.nx^2)
+    N = sparse(N_i, N_j, N_v, g.nx^2, g.nx^2)
+    
+    chol = cholesky(Hermitian(M))
+    P = sparse(1:g.nx^2, chol.p, ones(g.nx^2))
+    L = P' * sparse(chol.L)
+
+    return M, K, N, L
+
+end
+
+struct MaternField
 
     μ::AbstractVector
-    Γ::AbstractMatrix
-    Γ_inv::AbstractMatrix
-    d::MvNormal
+    σ_bounds::Tuple
+    l_bounds::Tuple
 
-    function MaternFieldKL(
-        g::Grid, 
+    M::AbstractMatrix 
+    K::AbstractMatrix 
+    N::AbstractMatrix
+    L::AbstractMatrix
+
+    Nθ::Int
+
+    function MaternField(
+        g::Grid,
         μ::Real,
-        σ::Real, 
-        l::Real, 
-        ν::Real
+        σ_bounds::Tuple,
+        l_bounds::Tuple
     )
 
-        # Form covariance matrix 
-        dxs = g.cxs .- g.cxs'
-        dys = g.cys .- g.cys'
-        Δxs = (dxs.^2 + dys.^2) .^ 0.5 + 1e-8I # Hack
-
         μ = fill(μ, g.nx^2)
-        @info "Building covariance matrix..."
-        Γ = σ^2 * (2.0^(1-ν) / gamma(ν)) .* (Δxs/l).^ν .* besselk.(ν, Δxs/l)
-
-        d = MvNormal(μ, Γ)
-        return new(μ, Γ, inv(Γ), d)
+        return new(μ, σ_bounds, l_bounds, build_fd_matrices(g)..., g.nx^2+2)
 
     end
 
 end
 
 function Base.rand(
-    f::MaternFieldKL, 
+    mf::MaternField, 
     n::Int=1
-)::AbstractMatrix
+)::AbstractMatrix   
+    return rand(Normal(), mf.Nθ, n)
+end
 
-    return rand(f.d, n)
+function transform(
+    mf::MaternField, 
+    ξ::AbstractVecOrMat
+)::AbstractVector
+
+    σ, l, ξ... = ξ
+
+    σ = gauss_to_unif(σ, mf.σ_bounds...)
+    l = gauss_to_unif(l, mf.l_bounds...)
+
+    α = σ^2 * (4 * pi * gamma(2)) / gamma(1)
+
+    A = mf.M + l^2 * mf.K + l / 1.42 * mf.N
+    b = √(α) * l * mf.L * ξ + A * mf.μ
+
+    return solve(LinearProblem(A, b))
 
 end
