@@ -23,8 +23,8 @@ u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 xmax = 1000.0
 tmax = 120.0
 
-Δx_c = 40.0
-Δx_f = 40.0
+Δx_c = 12.5
+Δx_f = 12.5
 Δt_c = 4.0
 Δt_f = 2.0
 
@@ -80,21 +80,21 @@ Q_f = build_Q(grid_f, wells_f, well_change_times)
 # Prior 
 # ----------------
 
-lnp_mu = -31
-σ = 1.0
-l = 300
-ν = 1.0
+lnp_μ = -31
+σ_bounds = (0.75, 1.25)
+l_bounds = (200, 400)
 
-pr = MaternFieldKL(grid_c, lnp_mu, σ, l, ν)
+pr = MaternField(grid_c, lnp_μ, σ_bounds, l_bounds)
 
 # ----------------
 # Truth
 # ----------------
 
-true_field = MaternFieldKL(grid_f, lnp_mu, σ, l, ν)
-lnps_t = rand(true_field)
+true_field = MaternField(grid_f, lnp_μ, σ_bounds, l_bounds)
+θs_t = rand(true_field)
+lnps_t = transform(true_field, θs_t)
 
-us_t = solve(grid_f, vec(lnps_t), Q_f)
+us_t = solve(grid_f, lnps_t, Q_f)
 
 # ----------------
 # Data
@@ -147,4 +147,4 @@ if TEST_POD
 
 end
 
-# animate(us_t, grid_f, (10, 10), "plots/animations/test")
+animate(us_t, grid_f, (10, 10), "plots/animations/test")

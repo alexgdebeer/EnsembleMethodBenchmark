@@ -120,9 +120,8 @@ function optimise(
 
     # Convergence parameters for CG 
     ϵ = 0.5
-    j_max = 100
+    j_max = 20
 
-    # TODO: convergence test
     i = 1
     while true
 

@@ -24,7 +24,7 @@ function gauss_to_unif(
 
 end
 
-function build_fd_matrices(g::Grid)
+function build_fem_matrices(g::Grid)
 
     grid_is = reshape(1:g.nx^2, g.nx, g.nx)
     
@@ -111,7 +111,7 @@ struct MaternField
     )
 
         μ = fill(μ, g.nx^2)
-        return new(μ, σ_bounds, l_bounds, build_fd_matrices(g)..., g.nx^2+2)
+        return new(μ, σ_bounds, l_bounds, build_fem_matrices(g)..., g.nx^2+2)
 
     end
 
