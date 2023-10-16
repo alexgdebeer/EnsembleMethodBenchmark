@@ -54,7 +54,7 @@ function build_B(
 )::SparseMatrixCSC
 
     function get_cell_index(xi::Int, yi::Int)
-        return xi + nx * yi # TODO: check this
+        return xi + nx * (yi-1)
     end
 
     is = Int[]
