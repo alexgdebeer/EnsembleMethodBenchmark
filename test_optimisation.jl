@@ -32,8 +32,7 @@ function optimise(
 
         ∂Au∂θ = (g.Δt / g.μ) * vcat([
             g.∇h' * spdiagm(g.∇h * u[:, t]) * 
-            spdiagm((g.A * exp.(-θ)).^-2) * g.A *
-            spdiagm(exp.(-θ)) for t ∈ 1:g.nt
+            g.A * spdiagm(exp.(θ)) for t ∈ 1:g.nt
         ]...)
 
         return ∂Au∂θ
@@ -196,7 +195,7 @@ function optimise(
         θ = transform(pr, η)
 
         # Form Aθ and Bθ at the current estimate of θ
-        Aθ = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)).^-1) * g.∇h
+        Aθ = (1.0 / g.μ) * g.∇h' * spdiagm(g.A * exp.(θ)) * g.∇h
         Bθ = (g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ)
         Bθt = sparse(Bθ')
 
@@ -214,37 +213,55 @@ function optimise(
 
             θ = transform(pr, η)
 
-            Aθ = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)).^-1) * g.∇h
+            Aθ = (1.0 / g.μ) * g.∇h' * spdiagm(g.A * exp.(θ)) * g.∇h
             Bθ = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ
 
             A_full = blockdiag([Bθ for _ ∈ 1:g.nt]...)
             iix = (g.nx^2+1):g.nx^2*g.nt 
             iiy = 1:g.nx^2*(g.nt-1)
-            A_full[iix, iiy] = -g.ϕ * g.c * sparse(I, g.nx^2*(g.nt-1), g.nx^2*(g.nt-1))
+            A_full[iix, iiy] += -g.ϕ * g.c * sparse(I, g.nx^2*(g.nt-1), g.nx^2*(g.nt-1))
 
             return A_full * u
 
         end
 
-        J = FiniteDiff.finite_difference_jacobian(A_full_u, η)
+        # J = FiniteDiff.finite_difference_jacobian(A_full_u, η)
+
+        J = zeros(length(u), length(η))
+        Δη = 0.01
+
+        for i ∈ 1:length(η)
+
+            η_p = copy(η)
+
+            η_p[i] += Δη
+            Au_1 = A_full_u(η_p)
+
+            η_p[i] -= 2Δη
+            Au_0 = A_full_u(η_p)
+
+            J[:, i] = (Au_1 - Au_0) / 2Δη
+
+        end
+
 
         ξ_σ, ξ_l = η[end-1:end]
-
         σ = gauss_to_unif(ξ_σ, pr.σ_bounds...)
         l = gauss_to_unif(ξ_l, pr.l_bounds...)
-
         α = σ^2 * (4π * gamma(2)) / gamma(1)
-
         H = pr.M + l^2 * pr.K + l / 1.42 * pr.N 
 
         invH = inv(Matrix(H))
 
         ∂Au∂ξ = ∂Au∂θ * invH * √(α) * l * pr.L
-        ∂Au∂ξσ = ∂Au∂θ * (θ / σ) * Δσ * pdf(Normal(), ξ_σ)
-        ∂Au∂ξl = ∂Au∂θ * invH * (-l^-1.0 * pr.M + l * pr.K) * θ * Δl * pdf(Normal(), ξ_l)
+        ∂Au∂ξσ = ∂Au∂θ * ((θ .- pr.μ) ./ σ) * Δσ * pdf(Normal(), ξ_σ)
+        ∂Au∂ξl = ∂Au∂θ * -invH * (-l^-1.0 * pr.M + l * pr.K) * (θ .- pr.μ) * Δl * pdf(Normal(), ξ_l)
 
-        display(J)
-        display(Matrix(hcat(∂Au∂ξ, ∂Au∂ξσ, ∂Au∂ξl)))
+        deriv = Matrix(hcat(∂Au∂ξ, ∂Au∂ξσ, ∂Au∂ξl))
+
+        display(J[2011:2021, :])
+        display(deriv[2011:2021, :])
+        display(J[2011:2021, end-1] ./ deriv[2011:2021, end-1])
 
         error("Stop")
 

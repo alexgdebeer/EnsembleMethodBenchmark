@@ -81,13 +81,13 @@ end
 """Solves the full model."""
 function SciMLBase.solve(
     g::Grid, 
-    lnps::AbstractVector, 
+    θ::AbstractVector, 
     Q::AbstractMatrix
 )::AbstractVector
 
     u = zeros(g.nx^2, g.nt)
 
-    A = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-lnps)).^-1) * g.∇h 
+    A = (1.0 / g.μ) * g.∇h' * spdiagm(g.A * exp.(θ)) * g.∇h 
     B = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * A 
     
     prob = LinearProblem(B, g.Δt*Q[:, 1] .+ g.ϕ*g.c*g.u0)
@@ -114,7 +114,7 @@ function SciMLBase.solve(
     us = zeros(g.nx^2, g.nt)
     us[:, 1] .= g.u0
 
-    A = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)).^-1) * g.∇h
+    A = (1.0 / g.μ) * g.∇h' * spdiagm(g.A * exp.(θ)) * g.∇h
     M = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * A
     M_r = V_r' * M * V_r
 

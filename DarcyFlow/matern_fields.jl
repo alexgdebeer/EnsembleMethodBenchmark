@@ -129,10 +129,10 @@ function transform(
     η::AbstractVecOrMat
 )::AbstractVector
 
-    ξ..., σ, l = η
+    ξ..., ξ_σ, ξ_l = η
 
-    σ = gauss_to_unif(σ, mf.σ_bounds...)
-    l = gauss_to_unif(l, mf.l_bounds...)
+    σ = gauss_to_unif(ξ_σ, mf.σ_bounds...)
+    l = gauss_to_unif(ξ_l, mf.l_bounds...)
 
     α = σ^2 * (4π * gamma(2)) / gamma(1)
 
