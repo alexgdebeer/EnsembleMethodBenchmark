@@ -1,5 +1,6 @@
 using LinearAlgebra
 using LinearSolve
+using Printf
 using SparseArrays
 
 include("setup.jl")
@@ -18,7 +19,7 @@ function optimise(
     Δl = pr.l_bounds[2] - pr.l_bounds[1]
 
     # Convergence parameters for CG 
-    ϵ = 1e-8
+    ϵ = 1e-4
     j_max = 40
 
     function compute_∂Au∂θ(
@@ -206,66 +207,11 @@ function optimise(
         ∂Au∂θ = compute_∂Au∂θ(θ, u)
         ∂Au∂θt = sparse(∂Au∂θ')
 
-        # # TEMP: finite difference Jacobian 
-        # function A_full_u(η)
-
-        #     θ = transform(pr, η)
-
-        #     Aθ = (1.0 / g.μ) * g.∇h' * spdiagm(g.A * exp.(θ)) * g.∇h
-        #     Bθ = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ
-
-        #     A_full = blockdiag([Bθ for _ ∈ 1:g.nt]...)
-        #     iix = (g.nx^2+1):g.nx^2*g.nt 
-        #     iiy = 1:g.nx^2*(g.nt-1)
-        #     A_full[iix, iiy] += -g.ϕ * g.c * sparse(I, g.nx^2*(g.nt-1), g.nx^2*(g.nt-1))
-
-        #     return A_full * u
-
-        # end
-
-        # J = zeros(length(u), length(η))
-        # Δη = 0.01
-
-        # for i ∈ 1:length(η)
-
-        #     η_p = copy(η)
-
-        #     η_p[i] += Δη
-        #     Au_1 = A_full_u(η_p)
-
-        #     η_p[i] -= 2Δη
-        #     Au_0 = A_full_u(η_p)
-
-        #     J[:, i] = (Au_1 - Au_0) / 2Δη
-
-        # end
-
-        # ξ_σ, ξ_l = η[end-1:end]
-        # σ = gauss_to_unif(ξ_σ, pr.σ_bounds...)
-        # l = gauss_to_unif(ξ_l, pr.l_bounds...)
-        # α = σ^2 * (4π * gamma(2)) / gamma(1)
-        # H = pr.M + l^2 * pr.K + l / 1.42 * pr.N 
-
-        # invH = inv(Matrix(H))
-
-        # ∂Au∂ξ = ∂Au∂θ * invH * √(α) * l * pr.L
-        # ∂Au∂ξσ = ∂Au∂θ * ((θ .- pr.μ) ./ σ) * Δσ * pdf(Normal(), ξ_σ)
-        # ∂Au∂ξl = ∂Au∂θ * -invH * (-l^-1.0 * pr.M + l * pr.K) * (θ .- pr.μ) * Δl * pdf(Normal(), ξ_l)
-
-        # ∂Au∂η = Matrix(hcat(∂Au∂ξ, ∂Au∂ξσ, ∂Au∂ξl))
-
-        # display(Vector(J' * p))
-        # display(Vector(compute_∂Au∂ηtx(∂Au∂θt, η, θ, p)))
-        # display(deriv[2011:2021, :])
-        # display(J[2011:2021, end-1] ./ deriv[2011:2021, end-1])
-
         # This seems to be working as expected
         ∇Lη = compute_∇Lη(∂Au∂θt, η, θ, p)
 
-        # display(Vector(J * ∇Lη))
-        # display(Vector(compute_∂Au∂ηx(∂Au∂θ, η, θ, ∇Lη)))
-
-        @info "Norm of gradient: $(norm(∇Lη))"
+        @printf "norm(∇Lη): %.3e\n" norm(∇Lη)
+        println("CG It. | norm(r)")
         if norm(∇Lη) < 0.1 || i > 50
             return η, u
         end
@@ -296,11 +242,9 @@ function optimise(
             r_prev = copy(r)
             r = r_prev - α * Hd
 
-            if j % 1 == 0
-                @info "Iteration $j. ||r||^2: $(r' * r)"
-            end
+            @printf "%6i | %.3e\n" j norm(r)
 
-            if (r' * r < ϵ^2 * ∇Lη' * ∇Lη) || (j > j_max)
+            if (norm(r) < ϵ^2 * norm(∇Lη)) || (j > j_max)
                 @info "Converged..."
                 break
             end
