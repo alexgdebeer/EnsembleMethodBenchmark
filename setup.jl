@@ -23,10 +23,10 @@ u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 xmax = 1000.0
 tmax = 120.0
 
-Δx_c = 40.0
-Δx_f = 40.0
+Δx_c = 50.0
+Δx_f = 50.0
 Δt_c = 4.0
-Δt_f = 2.0
+Δt_f = 4.0
 
 well_centres = [
     (150, 150), (150, 500), (150, 850),
@@ -48,7 +48,7 @@ grid_f = Grid(xmax, tmax, Δx_f, Δt_f, x_obs, y_obs, t_obs, ϕ, μ, c, u0)
 q_c = 40.0 / Δx_c^2                 # Extraction rate, (m^3 / day) / m^3
 q_f = 40.0 / Δx_f^2                 # Extraction rate, (m^3 / day) / m^3
 
-well_radius = 30.0
+well_radius = 100.0
 well_change_times = [0, 40, 80]
 
 well_rates_c = [

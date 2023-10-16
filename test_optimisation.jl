@@ -4,6 +4,8 @@ using SparseArrays
 
 include("setup.jl")
 
+using FiniteDiff # TEMP
+
 function optimise(
     g::Grid,
     pr::MaternField,
@@ -206,6 +208,45 @@ function optimise(
         # w.r.t. θ
         ∂Au∂θ = compute_∂Au∂θ(θ, u)
         ∂Au∂θt = sparse(∂Au∂θ')
+
+        # TEMP: finite difference Jacobian 
+        function A_full_u(η)
+
+            θ = transform(pr, η)
+
+            Aθ = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)).^-1) * g.∇h
+            Bθ = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ
+
+            A_full = blockdiag([Bθ for _ ∈ 1:g.nt]...)
+            iix = (g.nx^2+1):g.nx^2*g.nt 
+            iiy = 1:g.nx^2*(g.nt-1)
+            A_full[iix, iiy] = -g.ϕ * g.c * sparse(I, g.nx^2*(g.nt-1), g.nx^2*(g.nt-1))
+
+            return A_full * u
+
+        end
+
+        J = FiniteDiff.finite_difference_jacobian(A_full_u, η)
+
+        ξ_σ, ξ_l = η[end-1:end]
+
+        σ = gauss_to_unif(ξ_σ, pr.σ_bounds...)
+        l = gauss_to_unif(ξ_l, pr.l_bounds...)
+
+        α = σ^2 * (4π * gamma(2)) / gamma(1)
+
+        H = pr.M + l^2 * pr.K + l / 1.42 * pr.N 
+
+        invH = inv(Matrix(H))
+
+        ∂Au∂ξ = ∂Au∂θ * invH * √(α) * l * pr.L
+        ∂Au∂ξσ = ∂Au∂θ * (θ / σ) * Δσ * pdf(Normal(), ξ_σ)
+        ∂Au∂ξl = ∂Au∂θ * invH * (-l^-1.0 * pr.M + l * pr.K) * θ * Δl * pdf(Normal(), ξ_l)
+
+        display(J)
+        display(Matrix(hcat(∂Au∂ξ, ∂Au∂ξσ, ∂Au∂ξl)))
+
+        error("Stop")
 
         ∇Lη = compute_∇Lη(∂Au∂θt, η, θ, p)
 
