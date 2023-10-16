@@ -5,7 +5,7 @@ using Random: seed!
 include("DarcyFlow/DarcyFlow.jl")
 include("plotting.jl")
 
-seed!(0)
+seed!(2)
 
 # ----------------
 # Reservoir properties 
@@ -23,8 +23,8 @@ u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 xmax = 1000.0
 tmax = 120.0
 
-Δx_c = 20.0
-Δx_f = 20.0
+Δx_c = 25.0
+Δx_f = 25.0
 Δt_c = 4.0
 Δt_f = 4.0
 
@@ -45,10 +45,10 @@ grid_f = Grid(xmax, tmax, Δx_f, Δt_f, x_obs, y_obs, t_obs, ϕ, μ, c, u0)
 # Well parameters 
 # ----------------
 
-q_c = 40.0 / Δx_c^2                 # Extraction rate, (m^3 / day) / m^3
-q_f = 40.0 / Δx_f^2                 # Extraction rate, (m^3 / day) / m^3
+q_c = 30.0 / Δx_c^2                 # Extraction rate, (m^3 / day) / m^3
+q_f = 30.0 / Δx_f^2                 # Extraction rate, (m^3 / day) / m^3
 
-well_radius = 30.0
+well_radius = 50.0
 well_change_times = [0, 40, 80]
 
 well_rates_c = [
@@ -82,7 +82,7 @@ Q_f = build_Q(grid_f, wells_f, well_change_times)
 
 lnp_μ = -31
 σ_bounds = (0.75, 1.25)
-l_bounds = (200, 400)
+l_bounds = (300, 400)
 
 pr = MaternField(grid_c, lnp_μ, σ_bounds, l_bounds)
 
@@ -147,4 +147,4 @@ if TEST_POD
 
 end
 
-animate(u_t, grid_f, (10, 10), "plots/animations/test")
+animate(u_t, grid_f, (8, 8), "plots/animations/test")
