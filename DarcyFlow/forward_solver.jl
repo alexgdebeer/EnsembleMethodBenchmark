@@ -81,13 +81,13 @@ end
 """Solves the full model."""
 function SciMLBase.solve(
     g::Grid, 
-    θ::AbstractVector, 
+    lnps::AbstractVector, 
     Q::AbstractMatrix
 )::AbstractVector
 
     u = zeros(g.nx^2, g.nt)
 
-    A = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)).^-1) * g.∇h 
+    A = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-lnps)).^-1) * g.∇h 
     B = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * A 
     
     prob = LinearProblem(B, g.Δt*Q[:, 1] .+ g.ϕ*g.c*g.u0)
@@ -105,7 +105,7 @@ end
 """Solves the reduced-order model."""
 function SciMLBase.solve(
     g::Grid, 
-    lnps::AbstractVecOrMat, 
+    θ::AbstractVector, 
     Q::AbstractMatrix,
     μ::AbstractVector,
     V_r::AbstractMatrix
@@ -114,18 +114,16 @@ function SciMLBase.solve(
     us = zeros(g.nx^2, g.nt)
     us[:, 1] .= g.u0
 
-    A = (g.Δt / g.μ) * g.∇h' * spdiagm((g.A * exp.(-vec(lnps))) .^ -1) * g.∇h
-    Id = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2)
-
-    M = Id + A 
+    A = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)).^-1) * g.∇h
+    M = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * A
     M_r = V_r' * M * V_r
 
-    for t ∈ 1:(g.nt-1)
+    for t ∈ 2:g.nt
 
-        b_r = V_r' * (g.Δt * Q[:, t+1] + g.ϕ * g.c * us[:, t] - M * μ)
+        b_r = V_r' * (g.Δt * Q[:, t] + g.ϕ * g.c * us[:, t-1] - M * μ)
 
         us_r = solve(LinearProblem(M_r, b_r))
-        us[:, t+1] = μ + V_r * us_r
+        us[:, t] = μ + V_r * us_r
 
     end
 

@@ -126,15 +126,15 @@ end
 
 function transform(
     mf::MaternField, 
-    ξ::AbstractVecOrMat
+    η::AbstractVecOrMat
 )::AbstractVector
 
-    σ, l, ξ... = ξ
+    ξ..., σ, l = η
 
     σ = gauss_to_unif(σ, mf.σ_bounds...)
     l = gauss_to_unif(l, mf.l_bounds...)
 
-    α = σ^2 * (4 * pi * gamma(2)) / gamma(1)
+    α = σ^2 * (4π * gamma(2)) / gamma(1)
 
     A = mf.M + l^2 * mf.K + l / 1.42 * mf.N
     b = √(α) * l * mf.L * ξ + A * mf.μ

@@ -23,8 +23,8 @@ u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 xmax = 1000.0
 tmax = 120.0
 
-Δx_c = 12.5
-Δx_f = 12.5
+Δx_c = 40.0
+Δx_f = 40.0
 Δt_c = 4.0
 Δt_f = 2.0
 
@@ -45,8 +45,8 @@ grid_f = Grid(xmax, tmax, Δx_f, Δt_f, x_obs, y_obs, t_obs, ϕ, μ, c, u0)
 # Well parameters 
 # ----------------
 
-q_c = 30.0 / Δx_c^2                 # Extraction rate, (m^3 / day) / m^3
-q_f = 30.0 / Δx_f^2                 # Extraction rate, (m^3 / day) / m^3
+q_c = 40.0 / Δx_c^2                 # Extraction rate, (m^3 / day) / m^3
+q_f = 40.0 / Δx_f^2                 # Extraction rate, (m^3 / day) / m^3
 
 well_radius = 30.0
 well_change_times = [0, 40, 80]
@@ -91,10 +91,10 @@ pr = MaternField(grid_c, lnp_μ, σ_bounds, l_bounds)
 # ----------------
 
 true_field = MaternField(grid_f, lnp_μ, σ_bounds, l_bounds)
-θs_t = rand(true_field)
-lnps_t = transform(true_field, θs_t)
+η_t = rand(true_field)
+θ_t = transform(true_field, η_t)
 
-us_t = solve(grid_f, lnps_t, Q_f)
+u_t = solve(grid_f, θ_t, Q_f)
 
 # ----------------
 # Data
@@ -104,19 +104,19 @@ us_t = solve(grid_f, lnps_t, Q_f)
 Γ_ϵ = diagm(fill(σ_ϵ^2, grid_f.ny))
 Γ_ϵ_inv = spdiagm(fill(σ_ϵ^-2, grid_f.ny))
 
-y_obs = grid_f.B * us_t
+y_obs = grid_f.B * u_t
 y_obs += rand(MvNormal(Γ_ϵ))
 
 # ----------------
 # Model functions
 # ----------------
 
-function F(lnps::AbstractVector)
-    return solve(grid_c, lnps, Q_c)
+function F(θ::AbstractVector)
+    return solve(grid_c, θ, Q_c)
 end
 
-function F_r(lnps::AbstractVector)
-    return solve(grid_c, lnps, Q_c, μ_u, V_r)
+function F_r(θ::AbstractVector)
+    return solve(grid_c, θ, Q_c, μ_u, V_r)
 end
 
 function G(us::AbstractVector)
@@ -147,4 +147,4 @@ if TEST_POD
 
 end
 
-animate(us_t, grid_f, (10, 10), "plots/animations/test")
+animate(u_t, grid_f, (10, 10), "plots/animations/test")

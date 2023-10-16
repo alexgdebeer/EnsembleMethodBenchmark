@@ -6,27 +6,35 @@ include("setup.jl")
 
 function optimise(
     g::Grid,
-    pr,
+    pr::MaternField,
     y::AbstractVector,
     Q::AbstractMatrix,
-    θ::AbstractVector, # Initial estimate of θ
+    η::AbstractVector, # Initial estimate of η
     Γ_ϵ_inv::AbstractMatrix
 )
 
-    function compute_DGθ(
+    # TODO: move to MaternField struct?
+    Δσ = pr.σ_bounds[2] - pr.σ_bounds[1]
+    Δl = pr.l_bounds[2] - pr.l_bounds[1]
+
+    # Convergence parameters for CG 
+    ϵ = 1e-8
+    j_max = 20
+
+    function compute_∂Au∂θ(
         θ::AbstractVector, 
         u::AbstractVector
     )::AbstractMatrix
 
         u = reshape(u, g.nx^2, g.nt)
 
-        DGθ = (g.Δt / g.μ) * vcat([
+        ∂Au∂θ = (g.Δt / g.μ) * vcat([
             g.∇h' * spdiagm(g.∇h * u[:, t]) * 
             spdiagm((g.A * exp.(-θ)).^-2) * g.A *
             spdiagm(exp.(-θ)) for t ∈ 1:g.nt
         ]...)
 
-        return DGθ
+        return ∂Au∂θ
 
     end
 
@@ -37,7 +45,7 @@ function optimise(
 
         p = spzeros(g.nx^2, g.nt)
 
-        b = -g.B' * Γ_ϵ_inv * sparsevec(g.B * u - y) 
+        b = -g.B' * Γ_ϵ_inv * (g.B * u - y) 
         b = reshape(b, g.nx^2, g.nt)
 
         prob = LinearProblem(Bθt, b[:, end])
@@ -52,13 +60,71 @@ function optimise(
 
     end
     
-    function compute_∇Lθ(
-        θ::AbstractVector, 
-        p::AbstractVector, 
-        DGθt::AbstractMatrix
+    function compute_∂Au∂ηtx(∂Au∂θt, η, θ, x)
+
+        ξ_σ, ξ_l = η[end-1:end]
+
+        σ = gauss_to_unif(ξ_σ, pr.σ_bounds...)
+        l = gauss_to_unif(ξ_l, pr.l_bounds...)
+
+        α = σ^2 * (4π * gamma(2)) / gamma(1)
+
+        H = pr.M + l^2 * pr.K + l / 1.42 * pr.N
+
+        ∂Au∂θtx = ∂Au∂θt * x
+
+        # White noise component 
+        ∂Au∂ξtx = √(α) * l * pr.L' * solve(LinearProblem(H, ∂Au∂θtx))
+
+        # Standard deviation component
+        ∂Au∂σtx = (θ / σ)' * ∂Au∂θtx
+        ∂Au∂ξσtx = Δσ * pdf(Normal(), ξ_σ) * ∂Au∂σtx
+        
+        # Lengthscale component
+        ∂Au∂ltx = θ' * (-l^-1.0 * pr.M + l * pr.K)' * solve(LinearProblem(H, ∂Au∂θtx))
+        ∂Au∂ξltx = Δl * pdf(Normal(), ξ_l) * ∂Au∂ltx
+
+        return vcat(∂Au∂ξtx, ∂Au∂ξσtx, ∂Au∂ξltx)
+
+    end
+
+    function compute_∂Au∂ηx(∂Au∂θ, η, θ, x)
+
+        ξ_σ, ξ_l = η[end-1:end]
+
+        σ = gauss_to_unif(ξ_σ, pr.σ_bounds...)
+        l = gauss_to_unif(ξ_l, pr.l_bounds...)
+
+        α = σ^2 * (4π * gamma(2)) / gamma(1)
+
+        H = pr.M + l^2 * pr.K + l / 1.42 * pr.N 
+
+        # White noise component
+        ∂θ∂ξx = solve(LinearProblem(H, √(α) * l * pr.L * x[1:end-2]))
+        ∂Au∂ξx = ∂Au∂θ * sparsevec(∂θ∂ξx)
+
+        # Standard deviation component
+        ∂σ∂ξσx = Δσ * pdf(Normal(), ξ_σ) * x[end-1]
+        ∂Au∂ξσx = ∂Au∂θ * (sparsevec(θ) / σ) * ∂σ∂ξσx
+
+        # Lengthscale component
+        ∂l∂ξlx = Δl * pdf(Normal(), ξ_l) * x[end]
+        ∂θ∂ξlx = solve(LinearProblem(H, (-l^-1.0 * pr.M + l * pr.K) * θ * ∂l∂ξlx))
+        ∂Au∂ξlx = ∂Au∂θ * ∂θ∂ξlx
+
+        return ∂Au∂ξx + ∂Au∂ξσx + ∂Au∂ξlx
+
+    end
+
+    function compute_∇Lη(
+        ∂Au∂θt::AbstractMatrix,
+        η::AbstractVector,
+        θ::AbstractVector,
+        p::AbstractVector
     )::AbstractVector
 
-        return pr.Γ_inv * (θ - pr.μ) + DGθt * p
+        # Prior is whitened
+        return η + compute_∂Au∂ηtx(∂Au∂θt, η, θ, p)
 
     end
 
@@ -104,32 +170,32 @@ function optimise(
 
     function compute_Hd(
         d::AbstractVector, 
+        η::AbstractVector,
+        θ::AbstractVector,
         Bθ::AbstractMatrix, 
         Bθt::AbstractMatrix,
-        DGθ::AbstractMatrix,
-        DGθt::AbstractMatrix
+        ∂Au∂θ::AbstractMatrix,
+        ∂Au∂θt::AbstractMatrix
     )::AbstractVector
 
         # Solve incremental forward and adjoint problems
-        u_inc = solve_forward_inc(Bθ, DGθ * d)
+        u_inc = solve_forward_inc(Bθ, compute_∂Au∂ηx(∂Au∂θ, η, θ, d))
         p_inc = solve_adjoint_inc(Bθt, g.B' * Γ_ϵ_inv * g.B * u_inc)
 
-        return DGθt * p_inc + pr.Γ_inv * d
+        return compute_∂Au∂ηtx(∂Au∂θt, η, θ, p_inc) + d
 
     end
-
-    # Convergence parameters for CG 
-    ϵ = 0.5
-    j_max = 20
 
     i = 1
     while true
 
         @info "Beginning outer loop: iteration $i"
         
+        θ = transform(pr, η)
+
         # Form Aθ and Bθ at the current estimate of θ
         Aθ = (1.0 / g.μ) * g.∇h' * spdiagm((g.A * exp.(-θ)).^-1) * g.∇h
-        Bθ = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ
+        Bθ = (g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ)
         Bθt = sparse(Bθ')
 
         # Solve forward and adoint problems
@@ -138,30 +204,31 @@ function optimise(
 
         # Compute Jacobian of forward problem and gradient of Lagrangian 
         # w.r.t. θ
-        DGθ = compute_DGθ(θ, u)
-        DGθt = sparse(DGθ')
-        ∇Lθ = compute_∇Lθ(θ, p, DGθt)
+        ∂Au∂θ = compute_∂Au∂θ(θ, u)
+        ∂Au∂θt = sparse(∂Au∂θ')
 
-        @info "Norm of gradient: $(norm(∇Lθ))"
-        if norm(∇Lθ) < 2
-            return θ, u
+        ∇Lη = compute_∇Lη(∂Au∂θt, η, θ, p)
+
+        @info "Norm of gradient: $(norm(∇Lη))"
+        if norm(∇Lη) < 2 || i > 30
+            return η, u
         end
 
         # Start δθ at 0 in the absence of the better guess
-        δθ = spzeros(g.nx^2)
+        δη = spzeros(pr.Nθ)
 
         # Define initial search direction and residual
-        d = -copy(∇Lθ)
-        r = -copy(∇Lθ)
+        d = -copy(∇Lη)
+        r = -copy(∇Lη)
 
         j = 1
         while true
             
-            Hd = compute_Hd(d, Bθ, Bθt, DGθ, DGθt)
+            Hd = compute_Hd(d, η, θ, Bθ, Bθt, ∂Au∂θ, ∂Au∂θt)
             
             # Compute step length and take a step 
             α = (r' * r) / (d' * Hd)
-            δθ += α * d
+            δη += α * d
 
             # Update residual vector
             r_prev = copy(r)
@@ -171,7 +238,7 @@ function optimise(
                 @info "Iteration $j. ||r||^2: $(r' * r)"
             end
 
-            if (r' * r < ϵ^2 * ∇Lθ' * ∇Lθ) || (j > j_max)
+            if (r' * r < ϵ^2 * ∇Lη' * ∇Lη) || (j > j_max)
                 @info "Converged..."
                 break
             end
@@ -184,14 +251,13 @@ function optimise(
 
         end
 
-        # Form new estimate of θ
-        θ += δθ
+        # Form new estimate of η
+        η += δη
         i += 1
 
     end
 
-    return θ
-
 end
 
-θ_map, u_map = optimise(grid_c, pr, y_obs, Q_c, vec(rand(pr, 1)), Γ_ϵ_inv)
+η = vec(rand(pr, 1)) # TODO: add POD basis
+η_map, u_map = optimise(grid_c, pr, y_obs, Q_c, η, Γ_ϵ_inv)
