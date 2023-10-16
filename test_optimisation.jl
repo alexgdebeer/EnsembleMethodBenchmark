@@ -223,12 +223,6 @@ function optimise(
         d = -copy(∇Lη)
         r = -copy(∇Lη)
 
-        # A_full = blockdiag([Bθ for _ ∈ 1:g.nt]...)
-        # iix = (g.nx^2+1):g.nx^2*g.nt 
-        # iiy = 1:g.nx^2*(g.nt-1)
-        # A_full[iix, iiy] += -g.ϕ * g.c * sparse(I, g.nx^2*(g.nt-1), g.nx^2*(g.nt-1))
-        # A_inv = inv(Matrix(A_full))
-
         j = 1
         while true
             
