@@ -4,8 +4,6 @@ using SparseArrays
 
 include("setup.jl")
 
-using FiniteDiff # TEMP
-
 function optimise(
     g::Grid,
     pr::MaternField,
@@ -78,11 +76,11 @@ function optimise(
         ∂Au∂ξtx = √(α) * l * pr.L' * solve(LinearProblem(H, ∂Au∂θtx))
 
         # Standard deviation component
-        ∂Au∂σtx = (θ / σ)' * ∂Au∂θtx
+        ∂Au∂σtx = ((θ .- pr.μ) / σ)' * ∂Au∂θtx
         ∂Au∂ξσtx = Δσ * pdf(Normal(), ξ_σ) * ∂Au∂σtx
         
         # Lengthscale component
-        ∂Au∂ltx = θ' * (-l^-1.0 * pr.M + l * pr.K)' * solve(LinearProblem(H, ∂Au∂θtx))
+        ∂Au∂ltx = -(θ .- pr.μ)' * (-l^-1.0 * pr.M + l * pr.K)' * solve(LinearProblem(H, ∂Au∂θtx))
         ∂Au∂ξltx = Δl * pdf(Normal(), ξ_l) * ∂Au∂ltx
 
         return vcat(∂Au∂ξtx, ∂Au∂ξσtx, ∂Au∂ξltx)
@@ -106,11 +104,11 @@ function optimise(
 
         # Standard deviation component
         ∂σ∂ξσx = Δσ * pdf(Normal(), ξ_σ) * x[end-1]
-        ∂Au∂ξσx = ∂Au∂θ * (sparsevec(θ) / σ) * ∂σ∂ξσx
+        ∂Au∂ξσx = ∂Au∂θ * (sparsevec(θ .- pr.μ) / σ) * ∂σ∂ξσx
 
         # Lengthscale component
         ∂l∂ξlx = Δl * pdf(Normal(), ξ_l) * x[end]
-        ∂θ∂ξlx = solve(LinearProblem(H, (-l^-1.0 * pr.M + l * pr.K) * θ * ∂l∂ξlx))
+        ∂θ∂ξlx = -solve(LinearProblem(H, (-l^-1.0 * pr.M + l * pr.K) * (θ .- pr.μ) * ∂l∂ξlx))
         ∂Au∂ξlx = ∂Au∂θ * ∂θ∂ξlx
 
         return ∂Au∂ξx + ∂Au∂ξσx + ∂Au∂ξlx
@@ -207,63 +205,6 @@ function optimise(
         # w.r.t. θ
         ∂Au∂θ = compute_∂Au∂θ(θ, u)
         ∂Au∂θt = sparse(∂Au∂θ')
-
-        # TEMP: finite difference Jacobian 
-        function A_full_u(η)
-
-            θ = transform(pr, η)
-
-            Aθ = (1.0 / g.μ) * g.∇h' * spdiagm(g.A * exp.(θ)) * g.∇h
-            Bθ = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ
-
-            A_full = blockdiag([Bθ for _ ∈ 1:g.nt]...)
-            iix = (g.nx^2+1):g.nx^2*g.nt 
-            iiy = 1:g.nx^2*(g.nt-1)
-            A_full[iix, iiy] += -g.ϕ * g.c * sparse(I, g.nx^2*(g.nt-1), g.nx^2*(g.nt-1))
-
-            return A_full * u
-
-        end
-
-        # J = FiniteDiff.finite_difference_jacobian(A_full_u, η)
-
-        J = zeros(length(u), length(η))
-        Δη = 0.01
-
-        for i ∈ 1:length(η)
-
-            η_p = copy(η)
-
-            η_p[i] += Δη
-            Au_1 = A_full_u(η_p)
-
-            η_p[i] -= 2Δη
-            Au_0 = A_full_u(η_p)
-
-            J[:, i] = (Au_1 - Au_0) / 2Δη
-
-        end
-
-
-        ξ_σ, ξ_l = η[end-1:end]
-        σ = gauss_to_unif(ξ_σ, pr.σ_bounds...)
-        l = gauss_to_unif(ξ_l, pr.l_bounds...)
-        α = σ^2 * (4π * gamma(2)) / gamma(1)
-        H = pr.M + l^2 * pr.K + l / 1.42 * pr.N 
-
-        invH = inv(Matrix(H))
-
-        ∂Au∂ξ = ∂Au∂θ * invH * √(α) * l * pr.L
-        ∂Au∂ξσ = ∂Au∂θ * ((θ .- pr.μ) ./ σ) * Δσ * pdf(Normal(), ξ_σ)
-        ∂Au∂ξl = ∂Au∂θ * -invH * (-l^-1.0 * pr.M + l * pr.K) * (θ .- pr.μ) * Δl * pdf(Normal(), ξ_l)
-
-        deriv = Matrix(hcat(∂Au∂ξ, ∂Au∂ξσ, ∂Au∂ξl))
-
-        display(J[2011:2021, :])
-        display(deriv[2011:2021, :])
-        display(J[2011:2021, end-1] ./ deriv[2011:2021, end-1])
-
-        error("Stop")
 
         ∇Lη = compute_∇Lη(∂Au∂θt, η, θ, p)
 
