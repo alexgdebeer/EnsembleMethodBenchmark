@@ -10,9 +10,8 @@ const GN_MAX_ITS = 30
 
 const CG_MAX_ITS = 30
 
-# Define linesearch parameters
-const LINE_C = 1e-4
-const LINE_MAX_IT = 10
+const LS_C = 1e-4 # From Nocedal and Wright
+const LS_MAX_ITS = 10
 
 function optimise(
     g::Grid,
@@ -30,7 +29,10 @@ function optimise(
     # Define CG convergence parameters (TODO: figure out how they did this in Petra and Staedler)
     ϵ = 1e-4
 
-    function J(η, u)
+    function J(
+        η::AbstractVector, 
+        u::AbstractVector
+    )::Real
         resid = g.B * u - y
         return 0.5 * resid' * Γ_ϵ_inv * resid + 0.5 * sum(η.^2)
     end
@@ -220,7 +222,7 @@ function optimise(
         α_k = 1.0
 
         n_ls = 1
-        while n_ls < LINE_MAX_IT
+        while n_ls < LS_MAX_ITS
 
             η_k = η_c + α_k * δη
             θ_k = transform(pr, η_k)
@@ -229,7 +231,7 @@ function optimise(
 
             @printf "%6i | %.3e\n" n_ls J_k 
 
-            if (J_k ≤ J_c + LINE_C * α_k * ∇Lη_c' * δη)
+            if (J_k ≤ J_c + LS_C * α_k * ∇Lη_c' * δη)
                 println("Linesearch converged after $n_ls iterations.")
                 return α_k
             end
@@ -304,9 +306,8 @@ function optimise(
         end
 
         α = linesearch(η, u, ∇Lη, δη)
-    
         η += α * δη
-        i += 1
+        n_gn += 1
 
     end
 
