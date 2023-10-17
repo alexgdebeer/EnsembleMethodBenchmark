@@ -5,6 +5,15 @@ using SparseArrays
 
 include("setup.jl")
 
+const GN_MIN_NORM = 0.1
+const GN_MAX_ITS = 30
+
+const CG_MAX_ITS = 30
+
+# Define linesearch parameters
+const LINE_C = 1e-4
+const LINE_MAX_IT = 10
+
 function optimise(
     g::Grid,
     pr::MaternField,
@@ -18,9 +27,13 @@ function optimise(
     Δσ = pr.σ_bounds[2] - pr.σ_bounds[1]
     Δl = pr.l_bounds[2] - pr.l_bounds[1]
 
-    # Convergence parameters for CG 
+    # Define CG convergence parameters (TODO: figure out how they did this in Petra and Staedler)
     ϵ = 1e-4
-    j_max = 40
+
+    function J(η, u)
+        resid = g.B * u - y
+        return 0.5 * resid' * Γ_ϵ_inv * resid + 0.5 * sum(η.^2)
+    end
 
     function compute_∂Au∂θ(
         θ::AbstractVector, 
@@ -60,7 +73,12 @@ function optimise(
 
     end
     
-    function compute_∂Au∂ηtx(∂Au∂θt, η, θ, x)
+    function compute_∂Au∂ηtx(
+        ∂Au∂θt::AbstractMatrix, 
+        η::AbstractVector, 
+        θ::AbstractVector, 
+        x::AbstractVector
+    )::AbstractVector
 
         ξ_σ, ξ_l = η[end-1:end]
 
@@ -88,7 +106,12 @@ function optimise(
 
     end
 
-    function compute_∂Au∂ηx(∂Au∂θ, η, θ, x)
+    function compute_∂Au∂ηx(
+        ∂Au∂θ::AbstractMatrix, 
+        η::AbstractVector, 
+        θ::AbstractVector, 
+        x::AbstractVector
+    )::AbstractVector
 
         ξ_σ, ξ_l = η[end-1:end]
 
@@ -123,7 +146,6 @@ function optimise(
         p::AbstractVector
     )::AbstractVector
 
-        # Prior is whitened
         return η + compute_∂Au∂ηtx(∂Au∂θt, η, θ, p)
 
     end
@@ -186,78 +208,110 @@ function optimise(
 
     end
 
-    i = 1
+    function linesearch(
+        η_c::AbstractVector, 
+        u_c::AbstractVector, 
+        ∇Lη_c::AbstractVector, 
+        δη::AbstractVector
+    )::Real
+
+        println("LS It. | J(η, u)")
+        J_c = J(η_c, u_c)
+        α_k = 1.0
+
+        n_ls = 1
+        while n_ls < LINE_MAX_IT
+
+            η_k = η_c + α_k * δη
+            θ_k = transform(pr, η_k)
+            u_k = solve(g, θ_k, Q)
+            J_k = J(η_k, u_k)
+
+            @printf "%6i | %.3e\n" n_ls J_k 
+
+            if (J_k ≤ J_c + LINE_C * α_k * ∇Lη_c' * δη)
+                println("Linesearch converged after $n_ls iterations.")
+                return α_k
+            end
+
+            α_k *= 0.5
+            n_ls += 1
+
+        end
+
+        @warn "Linesearch failed to converge within $LINE_MAX_IT iterations."
+        return α_k
+
+    end
+
+    n_gn = 1
     while true
 
-        @info "Beginning outer loop: iteration $i"
+        @info "Beginning GN It. $n_gn"
         
         θ = transform(pr, η)
 
-        # Form Aθ and Bθ at the current estimate of θ
         Aθ = (1.0 / g.μ) * g.∇h' * spdiagm(g.A * exp.(θ)) * g.∇h
-        Bθ = (g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ)
+        Bθ = sparse(g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ)
         Bθt = sparse(Bθ')
 
-        # Solve forward and adoint problems
         u = solve(g, θ, Q)
         p = solve_adjoint(u, Bθt)
 
-        # Compute Jacobian of forward problem and gradient of Lagrangian 
-        # w.r.t. θ
         ∂Au∂θ = compute_∂Au∂θ(θ, u)
         ∂Au∂θt = sparse(∂Au∂θ')
 
-        # This seems to be working as expected
         ∇Lη = compute_∇Lη(∂Au∂θt, η, θ, p)
-
         @printf "norm(∇Lη): %.3e\n" norm(∇Lη)
-        println("CG It. | norm(r)")
-        if norm(∇Lη) < 0.1 || i > 50
+
+        if norm(∇Lη) < GN_MIN_NORM
+            return η, u
+        elseif n_gn > GN_MAX_ITS
+            @warn "Gauss-Newton failed to converge within $GN_MAX_ITS iterations."
             return η, u
         end
 
-        # Start δθ at 0 in the absence of the better guess
+        println("CG It. | norm(r)")
         δη = spzeros(pr.Nθ)
-
-        # Define initial search direction and residual
         d = -copy(∇Lη)
         r = -copy(∇Lη)
 
-        j = 1
+        n_cg = 1
         while true
             
             Hd = compute_Hd(d, η, θ, Bθ, Bθt, ∂Au∂θ, ∂Au∂θt)
             
-            # Compute step length and take a step 
             α = (r' * r) / (d' * Hd)
             δη += α * d
 
-            # Update residual vector
             r_prev = copy(r)
             r = r_prev - α * Hd
 
-            @printf "%6i | %.3e\n" j norm(r)
+            @printf "%6i | %.3e\n" n_cg norm(r)
 
-            if (norm(r) < ϵ^2 * norm(∇Lη)) || (j > j_max)
-                @info "Converged..."
+            if (norm(r) < ϵ^2 * norm(∇Lη))
+                println("CG converged after $n_cg iterations.")
                 break
+            elseif n_cg > CG_MAX_ITS
+                @warn "CG failed to converge within $CG_MAX_ITS iterations."
             end
             
-            # Compute new search direction
             β = (r' * r) / (r_prev' * r_prev)
             d = r + β * d
 
-            j += 1
+            n_cg += 1
 
         end
 
-        # Form new estimate of η
-        η += 0.5δη
+        α = linesearch(η, u, ∇Lη, δη)
+    
+        η += α * δη
         i += 1
 
     end
 
 end
+
 
 η = vec(rand(pr, 1)) # TODO: add POD basis
 η_map, u_map = optimise(grid_c, pr, y_obs, Q_c, η, Γ_ϵ_inv)
