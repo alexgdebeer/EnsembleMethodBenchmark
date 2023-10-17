@@ -5,7 +5,7 @@ using Random: seed!
 include("DarcyFlow/DarcyFlow.jl")
 include("plotting.jl")
 
-seed!(1)
+seed!(26)
 
 # ----------------
 # Reservoir properties 

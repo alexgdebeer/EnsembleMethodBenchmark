@@ -5,12 +5,12 @@ using SparseArrays
 
 include("setup.jl")
 
-const GN_MIN_NORM = 0.1
+const GN_MIN_NORM = 1e-2
 const GN_MAX_ITS = 30
 
 const CG_MAX_ITS = 30
 
-const LS_C = 1e-4 # From Nocedal and Wright
+const LS_C = 1e-4
 const LS_MAX_ITS = 10
 
 function optimise(
@@ -25,9 +25,6 @@ function optimise(
     # TODO: move to MaternField struct?
     Δσ = pr.σ_bounds[2] - pr.σ_bounds[1]
     Δl = pr.l_bounds[2] - pr.l_bounds[1]
-
-    # Define CG convergence parameters (TODO: figure out how they did this in Petra and Staedler)
-    ϵ = 1e-4
 
     function J(
         η::AbstractVector, 
@@ -221,23 +218,23 @@ function optimise(
         J_c = J(η_c, u_c)
         α_k = 1.0
 
-        n_ls = 1
-        while n_ls < LS_MAX_ITS
+        i_ls = 1
+        while i_ls < LS_MAX_ITS
 
             η_k = η_c + α_k * δη
             θ_k = transform(pr, η_k)
-            u_k = solve(g, θ_k, Q)
+            u_k = solve(g, θ_k, Q) # TODO: return this to the main loop to avoid computing it again at the next iteration
             J_k = J(η_k, u_k)
 
-            @printf "%6i | %.3e\n" n_ls J_k 
+            @printf "%6i | %.3e\n" i_ls J_k 
 
             if (J_k ≤ J_c + LS_C * α_k * ∇Lη_c' * δη)
-                println("Linesearch converged after $n_ls iterations.")
+                println("Linesearch converged after $i_ls iterations.")
                 return α_k
             end
 
             α_k *= 0.5
-            n_ls += 1
+            i_ls += 1
 
         end
 
@@ -246,10 +243,11 @@ function optimise(
 
     end
 
-    n_gn = 1
+    norm∇Lη0 = nothing
+    i_gn = 1
     while true
 
-        @info "Beginning GN It. $n_gn"
+        @info "Beginning GN It. $i_gn"
         
         θ = transform(pr, η)
 
@@ -264,11 +262,18 @@ function optimise(
         ∂Au∂θt = sparse(∂Au∂θ')
 
         ∇Lη = compute_∇Lη(∂Au∂θt, η, θ, p)
+        
+        if i_gn == 1
+            norm∇Lη0 = norm(∇Lη)
+        end
+        tol_cg = min(0.5, √(norm(∇Lη) / norm∇Lη0)) * norm(∇Lη)
+
         @printf "norm(∇Lη): %.3e\n" norm(∇Lη)
+        @printf "CG tolerance: %3.e\n" tol_cg
 
         if norm(∇Lη) < GN_MIN_NORM
             return η, u
-        elseif n_gn > GN_MAX_ITS
+        elseif i_gn > GN_MAX_ITS
             @warn "Gauss-Newton failed to converge within $GN_MAX_ITS iterations."
             return η, u
         end
@@ -278,7 +283,7 @@ function optimise(
         d = -copy(∇Lη)
         r = -copy(∇Lη)
 
-        n_cg = 1
+        i_cg = 1
         while true
             
             Hd = compute_Hd(d, η, θ, Bθ, Bθt, ∂Au∂θ, ∂Au∂θt)
@@ -289,30 +294,29 @@ function optimise(
             r_prev = copy(r)
             r = r_prev - α * Hd
 
-            @printf "%6i | %.3e\n" n_cg norm(r)
+            @printf "%6i | %.3e\n" i_cg norm(r)
 
-            if (norm(r) < ϵ^2 * norm(∇Lη))
-                println("CG converged after $n_cg iterations.")
+            if (norm(r) < tol_cg)
+                println("CG converged after $i_cg iterations.")
                 break
-            elseif n_cg > CG_MAX_ITS
+            elseif i_cg > CG_MAX_ITS
                 @warn "CG failed to converge within $CG_MAX_ITS iterations."
             end
             
             β = (r' * r) / (r_prev' * r_prev)
             d = r + β * d
 
-            n_cg += 1
+            i_cg += 1
 
         end
 
         α = linesearch(η, u, ∇Lη, δη)
         η += α * δη
-        n_gn += 1
+        i_gn += 1
 
     end
 
 end
-
 
 η = vec(rand(pr, 1)) # TODO: add POD basis
 η_map, u_map = optimise(grid_c, pr, y_obs, Q_c, η, Γ_ϵ_inv)
