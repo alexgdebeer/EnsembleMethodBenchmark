@@ -23,10 +23,10 @@ u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 xmax = 1000.0
 tmax = 120.0
 
-Δx_c = 25.0
-Δx_f = 25.0
+Δx_c = 12.5
+Δx_f = 7.5
 Δt_c = 4.0
-Δt_f = 4.0
+Δt_f = 2.0
 
 well_centres = [
     (150, 150), (150, 500), (150, 850),
@@ -111,11 +111,13 @@ y_obs += rand(MvNormal(Γ_ϵ))
 # Model functions
 # ----------------
 
-function F(θ::AbstractVector)
+function F(η::AbstractVector)
+    θ = transform(pr, η)
     return solve(grid_c, θ, Q_c)
 end
 
-function F_r(θ::AbstractVector)
+function F_r(η::AbstractVector)
+    θ = transform(pr, η)
     return solve(grid_c, θ, Q_c, μ_u, V_r)
 end
 
@@ -127,14 +129,14 @@ end
 # POD
 # ----------------
 
-# us_samp = generate_pod_samples(p, 100)
+# us_samp = generate_pod_samples(pr, 100)
 # μ_u, V_r = compute_pod_basis(grid_c, us_samp, 0.999)
 
 TEST_POD = false
 
 if TEST_POD
 
-    θs_test = rand(p, 100)
+    θs_test = rand(pr, 100)
 
     us_test = [@time F(θ) for θ ∈ eachcol(θs_test)]
     us_test_r = [@time F_r(θ) for θ ∈ eachcol(θs_test)]
