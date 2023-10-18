@@ -23,8 +23,8 @@ u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 xmax = 1000.0
 tmax = 120.0
 
-Δx_c = 12.5
-Δx_f = 7.5
+Δx_c = 25.0
+Δx_f = 25.0
 Δt_c = 4.0
 Δt_f = 2.0
 
@@ -48,7 +48,7 @@ grid_f = Grid(xmax, tmax, Δx_f, Δt_f, x_obs, y_obs, t_obs, ϕ, μ, c, u0)
 q_c = 30.0 / Δx_c^2                 # Extraction rate, (m^3 / day) / m^3
 q_f = 30.0 / Δx_f^2                 # Extraction rate, (m^3 / day) / m^3
 
-well_radius = 50.0
+well_radius = 50.0                  # TODO: change?
 well_change_times = [0, 40, 80]
 
 well_rates_c = [
@@ -102,7 +102,6 @@ u_t = solve(grid_f, θ_t, Q_f)
 
 σ_ϵ = u0 * 0.01 # TODO: think about this (currently like this so the data are informative)
 Γ_ϵ = diagm(fill(σ_ϵ^2, grid_f.ny))
-Γ_ϵ_inv = spdiagm(fill(σ_ϵ^-2, grid_f.ny))
 
 y_obs = grid_f.B * u_t
 y_obs += rand(MvNormal(Γ_ϵ))
@@ -116,7 +115,7 @@ function F(η::AbstractVector)
     return solve(grid_c, θ, Q_c)
 end
 
-function F_r(η::AbstractVector)
+function F_r(η::AbstractVector, μ_u::AbstractVector, V_r::AbstractMatrix)
     θ = transform(pr, η)
     return solve(grid_c, θ, Q_c, μ_u, V_r)
 end
@@ -129,24 +128,25 @@ end
 # POD
 # ----------------
 
-# us_samp = generate_pod_samples(pr, 100)
-# μ_u, V_r = compute_pod_basis(grid_c, us_samp, 0.999)
+# Generate POD basis 
+# μ_u, V_r, μ_e, Γ_e = generate_pod_data(grid_c, F, F_r, G, pr, 100, 0.999, "pod2")
+μ_u, V_r, μ_e, Γ_e = read_pod_data("pod2")
 
-TEST_POD = false
+Γ_e_inv = inv(Γ_ϵ + Γ_e) # TODO: better naming convention for the es/ϵs
 
-if TEST_POD
+# if TEST_POD
 
-    θs_test = rand(pr, 100)
+#     θs_test = rand(pr, 20)
 
-    us_test = [@time F(θ) for θ ∈ eachcol(θs_test)]
-    us_test_r = [@time F_r(θ) for θ ∈ eachcol(θs_test)]
+#     us_test = [@time F(θ) for θ ∈ eachcol(θs_test)]
+#     us_test_r = [@time F_r(θ) for θ ∈ eachcol(θs_test)]
 
-    ys_test = hcat([G(u) for u ∈ us_test]...)
-    ys_test_r = hcat([G(u) for u ∈ us_test_r]...)
+#     ys_test = hcat([G(u) for u ∈ us_test]...)
+#     ys_test_r = hcat([G(u) for u ∈ us_test_r]...)
 
-    animate(us_test[1], grid_c, (41, 13), "plots/animations/darcy_flow_ex")
-    animate(us_test_r[1], grid_c, (41, 13), "plots/animations/darcy_flow_ex_reduced")
+#     animate(us_test[1], grid_c, (41, 13), "plots/animations/darcy_flow_ex")
+#     animate(us_test_r[1], grid_c, (41, 13), "plots/animations/darcy_flow_ex_reduced")
 
-end
+# end
 
-animate(u_t, grid_f, (8, 8), "plots/animations/test")
+# animate(u_t, grid_f, (8, 8), "plots/animations/test")

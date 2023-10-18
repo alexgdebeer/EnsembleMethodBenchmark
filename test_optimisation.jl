@@ -18,20 +18,29 @@ function optimise(
     pr::MaternField,
     y::AbstractVector,
     Q::AbstractMatrix,
-    η::AbstractVector, # Initial estimate of η
-    Γ_ϵ_inv::AbstractMatrix
+    η::AbstractVector,          # Initial estimate of η
+    μ_u::AbstractVector,        # Mean of u, estimated using samples
+    V_r::AbstractMatrix,        # Reduced basis for u
+    μ_e::AbstractVector,        # Mean of model errors 
+    Γ_e_inv::AbstractMatrix     # Inverse of combined measurement and model error covariance
 )
 
     # TODO: move to MaternField struct?
     Δσ = pr.σ_bounds[2] - pr.σ_bounds[1]
     Δl = pr.l_bounds[2] - pr.l_bounds[1]
 
+    # Get the size of the reduced state vector
+    nu_r = size(V_r, 2)
+
+    V_r_f = sparse(kron(sparse(I, g.nt, g.nt), V_r))
+    μ_u_f = repeat(μ_u, g.nt)
+
     function J(
         η::AbstractVector, 
         u::AbstractVector
     )::Real
-        resid = g.B * u - y
-        return 0.5 * resid' * Γ_ϵ_inv * resid + 0.5 * sum(η.^2)
+        res = g.B * (V_r_f * u + μ_u_f) + μ_e - y
+        return 0.5 * res' * Γ_e_inv * res + 0.5 * sum(η.^2)
     end
 
     function compute_∂Au∂θ(
@@ -39,10 +48,10 @@ function optimise(
         u::AbstractVector
     )::AbstractMatrix
 
-        u = reshape(u, g.nx^2, g.nt)
+        u = reshape(u, nu_r, g.nt)
 
         ∂Au∂θ = (g.Δt / g.μ) * vcat([
-            g.∇h' * spdiagm(g.∇h * u[:, t]) * 
+            V_r' * g.∇h' * spdiagm(g.∇h * V_r * u[:, t]) * 
             g.A * spdiagm(exp.(θ)) for t ∈ 1:g.nt
         ]...)
 
@@ -50,25 +59,45 @@ function optimise(
 
     end
 
-    function solve_adjoint(
-        u::AbstractVector, 
-        Bθt::AbstractMatrix
+    function solve_forward(
+        Bθ::AbstractMatrix,
+        B̃θ::AbstractMatrix
     )::AbstractVector
 
-        p = spzeros(g.nx^2, g.nt)
+        u = zeros(nu_r, g.nt)
 
-        b = -g.B' * Γ_ϵ_inv * (g.B * u - y) 
-        b = reshape(b, g.nx^2, g.nt)
+        b = V_r' * (g.Δt * Q[:, 1] .+ (g.ϕ * g.c * u0) .- Bθ * μ_u)
+        u[:, 1] = solve(LinearProblem(B̃θ, b))
 
-        prob = LinearProblem(Bθt, b[:, end])
+        for t ∈ 2:g.nt 
+            b = V_r' * (g.Δt * Q[:, t] + g.ϕ * g.c * (V_r * u[:, t-1] + μ_u) - Bθ * μ_u)
+            u[:, t] = solve(LinearProblem(B̃θ, b))
+        end
+
+        return vec(u)
+
+    end
+
+    function solve_adjoint(
+        u::AbstractVector, 
+        B̃θ::AbstractMatrix
+    )::AbstractVector
+        
+        p = zeros(nu_r, g.nt) 
+
+        # TODO: think about the observation operator -- this could potentially be tidied up
+        b = -V_r_f' * g.B' * Γ_e_inv * (g.B * (V_r_f * u + μ_u_f) + μ_e - y) 
+        b = reshape(b, nu_r, g.nt)
+
+        prob = LinearProblem(B̃θ', b[:, end])
         p[:, end] = solve(prob)
 
         for t ∈ (g.nt-1):-1:1
-            prob = LinearProblem(Bθt, b[:, t] + g.ϕ * g.c * p[:, t+1])
+            prob = LinearProblem(B̃θ', b[:, t] + g.ϕ * g.c * V_r' * V_r * p[:, t+1])
             p[:, t] = solve(prob)
         end
 
-        return Vector(vec(p))
+        return vec(p)
 
     end
     
@@ -150,42 +179,47 @@ function optimise(
     end
 
     function solve_forward_inc(
-        Bθ::AbstractMatrix,
+        B̃θ::AbstractMatrix,
         b::AbstractVector
     )::AbstractVector
 
-        b = reshape(Vector(b), g.nx^2, g.nt)
-        u = spzeros(g.nx^2, g.nt)
+        b = reshape(b, nu_r, g.nt)
+        u = zeros(nu_r, g.nt)
 
-        prob = LinearProblem(Bθ, b[:, 1])
+        prob = LinearProblem(B̃θ, b[:, 1])
         u[:, 1] = solve(prob)
 
         for t ∈ 2:g.nt 
-            prob = LinearProblem(Bθ, b[:, t] + g.ϕ*g.c*u[:, t-1])
+            prob = LinearProblem(B̃θ, b[:, t] + g.ϕ * g.c * V_r' * V_r * u[:, t-1])
             u[:, t] = solve(prob)
         end
 
-        return sparsevec(u)
+        return vec(u)
 
     end
 
     function solve_adjoint_inc(
-        Bθt::AbstractMatrix,
-        b::AbstractVector 
+        B̃θt::AbstractMatrix,
+        u_inc::AbstractVector
     )::AbstractVector
+        
+        p = zeros(nu_r, g.nt)
+        
+        b = V_r_f' * g.B' * Γ_e_inv * g.B * V_r_f * u_inc
 
-        b = reshape(b, g.nx^2, g.nt)
-        p = spzeros(g.nx^2, g.nt)
+        b = reshape(b, nu_r, g.nt)
+        # for (i, t) ∈ enumerate(g.t_obs_inds)
+        #     b[:, t] = V_r' * g.Bs[i]' * Γ_e_inv[1:9, 1:9] * g.Bs[i] * V_r * u_inc[:, t] # HACK (do the indices properly)
+        # end
 
-        prob = LinearProblem(Bθt, b[:, end])
-        p[:, end] = solve(prob)
+        p[:, end] = solve(LinearProblem(B̃θt, b[:, end]))
 
         for t ∈ (g.nt-1):-1:1
-            prob = LinearProblem(Bθt, b[:, t] + g.ϕ * g.c * p[:, t+1])
+            prob = LinearProblem(B̃θt, b[:, t] + g.ϕ * g.c * V_r' * V_r * p[:, t+1])
             p[:, t] = solve(prob)
         end
 
-        return Vector(vec(p))
+        return vec(p)
 
     end
 
@@ -193,17 +227,16 @@ function optimise(
         d::AbstractVector, 
         η::AbstractVector,
         θ::AbstractVector,
-        Bθ::AbstractMatrix, 
-        Bθt::AbstractMatrix,
+        B̃θ::AbstractMatrix, 
         ∂Au∂θ::AbstractMatrix,
-        ∂Au∂θt::AbstractMatrix
     )::AbstractVector
 
-        # Solve incremental forward and adjoint problems
-        u_inc = solve_forward_inc(Bθ, compute_∂Au∂ηx(∂Au∂θ, η, θ, d))
-        p_inc = solve_adjoint_inc(Bθt, g.B' * Γ_ϵ_inv * g.B * u_inc)
+        ∂Au∂ηx = compute_∂Au∂ηx(∂Au∂θ, η, θ, d)
 
-        return compute_∂Au∂ηtx(∂Au∂θt, η, θ, p_inc) + d
+        u_inc = solve_forward_inc(B̃θ, ∂Au∂ηx)
+        p_inc = solve_adjoint_inc(Matrix(B̃θ'), u_inc)
+
+        return compute_∂Au∂ηtx(Matrix(∂Au∂θ'), η, θ, p_inc) + d
 
     end
 
@@ -223,7 +256,14 @@ function optimise(
 
             η_k = η_c + α_k * δη
             θ_k = transform(pr, η_k)
-            u_k = solve(g, θ_k, Q) # TODO: return this to the main loop to avoid computing it again at the next iteration
+            
+            Aθ_k = (1.0 / g.μ) * g.∇h' * spdiagm(g.A * exp.(θ_k)) * g.∇h
+            Bθ_k = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ_k
+            B̃θ_k = V_r' * Bθ_k * V_r 
+
+            # TODO: return this to the main loop to avoid computing it again at the next iteration
+            u_k = solve_forward(Bθ_k, B̃θ_k)
+            
             J_k = J(η_k, u_k)
 
             @printf "%6i | %.3e\n" i_ls J_k 
@@ -238,7 +278,7 @@ function optimise(
 
         end
 
-        @warn "Linesearch failed to converge within $LINE_MAX_IT iterations."
+        @warn "Linesearch failed to converge within $LS_MAX_ITS iterations."
         return α_k
 
     end
@@ -252,14 +292,29 @@ function optimise(
         θ = transform(pr, η)
 
         Aθ = (1.0 / g.μ) * g.∇h' * spdiagm(g.A * exp.(θ)) * g.∇h
-        Bθ = sparse(g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ)
-        Bθt = sparse(Bθ')
+        Bθ = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ
+        B̃θ = V_r' * Bθ * V_r
 
-        u = solve(g, θ, Q)
-        p = solve_adjoint(u, Bθt)
+        u = solve_forward(Bθ, B̃θ)
+        p = solve_adjoint(u, B̃θ)
 
         ∂Au∂θ = compute_∂Au∂θ(θ, u)
         ∂Au∂θt = sparse(∂Au∂θ')
+
+        # # TEMP
+        # ξ_σ, ξ_l = η[end-1:end]
+        # σ = gauss_to_unif(ξ_σ, pr.σ_bounds...)
+        # l = gauss_to_unif(ξ_l, pr.l_bounds...)
+        # α = σ^2 * (4π * gamma(2)) / gamma(1)
+        # H = pr.M + l^2 * pr.K + l / 1.42 * pr.N 
+
+        # invH = inv(Matrix(H))
+
+        # ∂Au∂ξ = ∂Au∂θ * invH * √(α) * l * pr.L
+        # ∂Au∂ξσ = ∂Au∂θ * ((θ .- pr.μ) ./ σ) * Δσ * pdf(Normal(), ξ_σ)
+        # ∂Au∂ξl = ∂Au∂θ * -invH * (-l^-1.0 * pr.M + l * pr.K) * (θ .- pr.μ) * Δl * pdf(Normal(), ξ_l)
+
+        # ∂Au∂η = Matrix(hcat(∂Au∂ξ, ∂Au∂ξσ, ∂Au∂ξl))
 
         ∇Lη = compute_∇Lη(∂Au∂θt, η, θ, p)
         
@@ -283,11 +338,24 @@ function optimise(
         d = -copy(∇Lη)
         r = -copy(∇Lη)
 
+        # Ãθ = blockdiag([sparse(B̃θ) for _ ∈ 1:g.nt]...)
+            
+        # for t ∈ 1:(g.nt-1)
+            
+        #     iix = (t*nu_r+1):(t+1)*nu_r
+        #     iiy = ((t-1)*nu_r+1):(t*nu_r)
+        #     Ãθ[iix, iiy] += -g.ϕ * g.c * V_r' * V_r
+
+        # end
+
+        # Ãθ_inv = inv(Matrix(Ãθ))
+        # H_alt = (∂Au∂η' * Ãθ_inv' * V_r_f' * g.B' * Γ_e_inv * g.B * V_r_f * Ãθ_inv * ∂Au∂η)
+
         i_cg = 1
         while true
-            
-            Hd = compute_Hd(d, η, θ, Bθ, Bθt, ∂Au∂θ, ∂Au∂θt)
-            
+
+            Hd = compute_Hd(d, η, θ, B̃θ, ∂Au∂θ)
+ 
             α = (r' * r) / (d' * Hd)
             δη += α * d
 
@@ -296,7 +364,7 @@ function optimise(
 
             @printf "%6i | %.3e\n" i_cg norm(r)
 
-            if (norm(r) < tol_cg)
+            if (norm(r) ≤ 1e-2)#tol_cg)
                 println("CG converged after $i_cg iterations.")
                 break
             elseif i_cg > CG_MAX_ITS
@@ -310,7 +378,7 @@ function optimise(
 
         end
 
-        α = linesearch(η, u, ∇Lη, δη)
+        α = linesearch(η, u, ∇Lη, δη) # The problem isn't this
         η += α * δη
         i_gn += 1
 
@@ -318,5 +386,5 @@ function optimise(
 
 end
 
-η = vec(rand(pr, 1)) # TODO: add POD basis
-η_map, u_map = optimise(grid_c, pr, y_obs, Q_c, η, Γ_ϵ_inv)
+η = vec(rand(pr, 1))
+η_map, u_map = optimise(grid_c, pr, y_obs, Q_c, η, μ_u, V_r, μ_e, Γ_e_inv)

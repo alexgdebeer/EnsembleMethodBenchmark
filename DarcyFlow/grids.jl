@@ -51,7 +51,7 @@ function build_B(
     x_obs::AbstractVector,
     y_obs::AbstractVector,
     t_obs_inds::AbstractVector 
-)::SparseMatrixCSC
+)
 
     function get_cell_index(xi::Int, yi::Int)
         return xi + nx * (yi-1)
@@ -87,6 +87,8 @@ function build_B(
 
     end
 
+    # TODO: this can surely be cleaned up
+
     Bi = sparse(is, js, vs, nyi, nx^2)
 
     # Form full operator
@@ -101,7 +103,9 @@ function build_B(
 
     end
 
-    return B
+    Bs = [Bi for _ ∈ 1:length(t_obs_inds)]
+
+    return B, Bs
 
 end
 
@@ -118,13 +122,15 @@ struct Grid
 
     nx::Int 
     nt::Int
-
     ny::Int
     nyi::Int
+
+    t_obs_inds::AbstractVector
 
     ∇h::SparseMatrixCSC
     A::SparseMatrixCSC
     B::SparseMatrixCSC
+    Bs::Vector{SparseMatrixCSC}
 
     ϕ::Real 
     μ::Real
@@ -161,9 +167,14 @@ struct Grid
         A = build_A(nx)
 
         t_obs_inds = [findfirst(ts .>= t) for t ∈ t_obs]
-        B = build_B(xs, nx, nt, ny, nyi, x_obs, y_obs, t_obs_inds)
+        B, Bs = build_B(xs, nx, nt, ny, nyi, x_obs, y_obs, t_obs_inds)
 
-        return new(xs, ts, cxs, cys, Δx, Δt, nx, nt, ny, nyi, ∇h, A, B, ϕ, μ, c, u0)
+        return new(
+            xs, ts, cxs, cys, Δx, Δt, 
+            nx, nt, ny, nyi, t_obs_inds, 
+            ∇h, A, B, Bs,
+            ϕ, μ, c, u0
+        )
 
     end
 
