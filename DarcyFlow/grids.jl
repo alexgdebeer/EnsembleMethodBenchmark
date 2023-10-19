@@ -87,25 +87,18 @@ function build_B(
 
     end
 
-    # TODO: this can surely be cleaned up
-
     Bi = sparse(is, js, vs, nyi, nx^2)
+    Bis = [i ∈ t_obs_inds ? Bi : spzeros(nyi, nx^2) for i ∈ 1:nt]
 
-    # Form full operator
     B = spzeros(ny, nx^2 * nt)
 
     for (i, t) ∈ enumerate(t_obs_inds)
-
         ii = (i-1) * nyi
         jj = (t-1) * nx^2
-        
         B[(ii+1):(ii+nyi), (jj+1):(jj+nx^2)] = Bi
-
     end
 
-    Bs = [Bi for _ ∈ 1:length(t_obs_inds)]
-
-    return B, Bs
+    return B, Bis
 
 end
 
@@ -130,7 +123,7 @@ struct Grid
     ∇h::SparseMatrixCSC
     A::SparseMatrixCSC
     B::SparseMatrixCSC
-    Bs::Vector{SparseMatrixCSC}
+    Bis::Vector{SparseMatrixCSC}
 
     ϕ::Real 
     μ::Real
@@ -167,12 +160,12 @@ struct Grid
         A = build_A(nx)
 
         t_obs_inds = [findfirst(ts .>= t) for t ∈ t_obs]
-        B, Bs = build_B(xs, nx, nt, ny, nyi, x_obs, y_obs, t_obs_inds)
+        B, Bis = build_B(xs, nx, nt, ny, nyi, x_obs, y_obs, t_obs_inds)
 
         return new(
             xs, ts, cxs, cys, Δx, Δt, 
             nx, nt, ny, nyi, t_obs_inds, 
-            ∇h, A, B, Bs,
+            ∇h, A, B, Bis,
             ϕ, μ, c, u0
         )
 

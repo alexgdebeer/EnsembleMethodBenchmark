@@ -5,7 +5,7 @@ using Random: seed!
 include("DarcyFlow/DarcyFlow.jl")
 include("plotting.jl")
 
-seed!(26)
+seed!(16)
 
 # ----------------
 # Reservoir properties 
@@ -23,8 +23,8 @@ u0 = 20 * 1.0e6                     # Initial pressure (Pa)
 xmax = 1000.0
 tmax = 120.0
 
-Δx_c = 25.0
-Δx_f = 25.0
+Δx_c = 12.5
+Δx_f = 7.5
 Δt_c = 4.0
 Δt_f = 2.0
 
@@ -129,8 +129,8 @@ end
 # ----------------
 
 # Generate POD basis 
-# μ_u, V_r, μ_e, Γ_e = generate_pod_data(grid_c, F, F_r, G, pr, 100, 0.999, "pod2")
-μ_u, V_r, μ_e, Γ_e = read_pod_data("pod2")
+μ_u, V_r, μ_e, Γ_e = generate_pod_data(grid_c, F, F_r, G, pr, 100, 0.999, "pod80")
+# μ_u, V_r, μ_e, Γ_e = read_pod_data("pod2")
 
 Γ_e_inv = inv(Γ_ϵ + Γ_e) # TODO: better naming convention for the es/ϵs
 

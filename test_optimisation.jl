@@ -34,6 +34,7 @@ function optimise(
 
     V_r_f = sparse(kron(sparse(I, g.nt, g.nt), V_r))
     μ_u_f = repeat(μ_u, g.nt)
+    BV_r = g.B * V_r_f
 
     function J(
         η::AbstractVector, 
@@ -98,8 +99,7 @@ function optimise(
         
         p = zeros(nu_r, g.nt) 
 
-        # TODO: form more efficiently
-        b = -V_r_f' * g.B' * Γ_e_inv * (g.B * (V_r_f * u + μ_u_f) + μ_e - y) 
+        b = -BV_r' * Γ_e_inv * (BV_r * u + g.B * μ_u_f + μ_e - y) 
         b = reshape(b, nu_r, g.nt)
 
         prob = LinearProblem(B̃θ', b[:, end])
@@ -217,15 +217,10 @@ function optimise(
         u_inc::AbstractVector
     )::AbstractVector
         
-        p = zeros(nu_r, g.nt)
-        
-        b = V_r_f' * g.B' * Γ_e_inv * g.B * V_r_f * u_inc
-
+        b = BV_r' * Γ_e_inv * BV_r * u_inc
         b = reshape(b, nu_r, g.nt)
-        # for (i, t) ∈ enumerate(g.t_obs_inds)
-        #     b[:, t] = V_r' * g.Bs[i]' * Γ_e_inv[1:9, 1:9] * g.Bs[i] * V_r * u_inc[:, t] # HACK (do the indices properly)
-        # end
 
+        p = zeros(nu_r, g.nt)
         p[:, end] = solve(LinearProblem(B̃θt, b[:, end]))
 
         for t ∈ (g.nt-1):-1:1
@@ -252,6 +247,7 @@ function optimise(
         u_inc = solve_forward_inc(B̃θ, ∂Au∂ηx + ∂Aμ∂ηx)
         p_inc = solve_adjoint_inc(Matrix(B̃θ'), u_inc)
 
+        # TODO: better variable names
         xx = compute_∂Au∂ηtx(Matrix(∂Au∂θ'), η, θ, p_inc)
         yy = compute_∂Au∂ηtx(Matrix(∂Aμ∂θ'), η, θ, p_inc)
 
