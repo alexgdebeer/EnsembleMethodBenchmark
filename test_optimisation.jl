@@ -59,6 +59,19 @@ function optimise(
 
     end
 
+    function compute_∂Aμ∂θ(
+        θ::AbstractVector
+    )::AbstractMatrix 
+
+        ∂Aμ∂θ = (g.Δt / g.μ) * vcat([
+            V_r' * g.∇h' * spdiagm(g.∇h * μ_u) * 
+            g.A * spdiagm(exp.(θ)) for t ∈ 1:g.nt
+        ]...)
+
+        return ∂Aμ∂θ
+
+    end
+
     function solve_forward(
         Bθ::AbstractMatrix,
         B̃θ::AbstractMatrix
@@ -85,7 +98,7 @@ function optimise(
         
         p = zeros(nu_r, g.nt) 
 
-        # TODO: think about the observation operator -- this could potentially be tidied up
+        # TODO: form more efficiently
         b = -V_r_f' * g.B' * Γ_e_inv * (g.B * (V_r_f * u + μ_u_f) + μ_e - y) 
         b = reshape(b, nu_r, g.nt)
 
@@ -169,12 +182,13 @@ function optimise(
 
     function compute_∇Lη(
         ∂Au∂θt::AbstractMatrix,
+        ∂Aμ∂θt::AbstractMatrix,
         η::AbstractVector,
         θ::AbstractVector,
         p::AbstractVector
     )::AbstractVector
 
-        return η + compute_∂Au∂ηtx(∂Au∂θt, η, θ, p)
+        return η + compute_∂Au∂ηtx(∂Au∂θt, η, θ, p) + compute_∂Au∂ηtx(∂Aμ∂θt, η, θ, p)
 
     end
 
@@ -229,14 +243,19 @@ function optimise(
         θ::AbstractVector,
         B̃θ::AbstractMatrix, 
         ∂Au∂θ::AbstractMatrix,
+        ∂Aμ∂θ::AbstractMatrix
     )::AbstractVector
 
         ∂Au∂ηx = compute_∂Au∂ηx(∂Au∂θ, η, θ, d)
+        ∂Aμ∂ηx = compute_∂Au∂ηx(∂Aμ∂θ, η, θ, d)
 
-        u_inc = solve_forward_inc(B̃θ, ∂Au∂ηx)
+        u_inc = solve_forward_inc(B̃θ, ∂Au∂ηx + ∂Aμ∂ηx)
         p_inc = solve_adjoint_inc(Matrix(B̃θ'), u_inc)
 
-        return compute_∂Au∂ηtx(Matrix(∂Au∂θ'), η, θ, p_inc) + d
+        xx = compute_∂Au∂ηtx(Matrix(∂Au∂θ'), η, θ, p_inc)
+        yy = compute_∂Au∂ηtx(Matrix(∂Aμ∂θ'), η, θ, p_inc)
+
+        return xx + yy + d
 
     end
 
@@ -301,22 +320,10 @@ function optimise(
         ∂Au∂θ = compute_∂Au∂θ(θ, u)
         ∂Au∂θt = sparse(∂Au∂θ')
 
-        # # TEMP
-        # ξ_σ, ξ_l = η[end-1:end]
-        # σ = gauss_to_unif(ξ_σ, pr.σ_bounds...)
-        # l = gauss_to_unif(ξ_l, pr.l_bounds...)
-        # α = σ^2 * (4π * gamma(2)) / gamma(1)
-        # H = pr.M + l^2 * pr.K + l / 1.42 * pr.N 
+        ∂Aμ∂θ = compute_∂Aμ∂θ(θ)
+        ∂Aμ∂θt = sparse(∂Aμ∂θ') 
 
-        # invH = inv(Matrix(H))
-
-        # ∂Au∂ξ = ∂Au∂θ * invH * √(α) * l * pr.L
-        # ∂Au∂ξσ = ∂Au∂θ * ((θ .- pr.μ) ./ σ) * Δσ * pdf(Normal(), ξ_σ)
-        # ∂Au∂ξl = ∂Au∂θ * -invH * (-l^-1.0 * pr.M + l * pr.K) * (θ .- pr.μ) * Δl * pdf(Normal(), ξ_l)
-
-        # ∂Au∂η = Matrix(hcat(∂Au∂ξ, ∂Au∂ξσ, ∂Au∂ξl))
-
-        ∇Lη = compute_∇Lη(∂Au∂θt, η, θ, p)
+        ∇Lη = compute_∇Lη(∂Au∂θt, ∂Aμ∂θt, η, θ, p)
         
         if i_gn == 1
             norm∇Lη0 = norm(∇Lη)
@@ -338,23 +345,10 @@ function optimise(
         d = -copy(∇Lη)
         r = -copy(∇Lη)
 
-        # Ãθ = blockdiag([sparse(B̃θ) for _ ∈ 1:g.nt]...)
-            
-        # for t ∈ 1:(g.nt-1)
-            
-        #     iix = (t*nu_r+1):(t+1)*nu_r
-        #     iiy = ((t-1)*nu_r+1):(t*nu_r)
-        #     Ãθ[iix, iiy] += -g.ϕ * g.c * V_r' * V_r
-
-        # end
-
-        # Ãθ_inv = inv(Matrix(Ãθ))
-        # H_alt = (∂Au∂η' * Ãθ_inv' * V_r_f' * g.B' * Γ_e_inv * g.B * V_r_f * Ãθ_inv * ∂Au∂η)
-
         i_cg = 1
         while true
 
-            Hd = compute_Hd(d, η, θ, B̃θ, ∂Au∂θ)
+            Hd = compute_Hd(d, η, θ, B̃θ, ∂Au∂θ, ∂Aμ∂θ)
  
             α = (r' * r) / (d' * Hd)
             δη += α * d
@@ -364,7 +358,7 @@ function optimise(
 
             @printf "%6i | %.3e\n" i_cg norm(r)
 
-            if (norm(r) ≤ 1e-2)#tol_cg)
+            if (norm(r) ≤ tol_cg)
                 println("CG converged after $i_cg iterations.")
                 break
             elseif i_cg > CG_MAX_ITS
@@ -378,7 +372,7 @@ function optimise(
 
         end
 
-        α = linesearch(η, u, ∇Lη, δη) # The problem isn't this
+        α = linesearch(η, u, ∇Lη, δη)
         η += α * δη
         i_gn += 1
 
