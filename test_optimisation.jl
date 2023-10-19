@@ -21,7 +21,7 @@ function optimise(
     η::AbstractVector,          # Initial estimate of η
     μ_u::AbstractVector,        # Mean of u, estimated using samples
     V_r::AbstractMatrix,        # Reduced basis for u
-    μ_e::AbstractVector,        # Mean of model errors 
+    μ_ε::AbstractVector,        # Mean of model errors 
     Γ_e_inv::AbstractMatrix     # Inverse of combined measurement and model error covariance
 )
 
@@ -40,7 +40,7 @@ function optimise(
         η::AbstractVector, 
         u::AbstractVector
     )::Real
-        res = g.B * (V_r_f * u + μ_u_f) + μ_e - y
+        res = g.B * (V_r_f * u + μ_u_f) + μ_ε - y
         return 0.5 * res' * Γ_e_inv * res + 0.5 * sum(η.^2)
     end
 
@@ -99,7 +99,7 @@ function optimise(
         
         p = zeros(nu_r, g.nt) 
 
-        b = -BV_r' * Γ_e_inv * (BV_r * u + g.B * μ_u_f + μ_e - y) 
+        b = -BV_r' * Γ_e_inv * (BV_r * u + g.B * μ_u_f + μ_ε - y) 
         b = reshape(b, nu_r, g.nt)
 
         prob = LinearProblem(B̃θ', b[:, end])
@@ -377,4 +377,4 @@ function optimise(
 end
 
 η = vec(rand(pr, 1))
-η_map, u_map = optimise(grid_c, pr, y_obs, Q_c, η, μ_u, V_r, μ_e, Γ_e_inv)
+η_map, u_map = optimise(grid_c, pr, y_obs, Q_c, η, μ_u, V_r, μ_ε, Γ_e_inv)

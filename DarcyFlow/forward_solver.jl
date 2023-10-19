@@ -203,14 +203,14 @@ function generate_pod_data(
 
     us_samp = generate_pod_samples(pr, N)
     μ_u, V_r = compute_pod_basis(g, us_samp, var_to_retain)
-    μ_e, Γ_e = compute_error_statistics(F, F_r, G, pr, μ_u, V_r, N)
+    μ_ε, Γ_ε = compute_error_statistics(F, F_r, G, pr, μ_u, V_r, N)
 
     h5write("data/$fname.h5", "μ_u", μ_u)
     h5write("data/$fname.h5", "V_r", V_r)
-    h5write("data/$fname.h5", "μ_e", μ_e)
-    h5write("data/$fname.h5", "Γ_e", Γ_e)
+    h5write("data/$fname.h5", "μ_e", μ_ε)
+    h5write("data/$fname.h5", "Γ_e", Γ_ε)
 
-    return μ_u, V_r, μ_e, Γ_e
+    return μ_u, V_r, μ_ε, Γ_ε
     
 end
 
@@ -222,9 +222,9 @@ function read_pod_data(
 
     μ_u = f["μ_u"][:]
     V_r = f["V_r"][:, :]
-    μ_e = f["μ_e"][:]
-    Γ_e = f["Γ_e"][:, :]
+    μ_ε = f["μ_ε"][:]
+    Γ_ε = f["Γ_ε"][:, :]
 
-    return μ_u, V_r, μ_e, Γ_e
+    return μ_u, V_r, μ_ε, Γ_ε
 
 end

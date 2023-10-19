@@ -129,10 +129,10 @@ end
 # ----------------
 
 # Generate POD basis 
-μ_u, V_r, μ_e, Γ_e = generate_pod_data(grid_c, F, F_r, G, pr, 100, 0.999, "pod80")
-# μ_u, V_r, μ_e, Γ_e = read_pod_data("pod2")
+# μ_u, V_r, μ_ε, Γ_ε = generate_pod_data(grid_c, F, F_r, G, pr, 100, 0.999, "pod80")
+μ_u, V_r, μ_ε, Γ_ε = read_pod_data("pod80")
 
-Γ_e_inv = inv(Γ_ϵ + Γ_e) # TODO: better naming convention for the es/ϵs
+Γ_e_inv = inv(Γ_ϵ + Γ_ε)
 
 # if TEST_POD
 
