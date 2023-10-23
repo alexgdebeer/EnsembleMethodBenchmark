@@ -207,8 +207,8 @@ function generate_pod_data(
 
     h5write("data/$fname.h5", "μ_u", μ_u)
     h5write("data/$fname.h5", "V_r", V_r)
-    h5write("data/$fname.h5", "μ_e", μ_ε)
-    h5write("data/$fname.h5", "Γ_e", Γ_ε)
+    h5write("data/$fname.h5", "μ_ε", μ_ε)
+    h5write("data/$fname.h5", "Γ_ε", Γ_ε)
 
     return μ_u, V_r, μ_ε, Γ_ε
     
