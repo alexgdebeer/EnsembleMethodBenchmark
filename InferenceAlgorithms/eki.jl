@@ -13,7 +13,7 @@ function run_ensemble(
     Gs = zeros(NG, Ne)
 
     for i ∈ 1:Ne
-        Fs[:,i] = @time F(θs[:,i])
+        Fs[:,i] = F(θs[:,i])
         Gs[:,i] = G(Fs[:,i])
     end
 
@@ -33,27 +33,28 @@ end
 function run_eki_dmc(
     F::Function,
     G::Function,
-    p, # TODO: define a suitable type for this
-    ys::AbstractVector,
-    Γ::AbstractMatrix,
+    pr::MaternField, 
+    y::AbstractVector,
+    μ_e::AbstractVector,
+    Γ_e::AbstractMatrix,
     NF::Int,
     Ne::Int,
     localisation::Bool=false, # TODO: add localisation options
     verbose::Bool=true
 )
 
-    NG = length(ys)
-    L = cholesky(inv(Γ)).U
+    NG = length(y)
+    L_e = cholesky(inv(Γ_e)).U # TODO: move out of this function
 
-    θs = []
+    ηs = []
     Fs = []
     Gs = []
     αs = []
 
-    θs_i = rand(p, Ne)
-    Fs_i, Gs_i = run_ensemble(F, G, θs_i, NF, NG, Ne)
+    ηs_i = rand(pr, Ne)
+    Fs_i, Gs_i = run_ensemble(F, G, ηs_i, NF, NG, Ne)
 
-    push!(θs, θs_i)
+    push!(ηs, ηs_i)
     push!(Fs, Fs_i)
     push!(Gs, Gs_i)
 
@@ -63,32 +64,32 @@ function run_eki_dmc(
     while !converged
 
         # Generate new inflation factor
-        φs = [0.5sum((L * (ys - Gs[end][:, i])).^2) for i ∈ 1:Ne]
+        φs = [0.5sum((L_e * (y - Gs[end][:, i])).^2) for i ∈ 1:Ne]
         α_i = min(max(NG / 2mean(φs), √(NG / 2var(φs))), 1-t)^-1
         push!(αs, α_i) 
 
-        println("Q1: $(NG / 2mean(φs))")
-        println("Q2: $(√(NG / 2var(φs)))")
+        @info "Data-misfit mean: $(NG / 2mean(φs))"
+        @info "Data-misfit variance: $(√(NG / 2var(φs)))"
 
         t += α_i^-1
         if abs(t - 1.0) < 1e-8
             converged = true
         end 
 
-        Δθ = calculate_deviations(θs[end], Ne)
+        Δη = calculate_deviations(ηs[end], Ne)
         ΔG = calculate_deviations(Gs[end], Ne)
 
         C_GG = ΔG * ΔG'
-        C_θG = Δθ * ΔG'
+        C_ηG = Δη * ΔG'
 
         # TODO: covariance localisation
 
-        ϵs = rand(MvNormal(αs[end]*Γ), Ne)
+        es = rand(MvNormal(αs[end] * Γ_e), Ne) # TODO: tidy up
 
-        θs_i = θs[end] + C_θG * inv(C_GG + αs[end]*Γ) * (ys .+ ϵs - Gs[end])
-        Fs_i, Gs_i = run_ensemble(F, G, θs_i, NF, NG, Ne)
+        ηs_i = ηs[end] + C_ηG * inv(C_GG + αs[end] * Γ_e) * (y .+ es - Gs[end] .- μ_e)
+        Fs_i, Gs_i = run_ensemble(F, G, ηs_i, NF, NG, Ne)
 
-        push!(θs, θs_i)
+        push!(ηs, ηs_i)
         push!(Fs, Fs_i)
         push!(Gs, Gs_i)
 
@@ -98,19 +99,6 @@ function run_eki_dmc(
 
     end
 
-    return θs, Fs, Gs, αs
+    return ηs, Fs, Gs, αs
 
 end
-
-include("setup.jl")
-
-NF = grid_c.nx * grid_c.ny * (grid_c.nt+1)
-Ne = 1000
-
-θs, Fs, Gs, αs = run_eki_dmc(F, G, p, us_o, Γ, NF, Ne)
-
-# TODO: plot the other things...
-logps = hcat([vec(transform(p, θ)) for θ in eachcol(θs[end])]...)
-
-μ_post = reshape(mean(logps, dims=2), grid_c.nx, grid_c.ny)
-σ_post = reshape(std(logps, dims=2), grid_c.nx, grid_c.ny)

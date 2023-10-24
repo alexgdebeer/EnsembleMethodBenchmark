@@ -101,7 +101,9 @@ struct MaternField
     N::AbstractMatrix
     L::AbstractMatrix
 
-    Nθ::Int
+    Nη::Int
+    Nθ::Int 
+    Nω::Int
 
     function MaternField(
         g::Grid,
@@ -111,7 +113,11 @@ struct MaternField
     )
 
         μ = fill(μ, g.nx^2)
-        return new(μ, σ_bounds, l_bounds, build_fem_matrices(g)..., g.nx^2+2)
+        return new(
+            μ, σ_bounds, l_bounds, 
+            build_fem_matrices(g)...,  
+            g.nx^2+2, g.nx^2, 2
+        )
 
     end
 
@@ -121,7 +127,7 @@ function Base.rand(
     mf::MaternField, 
     n::Int=1
 )::AbstractMatrix   
-    return rand(Normal(), mf.Nθ, n)
+    return rand(Normal(), mf.Nη, n)
 end
 
 function transform(
