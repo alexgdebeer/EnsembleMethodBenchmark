@@ -96,6 +96,9 @@ struct MaternField
     σ_bounds::Tuple
     l_bounds::Tuple
 
+    Δσ::Real 
+    Δl::Real
+
     M::AbstractMatrix 
     K::AbstractMatrix 
     N::AbstractMatrix
@@ -112,9 +115,12 @@ struct MaternField
         l_bounds::Tuple
     )
 
+        Δσ = σ_bounds[2] - σ_bounds[1]
+        Δl = l_bounds[2] - l_bounds[1]
+        
         μ = fill(μ, g.nx^2)
         return new(
-            μ, σ_bounds, l_bounds, 
+            μ, σ_bounds, l_bounds, Δσ, Δl,
             build_fem_matrices(g)...,  
             g.nx^2+2, g.nx^2, 2
         )
