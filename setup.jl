@@ -48,7 +48,7 @@ grid_f = Grid(xmax, tmax, Δx_f, Δt_f, x_obs, y_obs, t_obs, ϕ, μ, c, u0)
 q_c = 30.0 / Δx_c^2                 # Extraction rate, (m^3 / day) / m^3
 q_f = 30.0 / Δx_f^2                 # Extraction rate, (m^3 / day) / m^3
 
-well_radius = 50.0                  # TODO: change?
+well_radius = 50.0
 well_change_times = [0, 40, 80]
 
 well_rates_c = [
@@ -81,8 +81,8 @@ Q_f = build_Q(grid_f, wells_f, well_change_times)
 # ----------------
 
 lnp_μ = -31
-σ_bounds = (0.75, 1.25)
-l_bounds = (300, 400)
+σ_bounds = (0.5, 1.25)
+l_bounds = (100, 1000)
 
 pr = MaternField(grid_c, lnp_μ, σ_bounds, l_bounds)
 
@@ -100,7 +100,7 @@ u_t = solve(grid_f, θ_t, Q_f)
 # Data
 # ----------------
 
-σ_ϵ = u0 * 0.01 # TODO: think about this (currently like this so the data are informative)
+σ_ϵ = u0 * 0.01
 Γ_ϵ = diagm(fill(σ_ϵ^2, grid_f.ny))
 
 y_obs = grid_f.B * u_t
