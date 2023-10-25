@@ -1,110 +1,129 @@
 using Distributions
 using Printf
 
-# TODO: account for burn-in when saving
-# TODO: save this stuff to h5 file?
-function run_chain(
-    num::Int,
-    F::Function,
-    G::Function,
-    y::AbstractVector,
-    η_c::Vector,
-    μ_e::AbstractVector,
-    L_e::AbstractMatrix,
-    NF::Int,
-    NG::Int,
-    Ni::Int,
-    Ns::Int,
-    β::Real,
-    δ::Real;
-    save_increment::Int=100,
-    verbose::Bool=false
+# function run_chain(
+#     F::Function,
+#     G::Function,
+#     y::AbstractVector,
+#     η_c::Vector,
+#     μ_e::AbstractVector,
+#     L_e::AbstractMatrix,
+#     NF::Int,
+#     NG::Int,
+#     Ni::Int,
+#     Nb::Int,
+#     β::Real,
+#     δ::Real;
+#     verbose::Bool=false
+# )
+
+#     norm = Normal()
+
+#     logpri(η) = -sum(η.^2)
+#     loglik(g) = -sum((L_e*(g+μ_e-y)).^2)
+#     logpost(η, g) = logpri(η) + loglik(g)
+
+#     ξs = Matrix{Float64}(undef, pr.Nθ, Nb)
+#     ωs = Matrix{Float64}(undef, pr.Nω, Nb)
+#     Fs = Matrix{Float64}(undef, NF, Nb)
+#     Gs = Matrix{Float64}(undef, NG, Nb)
+#     τs = Vector{Float64}(undef, Ni, Nb)
+
+#     α_ξ = 0
+#     α_ω = 0
+
+#     ξs[:, 1] = η_c[1:pr.Nθ]
+#     ωs[:, 1] = η_c[pr.Nθ+1:end]
+#     Fs[:, 1] = F(η_c)
+#     Gs[:, 1] = G(Fs[:, 1])
+#     τs[1] = logpost(η_c, G_c)
+
+#     t0 = time()
+#     for i ∈ 1:(Ni-1)
+
+#         ind_c = (i-1) % Nb + 1
+#         ind_p = i % Nb + 1
+
+#         ζ_ξ = rand(norm, pr.Nθ)
+#         ξ_p = √(1-β^2) * ξs[:, ind_c] + β*ζ_ξ
+
+#         η_p = vcat(ξ_p, ω_c)
+#         F_p = F(η_p)
+#         G_p = G(F_p)
+
+#         h = exp(loglik(G_p) - loglik(Gs[:, ind_c]))
+
+#         if h ≥ rand()
+#             α_ξ += 1
+#             ξs[:, ind_p] = ξ_p
+#             Fs[:, ind_p] = F_p
+#             Gs[:, ind_p] = G_p
+#         else
+#             ξs[:, ind_p] = ξs[:, ind_c]
+#             Fs[:, ind_p] = Fs[:, ind_c]
+#             Gs[:, ind_p] = Gs[:, ind_c]
+#         end
+
+#         ζ_ω = rand(norm, pr.Nω)
+#         ω_p = ω_c + δ*ζ_ω
+
+#         η_p = vcat(ξs[:, ind_p], ω_p)
+#         F_p = F(η_p)
+#         G_p = G(F_p)
+
+#         h = exp((loglik(G_p) + logpri(ω_p)) - 
+#                 (loglik(Gs[:, ind_p]) + logpri(ωs[:, ind_p])))
+
+#         if h ≥ rand()
+#             α_ω += 1
+#             ωs[:, ind_p] = ω_p
+#             Fs[:, ind_p] = F_p 
+#             Gs[:, ind_p] = G_p
+#         else
+#             ωs[:, ind_p] = ωs[:, ind_c]
+#         end
+
+#         η_c = vcat(ξ_c, ω_c)
+#         τs[ind_p] = logpost(η_c, G_c)
+
+#         if i % Nb == 0
+
+#             h5write("data/mcmc/chain_$i.h5", "ηs_b$batch_num", ηs)
+#             h5write("data/mcmc/chain_$i.h5", "Gs_b$batch_num", Gs)
+
+#             if verbose
+
+#                 t1 = time()
+#                 time_per_it = (t1 - t0) / Nb
+#                 t0 = t1
+    
+#                 @printf(
+#                     "%5.0e | %6.2f | %6.2f | %9.2e | %6.2f\n",
+#                     i, α_ξ/i, α_ω/i, τs[i], time_per_it
+#                 )
+    
+#             end
+
+#         end
+
+#     end
+
+#     return ηs, Fs, Gs, τs
+
+# end
+
+function save_chain(
+    i::Int, 
+    ηs::AbstractMatrix, 
+    Fs::AbstractMatrix, 
+    Gs::AbstractMatrix, 
+    τs::AbstractVector
 )
 
-    norm = Normal()
-
-    logpri(η) = -sum(η.^2)
-    loglik(g) = -sum((L_e*(g+μ_e-y)).^2)
-    logpost(η, g) = logpri(η) + loglik(g)
-
-    ηs = Matrix{Float64}(undef, pr.Nη, Ns)
-    Fs = Matrix{Float64}(undef, NF, Ns)
-    Gs = Matrix{Float64}(undef, NG, Ns)
-    τs = Vector{Float64}(undef, Ni)
-
-    α_ξ = 0
-    α_ω = 0
-
-    ξ_c = η_c[1:pr.Nθ]
-    ω_c = η_c[pr.Nθ+1:end]
-    F_c = F(η_c)
-    G_c = G(F_c)
-    τs[1] = logpost(η_c, G_c)
-
-    i_save = 0
-    t0 = time()
-
-    for i ∈ 2:Ni
-
-        ζ_ξ = rand(norm, pr.Nθ)
-        ξ_p = √(1-β^2) * ξ_c + β*ζ_ξ
-
-        η_p = vcat(ξ_p, ω_c)
-        F_p = F(η_p)
-        G_p = G(F_p)
-
-        h = exp(loglik(G_p) - loglik(G_c))
-
-        if h ≥ rand()
-            α_ξ += 1
-            ξ_c = copy(ξ_p)
-            F_c = copy(F_p)
-            G_c = copy(G_p)
-        end
-
-        ζ_ω = rand(norm, pr.Nω)
-        ω_p = ω_c + δ*ζ_ω
-
-        η_p = vcat(ξ_c, ω_p)
-        F_p = F(η_p)
-        G_p = G(F_p)
-
-        h = exp((loglik(G_p) + logpri(ω_p)) - 
-                (loglik(G_c) + logpri(ω_c)))
-
-        if h ≥ rand()
-            α_ω += 1
-            ω_c = copy(ω_p)
-            F_c = copy(F_p)
-            G_c = copy(G_p)
-        end
-
-        η_c = vcat(ξ_c, ω_c)
-        τs[i] = logpost(η_c, G_c)
-
-        if i % save_increment == 0
-            i_save += 1
-            ηs[:, i_save] = η_c
-            Fs[:, i_save] = F_c 
-            Gs[:, i_save] = G_c
-        end
-
-        if verbose && (i % 100 == 0)
-
-            t1 = time()
-            time_per_it = (t1 - t0) / 100
-            t0 = t1
-
-            @printf(
-                "%5i | %5.0e | %6.2f | %6.2f | %9.2e | %6.2f\n",
-                num, i, α_ξ/i, α_ω/i, τs[i], time_per_it
-            )
-
-        end
-
-    end
-
-    return ηs, Fs, Gs, τs
+    h5write("data/mcmc/chain_$i.h5", "ηs", ηs)
+    h5write("data/mcmc/chain_$i.h5", "Fs", Fs)
+    h5write("data/mcmc/chain_$i.h5", "Gs", Gs)
+    h5write("data/mcmc/chain_$i.h5", "τs", τs)
 
 end
 
@@ -117,34 +136,112 @@ function run_pcn(
     L_e::AbstractMatrix,
     NF::Int,
     Ni::Int,
-    Nc::Int,
+    Nb::Int,
     β::Real,
-    δ::Real;
-    save_increment::Int=100,
+    δ::Real,
+    chain_num::Int;
     verbose::Bool=true
 )
 
-    verbose && println("Chain | Iters | ξ acc. | ω acc. | logpost   | time (s)")
+    verbose && println("Iters | ξ acc. | ω acc. | logpost   | time (s)")
 
     NG = length(y)
-    Ns = Ni ÷ save_increment
 
-    # ηs_f = Array{Float64}(undef, pr.Nη, Ns, Nc)
-    # Gs_f = Array{Float64}(undef, NG, Ns, Nc)
-    # Fs_f = Array{Float64}(undef, NF, Ns, Nc)
-    # τs_f = Matrix{Float64}(undef, Ni, Nc)
+    η_1 = rand(pr, 100)[:, chain_num]
 
-    η_cs = rand(pr, Nc)
+    norm = Normal()
 
-    Threads.@threads for i ∈ 1:Nc
+    logpri(η) = -sum(η.^2)
+    loglik(g) = -sum((L_e*(g+μ_e-y)).^2)
+    logpost(η, g) = logpri(η) + loglik(g)
 
-        run_chain(
-            i, F, G, y, η_cs[:, i], μ_e, L_e, NF, NG, Ni, Ns, β, δ,
-            save_increment=save_increment, verbose=verbose
-        )
-        
+    ξs = Matrix{Float64}(undef, pr.Nθ, Nb)
+    ωs = Matrix{Float64}(undef, pr.Nω, Nb)
+    Fs = Matrix{Float64}(undef, NF, Nb)
+    Gs = Matrix{Float64}(undef, NG, Nb)
+    τs = Vector{Float64}(undef, Nb)
+
+    α_ξ = 0
+    α_ω = 0
+
+    ξs[:, 1] = η_1[1:pr.Nθ]
+    ωs[:, 1] = η_1[pr.Nθ+1:end]
+    Fs[:, 1] = F(η_1)
+    Gs[:, 1] = G(Fs[:, 1])
+    τs[1] = logpost(η_1, Gs[:, 1])
+
+    t0 = time()
+    for i ∈ 1:(Ni-1)
+
+        ind_c = (i-1) % Nb + 1
+        ind_p = i % Nb + 1
+
+        ζ_ξ = rand(norm, pr.Nθ)
+        ξ_p = √(1-β^2) * ξs[:, ind_c] + β*ζ_ξ
+
+        η_p = vcat(ξ_p, ωs[:, ind_c])
+        F_p = F(η_p)
+        G_p = G(F_p)
+
+        h = exp(loglik(G_p) - loglik(Gs[:, ind_c]))
+
+        if h ≥ rand()
+            α_ξ += 1
+            ξs[:, ind_p] = ξ_p
+            Fs[:, ind_p] = F_p
+            Gs[:, ind_p] = G_p
+        else
+            ξs[:, ind_p] = ξs[:, ind_c]
+            Fs[:, ind_p] = Fs[:, ind_c]
+            Gs[:, ind_p] = Gs[:, ind_c]
+        end
+
+        ζ_ω = rand(norm, pr.Nω)
+        ω_p = ωs[:, ind_c] + δ*ζ_ω
+
+        η_p = vcat(ξs[:, ind_p], ω_p)
+        F_p = F(η_p)
+        G_p = G(F_p)
+
+        h = exp((loglik(G_p) + logpri(ω_p)) - 
+                (loglik(Gs[:, ind_p]) + logpri(ωs[:, ind_p])))
+
+        if h ≥ rand()
+            α_ω += 1
+            ωs[:, ind_p] = ω_p
+            Fs[:, ind_p] = F_p 
+            Gs[:, ind_p] = G_p
+        else
+            ωs[:, ind_p] = ωs[:, ind_c]
+        end
+
+        η = vcat(ξs[:, ind_p], ωs[:, ind_p])
+        τs[ind_p] = logpost(η, Gs[:, ind_p])
+
+        if i % Nb == 0
+
+            ηs = vcat(ξs, ωs)
+            n_batch = i ÷ Nb
+
+            h5write("data/mcmc/chain_$chain_num.h5", "ηs_b$n_batch", ηs)
+            h5write("data/mcmc/chain_$chain_num.h5", "Gs_b$n_batch", Gs)
+            h5write("data/mcmc/chain_$chain_num.h5", "τs_b$n_batch", τs)
+
+            if verbose
+
+                t1 = time()
+                time_per_it = (t1 - t0) / Nb
+                t0 = t1
+    
+                @printf(
+                    "%5.0e | %6.2f | %6.2f | %9.2e | %7.3f\n",
+                    i, α_ξ/i, α_ω/i, τs[ind_p], time_per_it
+                )
+    
+            end
+
+        end
+
     end
-    # ηs_f[:, :, i], Fs_f[:, :, i], Gs_f[:, :, i], τs_f[:, i] =
-    # return ηs_f, Fs_f, Gs_f, τs_f
 
 end

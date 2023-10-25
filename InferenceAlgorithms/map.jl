@@ -23,10 +23,6 @@ function compute_map(
     Γ_e_inv::AbstractMatrix     # Inverse of combined measurement and model error covariance
 )
 
-    # TODO: move to MaternField struct?
-    Δσ = pr.σ_bounds[2] - pr.σ_bounds[1]
-    Δl = pr.l_bounds[2] - pr.l_bounds[1]
-
     # Get the size of the reduced state vector
     nu_r = size(V_r, 2)
 
@@ -136,11 +132,11 @@ function compute_map(
 
         # Standard deviation component
         ∂Ax∂σtx = ((θ .- pr.μ) / σ)' * ∂Ax∂θtx
-        ∂Ax∂ξσtx = Δσ * pdf(Normal(), ξ_σ) * ∂Ax∂σtx
+        ∂Ax∂ξσtx = pr.Δσ * pdf(Normal(), ξ_σ) * ∂Ax∂σtx
         
         # Lengthscale component
         ∂Ax∂ltx = -(θ - pr.μ)' * (-l^-1.0 * pr.M + l * pr.K)' * H∂Ax∂θtx
-        ∂Ax∂ξltx = Δl * pdf(Normal(), ξ_l) * ∂Ax∂ltx
+        ∂Ax∂ξltx = pr.Δl * pdf(Normal(), ξ_l) * ∂Ax∂ltx
 
         return vcat(∂Ax∂ξtx, ∂Ax∂ξσtx, ∂Ax∂ξltx)
 
@@ -167,11 +163,11 @@ function compute_map(
         ∂Ax∂ξx = ∂Ax∂θ * sparsevec(∂θ∂ξx)
 
         # Standard deviation component
-        ∂σ∂ξσx = Δσ * pdf(Normal(), ξ_σ) * x[end-1]
+        ∂σ∂ξσx = pr.Δσ * pdf(Normal(), ξ_σ) * x[end-1]
         ∂Ax∂ξσx = ∂Ax∂θ * (sparsevec(θ .- pr.μ) / σ) * ∂σ∂ξσx
 
         # Lengthscale component
-        ∂l∂ξlx = Δl * pdf(Normal(), ξ_l) * x[end]
+        ∂l∂ξlx = pr.Δl * pdf(Normal(), ξ_l) * x[end]
         ∂θ∂ξlx = -solve(LinearProblem(H, (-l^-1.0 * pr.M + l * pr.K) * (θ .- pr.μ) * ∂l∂ξlx))
         ∂Ax∂ξlx = ∂Ax∂θ * sparsevec(∂θ∂ξlx)
 
@@ -332,7 +328,7 @@ function compute_map(
         end
 
         println("CG It. | norm(r)")
-        δη = spzeros(pr.Nθ)
+        δη = spzeros(pr.Nη)
         d = -copy(∇Lη)
         r = -copy(∇Lη)
 
