@@ -131,7 +131,7 @@ end
 # ----------------
 
 # Generate POD basis 
-# μ_u, V_r, μ_ε, Γ_ε = generate_pod_data(grid_c, F, F_r, G, pr, 100, 0.999, "pod80")
+# μ_u, V_r, μ_ε, Γ_ε = generate_pod_data(grid_c, F, G, pr, 100, 0.999, "pod$(grid_c.nx)")
 μ_u, V_r, μ_ε, Γ_ε = read_pod_data("pod80")
 
 Γ_e = Hermitian(Γ_ϵ + Γ_ε)

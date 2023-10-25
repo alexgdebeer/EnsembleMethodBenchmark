@@ -166,14 +166,19 @@ function compute_pod_basis(
 end
 
 function compute_error_statistics(
-    F::Function, 
-    F_r::Function,
+    F::Function,
     G::Function,
     pr::MaternField,
     μ_u::AbstractVector,
     V_r::AbstractMatrix,
     N::Int
 )::Tuple{AbstractVector, AbstractMatrix}
+
+    # HACK! TODO: tidy up
+    function F_r(η, μ_u, V_r)
+        θ = transform(pr, η)
+        return solve(grid_c, θ, Q_c, μ_u, V_r)
+    end
 
     ηs = rand(pr, N)
     us = [@time F(η) for η ∈ eachcol(ηs)]
@@ -193,7 +198,6 @@ end
 function generate_pod_data(
     g::Grid,
     F::Function,
-    F_r::Function,
     G::Function,
     pr::MaternField,
     N::Int, 
@@ -203,7 +207,7 @@ function generate_pod_data(
 
     us_samp = generate_pod_samples(pr, N)
     μ_u, V_r = compute_pod_basis(g, us_samp, var_to_retain)
-    μ_ε, Γ_ε = compute_error_statistics(F, F_r, G, pr, μ_u, V_r, N)
+    μ_ε, Γ_ε = compute_error_statistics(F, G, pr, μ_u, V_r, N)
 
     h5write("data/$fname.h5", "μ_u", μ_u)
     h5write("data/$fname.h5", "V_r", V_r)
