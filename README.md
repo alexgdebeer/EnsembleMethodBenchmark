@@ -2,6 +2,4 @@
 
 ## TODO:
 
- - Consider rescaling the state information and / or using different bases for each time period
- - BAE (check how POD errors were quantified in other studies)
- - Extend optimisation code to POD
+ - Add the pressure at each well over the entire time period to the MCMC output.
