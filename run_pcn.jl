@@ -1,19 +1,20 @@
 include("setup.jl")
 include("InferenceAlgorithms/pcn.jl")
 
-NF = grid_c.nx^2 * grid_c.nt
+NF = 9 * grid_c.nt # TODO: put n_wells somewhere?
 Ni = 500_000
 
 β = 0.05
 δ = 0.5
 
-chain_num = 1
 Nb = 100
+Nc = 6
+
+B_wells = blockdiag([grid_c.Bi for _ ∈ 1:grid_c.nt]...)
 
 run_pcn(
     F_r, G, pr, y_obs, 
     μ_ε, L_e, 
-    NF, Ni, Nb,
-    β, δ, 
-    chain_num
+    NF, Ni, Nb, Nc,
+    β, δ, B_wells
 )
