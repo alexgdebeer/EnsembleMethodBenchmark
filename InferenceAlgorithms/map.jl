@@ -17,24 +17,25 @@ function compute_map(
     y::AbstractVector,
     Q::AbstractMatrix,
     η::AbstractVector,          # Initial estimate of η
-    μ_u::AbstractVector,        # Mean of u, estimated using samples
-    V_r::AbstractMatrix,        # Reduced basis for u
+    μ_uk::AbstractVector,        # Mean of u, estimated using samples
+    V_rk::AbstractMatrix,        # Reduced basis for u
     μ_ε::AbstractVector,        # Mean of model errors 
     Γ_e_inv::AbstractMatrix     # Inverse of combined measurement and model error covariance
 )
 
     # Get the size of the reduced state vector
-    nu_r = size(V_r, 2)
+    nu_r = size(V_rk, 2)
 
-    V_r_f = sparse(kron(sparse(I, g.nt, g.nt), V_r))
-    BV_r = g.B * V_r_f
-    μ_u_f = repeat(μ_u, g.nt)
+    # TODO: tidy this up (and the above line of code)
+    V_r = sparse(kron(sparse(I, g.nt, g.nt), V_rk))
+    BV_r = g.B * V_r
+    μ_u = repeat(μ_uk, g.nt)
 
     function J(
         η::AbstractVector, 
         u::AbstractVector
     )::Real
-        res = g.B * (V_r_f * u + μ_u_f) + μ_ε - y
+        res = g.B * (V_r * u + μ_u) + μ_ε - y
         return 0.5 * res' * Γ_e_inv * res + 0.5 * sum(η.^2)
     end
 
@@ -46,7 +47,7 @@ function compute_map(
         u = reshape(u, nu_r, g.nt)
 
         ∂Au∂θ = (g.Δt / g.μ) * vcat([
-            V_r' * g.∇h' * spdiagm(g.∇h * V_r * u[:, t]) * 
+            V_rk' * g.∇h' * spdiagm(g.∇h * V_rk * u[:, t]) * 
             g.A * spdiagm(exp.(θ)) for t ∈ 1:g.nt
         ]...)
 
@@ -59,7 +60,7 @@ function compute_map(
     )::AbstractMatrix 
 
         ∂Aμ∂θ = (g.Δt / g.μ) * vcat([
-            V_r' * g.∇h' * spdiagm(g.∇h * μ_u) * 
+            V_rk' * g.∇h' * spdiagm(g.∇h * μ_uk) * 
             g.A * spdiagm(exp.(θ)) for t ∈ 1:g.nt
         ]...)
 
@@ -68,18 +69,18 @@ function compute_map(
     end
 
     function solve_forward(
-        Bθ::AbstractMatrix,
-        B̃θ::AbstractMatrix
+        Aθ::AbstractMatrix,
+        Aθ_r::AbstractMatrix
     )::AbstractVector
 
         u = zeros(nu_r, g.nt)
 
-        b = V_r' * (g.Δt * Q[:, 1] .+ (g.ϕ * g.c * u0) .- Bθ * μ_u)
-        u[:, 1] = solve(LinearProblem(B̃θ, b))
+        b = V_rk' * (g.Δt * Q[:, 1] .+ (g.c * g.ϕ * u0) .- Aθ * μ_uk)
+        u[:, 1] = solve(LinearProblem(Aθ_r, b))
 
         for t ∈ 2:g.nt 
-            b = V_r' * (g.Δt * Q[:, t] + g.ϕ * g.c * (V_r * u[:, t-1] + μ_u) - Bθ * μ_u)
-            u[:, t] = solve(LinearProblem(B̃θ, b))
+            b = V_rk' * (g.Δt * Q[:, t] + g.ϕ * g.c * (V_rk * u[:, t-1] + μ_uk) - Aθ * μ_uk)
+            u[:, t] = solve(LinearProblem(Aθ_r, b))
         end
 
         return vec(u)
@@ -88,19 +89,19 @@ function compute_map(
 
     function solve_adjoint(
         u::AbstractVector, 
-        B̃θ::AbstractMatrix
+        Aθ_r::AbstractMatrix
     )::AbstractVector
         
         p = zeros(nu_r, g.nt) 
 
-        b = -BV_r' * Γ_e_inv * (BV_r * u + g.B * μ_u_f + μ_ε - y) 
+        b = -BV_r' * Γ_e_inv * (BV_r * u + g.B * μ_u + μ_ε - y)
         b = reshape(b, nu_r, g.nt)
 
-        prob = LinearProblem(B̃θ', b[:, end])
+        prob = LinearProblem(Aθ_r', b[:, end])
         p[:, end] = solve(prob)
 
         for t ∈ (g.nt-1):-1:1
-            prob = LinearProblem(B̃θ', b[:, t] + g.ϕ * g.c * V_r' * V_r * p[:, t+1])
+            prob = LinearProblem(Aθ_r', b[:, t] + V_rk' * g.c * g.ϕ * V_rk * p[:, t+1])
             p[:, t] = solve(prob)
         end
 
@@ -115,10 +116,10 @@ function compute_map(
         x::AbstractVector
     )::AbstractVector
 
-        ξ_σ, ξ_l = η[end-1:end]
+        ω_σ, ω_l = η[end-1:end]
 
-        σ = gauss_to_unif(ξ_σ, pr.σ_bounds...)
-        l = gauss_to_unif(ξ_l, pr.l_bounds...)
+        σ = gauss_to_unif(ω_σ, pr.σ_bounds...)
+        l = gauss_to_unif(ω_l, pr.l_bounds...)
 
         α = σ^2 * (4π * gamma(2)) / gamma(1)
 
@@ -132,11 +133,11 @@ function compute_map(
 
         # Standard deviation component
         ∂Ax∂σtx = ((θ .- pr.μ) / σ)' * ∂Ax∂θtx
-        ∂Ax∂ξσtx = pr.Δσ * pdf(Normal(), ξ_σ) * ∂Ax∂σtx
+        ∂Ax∂ξσtx = pr.Δσ * pdf(Normal(), ω_σ) * ∂Ax∂σtx
         
         # Lengthscale component
-        ∂Ax∂ltx = -(θ - pr.μ)' * (-l^-1.0 * pr.M + l * pr.K)' * H∂Ax∂θtx
-        ∂Ax∂ξltx = pr.Δl * pdf(Normal(), ξ_l) * ∂Ax∂ltx
+        ∂Ax∂ltx = (θ - pr.μ)' * (l^-1.0 * pr.M - l * pr.K)' * H∂Ax∂θtx
+        ∂Ax∂ξltx = pr.Δl * pdf(Normal(), ω_l) * ∂Ax∂ltx
 
         return vcat(∂Ax∂ξtx, ∂Ax∂ξσtx, ∂Ax∂ξltx)
 
@@ -149,10 +150,10 @@ function compute_map(
         x::AbstractVector
     )::AbstractVector
 
-        ξ_σ, ξ_l = η[end-1:end]
+        ω_σ, ω_l = η[end-1:end]
 
-        σ = gauss_to_unif(ξ_σ, pr.σ_bounds...)
-        l = gauss_to_unif(ξ_l, pr.l_bounds...)
+        σ = gauss_to_unif(ω_σ, pr.σ_bounds...)
+        l = gauss_to_unif(ω_l, pr.l_bounds...)
 
         α = σ^2 * (4π * gamma(2)) / gamma(1)
 
@@ -163,15 +164,15 @@ function compute_map(
         ∂Ax∂ξx = ∂Ax∂θ * sparsevec(∂θ∂ξx)
 
         # Standard deviation component
-        ∂σ∂ξσx = pr.Δσ * pdf(Normal(), ξ_σ) * x[end-1]
-        ∂Ax∂ξσx = ∂Ax∂θ * (sparsevec(θ .- pr.μ) / σ) * ∂σ∂ξσx
+        ∂σ∂ωσx = pr.Δσ * pdf(Normal(), ω_σ) * x[end-1]
+        ∂Ax∂ωσx = ∂Ax∂θ * (sparsevec(θ .- pr.μ) / σ) * ∂σ∂ωσx
 
         # Lengthscale component
-        ∂l∂ξlx = pr.Δl * pdf(Normal(), ξ_l) * x[end]
-        ∂θ∂ξlx = -solve(LinearProblem(H, (-l^-1.0 * pr.M + l * pr.K) * (θ .- pr.μ) * ∂l∂ξlx))
-        ∂Ax∂ξlx = ∂Ax∂θ * sparsevec(∂θ∂ξlx)
+        ∂l∂ωlx = pr.Δl * pdf(Normal(), ω_l) * x[end]
+        ∂θ∂ωlx = solve(LinearProblem(H, (l^-1.0 * pr.M - l * pr.K) * (θ .- pr.μ) * ∂l∂ωlx))
+        ∂Ax∂ωlx = ∂Ax∂θ * sparsevec(∂θ∂ωlx)
 
-        return ∂Ax∂ξx + ∂Ax∂ξσx + ∂Ax∂ξlx
+        return ∂Ax∂ξx + ∂Ax∂ωσx + ∂Ax∂ωlx
 
     end
 
@@ -188,18 +189,18 @@ function compute_map(
     end
 
     function solve_forward_inc(
-        B̃θ::AbstractMatrix,
+        Aθ_r::AbstractMatrix,
         b::AbstractVector
     )::AbstractVector
 
         b = reshape(b, nu_r, g.nt)
         u = zeros(nu_r, g.nt)
 
-        prob = LinearProblem(B̃θ, b[:, 1])
+        prob = LinearProblem(Aθ_r, b[:, 1])
         u[:, 1] = solve(prob)
 
         for t ∈ 2:g.nt 
-            prob = LinearProblem(B̃θ, b[:, t] + g.ϕ * g.c * V_r' * V_r * u[:, t-1])
+            prob = LinearProblem(Aθ_r, b[:, t] + g.ϕ * g.c * V_rk' * V_rk * u[:, t-1])
             u[:, t] = solve(prob)
         end
 
@@ -208,7 +209,7 @@ function compute_map(
     end
 
     function solve_adjoint_inc(
-        B̃θ::AbstractMatrix,
+        Aθ_r::AbstractMatrix,
         u_inc::AbstractVector
     )::AbstractVector
         
@@ -216,10 +217,10 @@ function compute_map(
         b = reshape(b, nu_r, g.nt)
 
         p = zeros(nu_r, g.nt)
-        p[:, end] = solve(LinearProblem(B̃θ', b[:, end]))
+        p[:, end] = solve(LinearProblem(Aθ_r', b[:, end]))
 
         for t ∈ (g.nt-1):-1:1
-            prob = LinearProblem(B̃θ', b[:, t] + g.ϕ * g.c * V_r' * V_r * p[:, t+1])
+            prob = LinearProblem(Aθ_r', b[:, t] + V_rk' * g.c * g.ϕ * V_rk * p[:, t+1])
             p[:, t] = solve(prob)
         end
 
@@ -231,7 +232,7 @@ function compute_map(
         d::AbstractVector, 
         η::AbstractVector,
         θ::AbstractVector,
-        B̃θ::AbstractMatrix, 
+        Aθ_r::AbstractMatrix, 
         ∂Au∂θ::AbstractMatrix,
         ∂Aμ∂θ::AbstractMatrix
     )::AbstractVector
@@ -239,8 +240,8 @@ function compute_map(
         ∂Au∂ηx = compute_∂Ax∂ηx(∂Au∂θ, η, θ, d)
         ∂Aμ∂ηx = compute_∂Ax∂ηx(∂Aμ∂θ, η, θ, d)
 
-        u_inc = solve_forward_inc(B̃θ, ∂Au∂ηx + ∂Aμ∂ηx)
-        p_inc = solve_adjoint_inc(B̃θ, u_inc)
+        u_inc = solve_forward_inc(Aθ_r, ∂Au∂ηx + ∂Aμ∂ηx)
+        p_inc = solve_adjoint_inc(Aθ_r, u_inc)
 
         ∂Au∂ηtp_inc = compute_∂Ax∂ηtx(∂Au∂θ, η, θ, p_inc)
         ∂Aμ∂ηtp_inc = compute_∂Ax∂ηtx(∂Aμ∂θ, η, θ, p_inc)
@@ -265,13 +266,12 @@ function compute_map(
 
             η_k = η_c + α_k * δη
             θ_k = transform(pr, η_k)
-            
-            Aθ_k = (1.0 / g.μ) * g.∇h' * spdiagm(g.A * exp.(θ_k)) * g.∇h
-            Bθ_k = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ_k
-            B̃θ_k = V_r' * Bθ_k * V_r 
+
+            Aθ = g.c * g.ϕ * sparse(I, g.nx^2, g.nx^2) + (g.Δt / g.μ) * g.∇h' * spdiagm(g.A * exp.(θ_k)) * g.∇h
+            Aθ_r = V_rk' * Aθ * V_rk 
 
             # TODO: return this to the main loop to avoid computing it again at the next iteration
-            u_k = solve_forward(Bθ_k, B̃θ_k)
+            u_k = solve_forward(Aθ, Aθ_r)
             
             J_k = J(η_k, u_k)
 
@@ -300,17 +300,16 @@ function compute_map(
         
         θ = transform(pr, η)
 
-        Aθ = (1.0 / g.μ) * g.∇h' * spdiagm(g.A * exp.(θ)) * g.∇h
-        Bθ = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ
-        B̃θ = V_r' * Bθ * V_r
+        Aθ = g.c * g.ϕ * sparse(I, g.nx^2, g.nx^2) + (g.Δt / g.μ) * g.∇h' * spdiagm(g.A * exp.(θ)) * g.∇h
+        Aθ_r = V_rk' * Aθ * V_rk
 
-        u = solve_forward(Bθ, B̃θ)
-        p = solve_adjoint(u, B̃θ)
+        u = solve_forward(Aθ, Aθ_r)
+        p = solve_adjoint(u, Aθ_r)
 
         ∂Au∂θ = compute_∂Au∂θ(θ, u)
         ∂Aμ∂θ = compute_∂Aμ∂θ(θ)
 
-        ∇Lη = @time compute_∇Lη(∂Au∂θ, ∂Aμ∂θ, η, θ, p)
+        ∇Lη = compute_∇Lη(∂Au∂θ, ∂Aμ∂θ, η, θ, p)
         
         if i_gn == 1
             norm∇Lη0 = norm(∇Lη)
@@ -335,7 +334,7 @@ function compute_map(
         i_cg = 1
         while true
 
-            Hd = compute_Hd(d, η, θ, B̃θ, ∂Au∂θ, ∂Aμ∂θ)
+            Hd = compute_Hd(d, η, θ, Aθ_r, ∂Au∂θ, ∂Aμ∂θ)
  
             α = (r' * r) / (d' * Hd)
             δη += α * d
@@ -366,7 +365,3 @@ function compute_map(
     end
 
 end
-
-# TODO: remove
-# η = vec(rand(pr, 1))
-# η_map, u_map = optimise(grid_c, pr, y_obs, Q_c, η, μ_u, V_r, μ_ε, Γ_e_inv)
