@@ -17,8 +17,8 @@ function compute_map(
     y::AbstractVector,
     Q::AbstractMatrix,
     η::AbstractVector,          # Initial estimate of η
-    μ_uk::AbstractVector,        # Mean of u, estimated using samples
-    V_rk::AbstractMatrix,        # Reduced basis for u
+    μ_uk::AbstractVector,       # Mean of u, estimated using samples
+    V_rk::AbstractMatrix,       # Reduced basis for u
     μ_ε::AbstractVector,        # Mean of model errors 
     Γ_e_inv::AbstractMatrix     # Inverse of combined measurement and model error covariance
 )
@@ -133,13 +133,13 @@ function compute_map(
 
         # Standard deviation component
         ∂Ax∂σtx = ((θ .- pr.μ) / σ)' * ∂Ax∂θtx
-        ∂Ax∂ξσtx = pr.Δσ * pdf(Normal(), ω_σ) * ∂Ax∂σtx
+        ∂Ax∂ωσtx = pr.Δσ * pdf(Normal(), ω_σ) * ∂Ax∂σtx
         
         # Lengthscale component
         ∂Ax∂ltx = (θ - pr.μ)' * (l^-1.0 * pr.M - l * pr.K)' * H∂Ax∂θtx
-        ∂Ax∂ξltx = pr.Δl * pdf(Normal(), ω_l) * ∂Ax∂ltx
+        ∂Ax∂ωltx = pr.Δl * pdf(Normal(), ω_l) * ∂Ax∂ltx
 
-        return vcat(∂Ax∂ξtx, ∂Ax∂ξσtx, ∂Ax∂ξltx)
+        return vcat(∂Ax∂ξtx, ∂Ax∂ωσtx, ∂Ax∂ωltx)
 
     end
 

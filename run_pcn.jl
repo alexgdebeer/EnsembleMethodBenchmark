@@ -5,10 +5,10 @@ NF = 9 * grid_c.nt # TODO: put n_wells somewhere?
 Ni = 500_000
 
 β = 0.05
-δ = 0.5
+δ = 0.20
 
 Nb = 100
-Nc = 6
+Nc = 4
 
 B_wells = blockdiag([grid_c.Bi for _ ∈ 1:grid_c.nt]...)
 

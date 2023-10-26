@@ -25,8 +25,8 @@ function run_chain(
     NG = length(y)
 
     logpri(η) = -sum(η.^2)
-    loglik(g) = -sum((L_e*(g+μ_e-y)).^2)
-    logpost(η, g) = logpri(η) + loglik(g)
+    loglik(G) = -sum((L_e*(G+μ_e-y)).^2)
+    logpost(η, G) = logpri(η) + loglik(G)
 
     ξs = Matrix{Float64}(undef, pr.Nθ, Nb)
     ωs = Matrix{Float64}(undef, pr.Nω, Nb)
@@ -81,7 +81,7 @@ function run_chain(
         G_p = G(F_f)
 
         h = exp((loglik(G_p) + logpri(ω_p)) - 
-                (loglik(Gs[:, ind_p]) + logpri(ωs[:, ind_p])))
+                (loglik(Gs[:, ind_p]) + logpri(ωs[:, ind_c])))
 
         if h ≥ rand()
             α_ω += 1
