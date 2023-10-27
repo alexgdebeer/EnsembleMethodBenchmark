@@ -102,6 +102,7 @@ u_t = solve(grid_f, θ_t, Q_f)
 
 σ_ϵ = u0 * 0.01
 Γ_ϵ = diagm(fill(σ_ϵ^2, grid_f.ny))
+Γ_ϵ_inv = spdiagm(fill(σ_ϵ^-2, grid_f.ny))
 
 y_obs = grid_f.B * u_t
 y_obs += rand(MvNormal(Γ_ϵ))
@@ -115,8 +116,6 @@ function F(η::AbstractVector)
     return solve(grid_c, θ, Q_c)
 end
 
-# TODO: figure out how to do POD code without requiring this function 
-# to have the mean and reduced basis as inputs
 function F_r(η::AbstractVector)
     θ = transform(pr, η)
     return solve(grid_c, θ, Q_c, μ_u, V_r)
@@ -132,7 +131,7 @@ end
 
 # Generate POD basis 
 # μ_u, V_r, μ_ε, Γ_ε = generate_pod_data(grid_c, F, G, pr, 100, 0.999, "pod$(grid_c.nx)")
-μ_u, V_r, μ_ε, Γ_ε = read_pod_data("pod80")
+μ_u, V_r, μ_ε, Γ_ε = read_pod_data("pod$(grid_c.nx)")
 
 Γ_e = Hermitian(Γ_ϵ + Γ_ε)
 Γ_e_inv = Hermitian(inv(Γ_e))

@@ -19,14 +19,14 @@ function compute_map(
     η::AbstractVector,          # Initial estimate of η
     μ_uk::AbstractVector,       # Mean of u, estimated using samples
     V_rk::AbstractMatrix,       # Reduced basis for u
-    μ_ε::AbstractVector,        # Mean of model errors 
+    μ_e::AbstractVector,        # Mean of errors 
     Γ_e_inv::AbstractMatrix     # Inverse of combined measurement and model error covariance
 )
 
     # Get the size of the reduced state vector
     nu_r = size(V_rk, 2)
 
-    # TODO: tidy this up (and the above line of code)
+    # TODO: avoid using these variables, or include them as inputs
     V_r = sparse(kron(sparse(I, g.nt, g.nt), V_rk))
     BV_r = g.B * V_r
     μ_u = repeat(μ_uk, g.nt)
@@ -35,7 +35,7 @@ function compute_map(
         η::AbstractVector, 
         u::AbstractVector
     )::Real
-        res = g.B * (V_r * u + μ_u) + μ_ε - y
+        res = g.B * (V_r * u + μ_u) + μ_e - y
         return 0.5 * res' * Γ_e_inv * res + 0.5 * sum(η.^2)
     end
 
@@ -94,14 +94,14 @@ function compute_map(
         
         p = zeros(nu_r, g.nt) 
 
-        b = -BV_r' * Γ_e_inv * (BV_r * u + g.B * μ_u + μ_ε - y)
+        b = -V_r' * g.B' * Γ_e_inv * (g.B * (V_r * u + μ_u) + μ_e - y)
         b = reshape(b, nu_r, g.nt)
 
-        prob = LinearProblem(Aθ_r', b[:, end])
+        prob = LinearProblem(Matrix(Aθ_r'), b[:, end])
         p[:, end] = solve(prob)
 
         for t ∈ (g.nt-1):-1:1
-            prob = LinearProblem(Aθ_r', b[:, t] + V_rk' * g.c * g.ϕ * V_rk * p[:, t+1])
+            prob = LinearProblem(Matrix(Aθ_r'), b[:, t] + V_rk' * g.c * g.ϕ * V_rk * p[:, t+1])
             p[:, t] = solve(prob)
         end
 
@@ -217,10 +217,10 @@ function compute_map(
         b = reshape(b, nu_r, g.nt)
 
         p = zeros(nu_r, g.nt)
-        p[:, end] = solve(LinearProblem(Aθ_r', b[:, end]))
+        p[:, end] = solve(LinearProblem(Matrix(Aθ_r'), b[:, end]))
 
         for t ∈ (g.nt-1):-1:1
-            prob = LinearProblem(Aθ_r', b[:, t] + V_rk' * g.c * g.ϕ * V_rk * p[:, t+1])
+            prob = LinearProblem(Matrix(Aθ_r'), b[:, t] + V_rk' * g.c * g.ϕ * V_rk * p[:, t+1])
             p[:, t] = solve(prob)
         end
 
@@ -306,10 +306,42 @@ function compute_map(
         u = solve_forward(Aθ, Aθ_r)
         p = solve_adjoint(u, Aθ_r)
 
+        # println(J(η, u))
+
+        # ----------------
+        # TEMP: test forward problem by solving full problem.
+        # ----------------
+        # Ãθ = blockdiag([Aθ for _ ∈ 1:g.nt]...)
+        # Id = g.c * g.ϕ * sparse(I, g.nx^2*(g.nt-1), g.nx^2*(g.nt-1))
+        # Ãθ[(g.nx^2+1):end, 1:(g.nx^2*(g.nt-1))] -= Id
+        # B̃θ = blockdiag([Aθ for _ ∈ 1:g.nt]...)
+        # Qs = sparsevec(Q)
+
+        # û0 = spzeros(g.nx^2*g.nt)
+        # û0[1:g.nx^2] = g.u0 .- μ_uk
+        # u_test = solve(LinearProblem(Matrix(V_r' * Ãθ * V_r), V_r' * (g.Δt * Qs + g.c * g.ϕ * (û0 + μ_u) - B̃θ * μ_u)))
+
+        # ----------------
+        # TEMP: test adjoint problem by solving full problem.
+        # ----------------
+        # b_test = -V_r' * g.B' * Γ_e_inv * (g.B * (V_r * u + μ_u) + μ_e - y)
+        # p_test = solve(LinearProblem(V_r' * Ãθ' * V_r, b_test))
+
+        # p = reshape(p, nu_r, g.nt)
+        # p_test = reshape(p_test, nu_r, g.nt)
+        # display(p)
+        # display(p_test)
+        # display(maximum(V_r' * Ãθ' * V_r * p - b_test))
+        # display(maximum(V_r' * Ãθ' * V_r * p_test - b_test))
+        # error("stop")
+
         ∂Au∂θ = compute_∂Au∂θ(θ, u)
         ∂Aμ∂θ = compute_∂Aμ∂θ(θ)
 
         ∇Lη = compute_∇Lη(∂Au∂θ, ∂Aμ∂θ, η, θ, p)
+
+        # TEMP
+        # Compute Jacobian using finite differences
         
         if i_gn == 1
             norm∇Lη0 = norm(∇Lη)
