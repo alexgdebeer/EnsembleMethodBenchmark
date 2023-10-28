@@ -74,7 +74,7 @@ function build_Q(
         end
     end
 
-    Q = sparse(Q_i, Q_j, Q_v, g.nx^2, g.nt+1)
+    Q = sparse(Q_i, Q_j, Q_v, g.nx^2, g.nt)
     return Q
 
 end
