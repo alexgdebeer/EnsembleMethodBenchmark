@@ -3,99 +3,23 @@ using LinearSolve
 using HDF5
 using SparseArrays
 
-"""Well that has been mollified using a bump function of radius r."""
-struct Well
-
-    cx::Real
-    cy::Real
-    r::Real
-
-    rates::Tuple
-    Z::Real
-    
-    function Well(
-        g::Grid, 
-        cx::Real, 
-        cy::Real, 
-        r::Real,
-        rates::Tuple
-    )::Well
-
-        """Calculates the value to scale the bump function by, such that 
-        the values of the function on the model grid sum to 1."""
-        function normalising_constant(
-            g::Grid, 
-            cx::Real, 
-            cy::Real, 
-            r::Real
-        )::Real
-        
-            Z = 0.0
-            for (x, y) ∈ zip(g.cxs, g.cys)
-                if (r_sq = (x-cx)^2 + (y-cy)^2) < r^2
-                    Z += exp(-1/(r^2-r_sq))
-                end
-            end
-        
-            return Z
-        
-        end
-
-        Z = normalising_constant(g, cx, cy, r)
-
-        return new(cx, cy, r, rates, Z)
-    
-    end
-
-end
-
-"""Builds the forcing term at each time index."""
-function build_Q(
-    g::Grid,
-    wells::AbstractVector{Well},
-    well_change_times::AbstractVector 
-)::SparseMatrixCSC
-
-    Q_i = Int[]
-    Q_j = Int[]
-    Q_v = Float64[]
-
-    time_inds = [findlast(well_change_times .<= t + 1e-8) for t ∈ g.ts]
-
-    for (i, (x, y)) ∈ enumerate(zip(g.cxs, g.cys))
-        for w ∈ wells 
-            if (dist_sq = (x-w.cx)^2 + (y-w.cy)^2) < w.r^2
-                for (j, q) ∈ enumerate(w.rates[time_inds])
-                    push!(Q_i, i)
-                    push!(Q_j, j)
-                    push!(Q_v, q * exp(-1/(q^2-dist_sq)) / w.Z)
-                end
-            end
-        end
-    end
-
-    Q = sparse(Q_i, Q_j, Q_v, g.nx^2, g.nt)
-    return Q
-
-end
-
 """Solves the full model."""
 function SciMLBase.solve(
     g::Grid, 
-    θ::AbstractVector, 
-    Q::AbstractMatrix
+    m::Model,
+    θ::AbstractVector
 )::AbstractVector
 
     u = zeros(g.nx^2, g.nt)
 
-    A = (1.0 / g.μ) * g.∇h' * spdiagm(g.A * exp.(θ)) * g.∇h 
-    B = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * A 
+    A = (1.0 / m.μ) * g.∇h' * spdiagm(g.A * exp.(θ)) * g.∇h 
+    B = m.ϕ * m.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * A 
     
-    prob = LinearProblem(B, g.Δt*Q[:, 1] .+ g.ϕ*g.c*g.u0)
+    prob = LinearProblem(B, g.Δt * m.Q[:, 1] .+ m.ϕ * m.c * m.u0)
     u[:, 1] = solve(prob)
 
     for t ∈ 2:g.nt
-        prob = LinearProblem(B, g.Δt*Q[:, t] + g.ϕ*g.c*u[:, t-1])
+        prob = LinearProblem(B, g.Δt * m.Q[:, t] + m.ϕ * m.c * u[:, t-1])
         u[:, t] = solve(prob)
     end
 
@@ -106,28 +30,25 @@ end
 """Solves the reduced-order model."""
 function SciMLBase.solve(
     g::Grid, 
-    θ::AbstractVector, 
-    Q::AbstractMatrix,
-    μ_u::AbstractVector,
-    V_r::AbstractMatrix
+    m::ReducedOrderModel,
+    θ::AbstractVector
 )::AbstractVector
 
-    nu_r = size(V_r, 2)
-    u = zeros(nu_r, g.nt)
+    u = zeros(m.nu_r, g.nt)
 
-    Aθ = (1.0 / g.μ) * g.∇h' * spdiagm(g.A * exp.(θ)) * g.∇h
-    Bθ = g.ϕ * g.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ
-    B̃θ = V_r' * Bθ * V_r
+    Aθ = (1.0 / m.μ) * g.∇h' * spdiagm(g.A * exp.(θ)) * g.∇h
+    Bθ = m.ϕ * m.c * sparse(I, g.nx^2, g.nx^2) + g.Δt * Aθ
+    B̃θ = m.V_r' * Bθ * m.V_r
 
-    b = V_r' * (g.Δt * Q[:, 1] .+ (g.ϕ * g.c * u0) .- Bθ * μ_u)
+    b = m.V_r' * (g.Δt * m.Q[:, 1] .+ (m.ϕ * m.c * m.u0) .- Bθ * m.μ_u)
     u[:, 1] = solve(LinearProblem(B̃θ, b))
 
     for t ∈ 2:g.nt
-        b = V_r' * (g.Δt * Q[:, t] + g.ϕ * g.c * (V_r * u[:, t-1] + μ_u) - Bθ * μ_u)
+        b = m.V_r' * (g.Δt * m.Q[:, t] + m.ϕ * m.c * (m.V_r * u[:, t-1] + m.μ_u) - Bθ * m.μ_u)
         u[:, t] = solve(LinearProblem(B̃θ, b))
     end
 
-    return vec(V_r * u .+ μ_u)
+    return vec(m.V_r * u .+ m.μ_u)
 
 end
 

@@ -38,8 +38,8 @@ x_obs = [c[1] for c ∈ well_centres]
 y_obs = [c[2] for c ∈ well_centres]
 t_obs = [8, 16, 24, 32, 40, 48, 56, 64, 72, 80]
 
-grid_c = Grid(xmax, tmax, Δx_c, Δt_c, x_obs, y_obs, t_obs, ϕ, μ, c, u0)
-grid_f = Grid(xmax, tmax, Δx_f, Δt_f, x_obs, y_obs, t_obs, ϕ, μ, c, u0)
+grid_c = Grid(xmax, tmax, Δx_c, Δt_c)
+grid_f = Grid(xmax, tmax, Δx_f, Δt_f)
 
 # ----------------
 # Well parameters 
@@ -73,8 +73,8 @@ wells_f = [
     for (centre, rates) ∈ zip(well_centres, well_rates_f)
 ]
 
-Q_c = build_Q(grid_c, wells_c, well_change_times)
-Q_f = build_Q(grid_f, wells_f, well_change_times)
+model_f = Model(grid_f, ϕ, μ, c, u0, wells_f, well_change_times, x_obs, y_obs, t_obs)
+model_c = Model(grid_c, ϕ, μ, c, u0, wells_c, well_change_times, x_obs, y_obs, t_obs)
 
 # ----------------
 # Prior 
@@ -82,7 +82,7 @@ Q_f = build_Q(grid_f, wells_f, well_change_times)
 
 lnp_μ = -31
 σ_bounds = (0.5, 1.25)
-l_bounds = (100, 1000)
+l_bounds = (200, 1000)
 
 pr = MaternField(grid_c, lnp_μ, σ_bounds, l_bounds)
 
@@ -94,18 +94,18 @@ true_field = MaternField(grid_f, lnp_μ, σ_bounds, l_bounds)
 η_t = rand(true_field)
 θ_t = transform(true_field, η_t)
 
-u_t = solve(grid_f, θ_t, Q_f)
+u_t = solve(grid_f, model_f, θ_t)
 
 # ----------------
 # Data
 # ----------------
 
 σ_ϵ = u0 * 0.01
-Γ_ϵ = diagm(fill(σ_ϵ^2, grid_f.ny))
-Γ_ϵ_inv = spdiagm(fill(σ_ϵ^-2, grid_f.ny))
+Γ_ϵ = diagm(fill(σ_ϵ^2, model_f.ny))
+Γ_ϵ_inv = spdiagm(fill(σ_ϵ^-2, model_f.ny))
 
-y_obs = grid_f.B * u_t
-y_obs += rand(MvNormal(Γ_ϵ))
+d_obs = model_f.B * u_t
+d_obs += rand(MvNormal(Γ_ϵ))
 
 # ----------------
 # Model functions
@@ -113,16 +113,16 @@ y_obs += rand(MvNormal(Γ_ϵ))
 
 function F(η::AbstractVector)
     θ = transform(pr, η)
-    return solve(grid_c, θ, Q_c)
+    return solve(grid_c, model_c, θ)
+end
+
+function G(us::AbstractVector)
+    return model_c.B * us
 end
 
 function F_r(η::AbstractVector)
     θ = transform(pr, η)
-    return solve(grid_c, θ, Q_c, μ_u, V_r)
-end
-
-function G(us::AbstractVector)
-    return grid_c.B * us
+    return solve(grid_c, model_r, θ)
 end
 
 # ----------------
@@ -130,12 +130,17 @@ end
 # ----------------
 
 # Generate POD basis 
-# μ_u, V_r, μ_ε, Γ_ε = generate_pod_data(grid_c, F, G, pr, 100, 0.999, "pod$(grid_c.nx)")
-μ_u, V_r, μ_ε, Γ_ε = read_pod_data("pod$(grid_c.nx)")
+# μ_ui, V_ri, μ_ε, Γ_ε = generate_pod_data(grid_c, F, G, pr, 100, 0.999, "pod$(grid_c.nx)")
+μ_ui, V_ri, μ_ε, Γ_ε = read_pod_data("pod$(grid_c.nx)")
 
 Γ_e = Hermitian(Γ_ϵ + Γ_ε)
 Γ_e_inv = Hermitian(inv(Γ_e))
 L_e = cholesky(Γ_e_inv).U
+
+model_r = ReducedOrderModel(
+    grid_c, ϕ, μ, c, u0, wells_c, well_change_times,
+    x_obs, y_obs, t_obs, μ_ui, V_ri, μ_ε, Γ_e
+)
 
 # if TEST_POD
 
