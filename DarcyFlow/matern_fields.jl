@@ -151,6 +151,6 @@ function transform(
     A = mf.M + l^2 * mf.K + l / 1.42 * mf.N
     b = √(α) * l * mf.L * ξ + A * mf.μ
 
-    return solve(LinearProblem(A, b))
+    return solve(LinearProblem(A, b)).u
 
 end
