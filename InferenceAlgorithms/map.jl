@@ -319,33 +319,6 @@ function compute_map(
         u_r = solve_forward(Aθ, Aθ_r)
         p = solve_adjoint(u_r, Aθ_r)
 
-        # println(J(η, u))
-
-        # # ----------------
-        # # TEMP: test forward problem by solving full problem.
-        # # ----------------
-        # Ãθ = blockdiag([Aθ for _ ∈ 1:g.nt]...)
-        # Id = g.c * g.ϕ * sparse(I, g.nx^2*(g.nt-1), g.nx^2*(g.nt-1))
-        # Ãθ[(g.nx^2+1):end, 1:(g.nx^2*(g.nt-1))] -= Id
-        # B̃θ = blockdiag([Aθ for _ ∈ 1:g.nt]...)
-        # Qs = sparsevec(Q)
-
-        # û0 = spzeros(g.nx^2*g.nt)
-        # û0[1:g.nx^2] = g.u0 .- μ_ui
-        # u_test = solve(LinearProblem(Matrix(V_r' * Ãθ * V_r), V_r' * (g.Δt * Qs + g.c * g.ϕ * (û0 + μ_u) - B̃θ * μ_u)))
-
-        # # ----------------
-        # # TEMP: test adjoint problem by solving full problem.
-        # # ----------------
-        # b_test = -V_r' * g.B' * Γ_e_inv * (g.B * (V_r * u + μ_u) + μ_e - y)
-        # p_test = solve(LinearProblem(Matrix(V_r' * Ãθ' * V_r), Vector(b_test))).u
-
-        # p = reshape(p, nu_r, g.nt)
-        # p_test = reshape(p_test, nu_r, g.nt)
-        # display(p)
-        # display(p_test)
-        # error("stop")
-
         # TODO: how to make these faster?
         ∂Au∂θ = compute_∂Au∂θ(θ, u_r)
         ∂Aμ∂θ = compute_∂Aμ∂θ(θ)
