@@ -476,6 +476,7 @@ function compute_laplace(
 
     println(info.numops)
     println(info.numiter)
+    println(minimum(vals))
     
     λ_r = vals[vals .> 1e-2]
     V_r = hcat(vecs[vals .> 1e-2]...)
