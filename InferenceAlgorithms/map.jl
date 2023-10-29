@@ -262,7 +262,7 @@ function solve_adjoint_inc(
 
 end
 
-function compute_Hx(
+function compute_Hmx(
     x::AbstractVector, 
     η::AbstractVector,
     θ::AbstractVector,
@@ -283,7 +283,23 @@ function compute_Hx(
     ∂Au∂ηtp_inc = compute_∂Ax∂ηtx(∂Au∂θ, η, θ, p_inc, pr)
     ∂Aμ∂ηtp_inc = compute_∂Ax∂ηtx(∂Aμ∂θ, η, θ, p_inc, pr)
 
-    return ∂Au∂ηtp_inc + ∂Aμ∂ηtp_inc + x
+    return ∂Au∂ηtp_inc + ∂Aμ∂ηtp_inc
+
+end
+
+function compute_Hx(
+    x::AbstractVector, 
+    η::AbstractVector,
+    θ::AbstractVector,
+    Aθ_r::AbstractMatrix, 
+    ∂Au∂θ::AbstractMatrix,
+    ∂Aμ∂θ::AbstractMatrix,
+    g::Grid,
+    m::ReducedOrderModel,
+    pr::MaternField
+)::AbstractVector
+
+    return compute_Hmx(x, η, θ, Aθ_r, ∂Au∂θ, ∂Aμ∂θ, g, m, pr) + x
 
 end
 
@@ -441,26 +457,82 @@ function compute_map(
 
 end
 
-function compute_laplace(
+function compute_laplace_alt(
     g::Grid,
     m::ReducedOrderModel,
     pr::MaternField,
     d_obs::AbstractVector,
     η0::AbstractVector;
-    n_eigvals::Int=500
+    n_eigvals::Int=30
 )
 
     map = compute_map(g, m, pr, d_obs, η0)
     !map.converged && @warn "MAP optimisation failed to converge."
 
-    f(x) = compute_Hx(x, map.η, map.θ, map.Aθ_r, map.∂Au∂θ, map.∂Aμ∂θ, g, m, pr)
+    f(x) = compute_Hmx(x, map.η, map.θ, map.Aθ_r, map.∂Au∂θ, map.∂Aμ∂θ, g, m, pr)
 
-    vals, vecs, info = eigsolve(f, pr.Nη, n_eigvals, :LR, krylovdim=10000, issymmetric=true, tol=1e-16)
-    println(vals)
-    println(info.converged)
+    vals, vecs, info = eigsolve(f, pr.Nη, n_eigvals, :LM, issymmetric=true)
+    info.converged != length(vals) && @warn "eigsolve did not converge."
+
     println(info.numops)
     println(info.numiter)
+    
+    λ_r = vals[vals .> 1e-2]
+    V_r = hcat(vecs[vals .> 1e-2]...)
 
-    return -1
+    D_r = diagm(λ_r ./ (λ_r .+ 1.0))
+    P_r = diagm(1.0 ./ sqrt.(λ_r .+ 1.0) .- 1.0)
+
+    Γ_post = I - V_r * D_r * V_r'
+    L_post = V_r * P_r * V_r' + I
+
+    return map, Γ_post, L_post
+
+end
+
+function compute_laplace_alt(
+    g::Grid,
+    m::ReducedOrderModel,
+    pr::MaternField,
+    d_obs::AbstractVector,
+    η0::AbstractVector;
+    n_eigvals::Int=10
+)
+
+    map = compute_map(g, m, pr, d_obs, η0)
+    !map.converged && @warn "MAP optimisation failed to converge."
+
+    # TEMP: form Jacobian
+    ξ_σ, ξ_l = map.η[end-1:end]
+    σ = gauss_to_unif(ξ_σ, pr.σ_bounds...)
+    l = gauss_to_unif(ξ_l, pr.l_bounds...)
+    α = σ^2 * (4π * gamma(2)) / gamma(1)
+    H = pr.M + l^2 * pr.K + l / 1.42 * pr.N 
+    invH = inv(Matrix(H))
+
+    ∂Au∂ξ = map.∂Au∂θ * invH * √(α) * l * pr.L
+    ∂Au∂ξσ = map.∂Au∂θ * ((map.θ - pr.μ) ./ σ) * pr.Δσ * pdf(UNIT_NORM, ξ_σ)
+    ∂Au∂ξl = map.∂Au∂θ * invH * (l^-1.0 * pr.M - l * pr.K) * (map.θ .- pr.μ) * pr.Δl * pdf(UNIT_NORM, ξ_l)
+
+    ∂Aμ∂ξ = map.∂Aμ∂θ * invH * √(α) * l * pr.L
+    ∂Aμ∂ξσ = map.∂Aμ∂θ * ((map.θ - pr.μ) ./ σ) * pr.Δσ * pdf(UNIT_NORM, ξ_σ)
+    ∂Aμ∂ξl = map.∂Aμ∂θ * invH * (l^-1.0 * pr.M - l * pr.K) * (map.θ .- pr.μ) * pr.Δl * pdf(UNIT_NORM, ξ_l)
+
+    ∂Au∂η = Matrix(hcat(∂Au∂ξ, ∂Au∂ξσ, ∂Au∂ξl))
+    ∂Aμ∂η = Matrix(hcat(∂Aμ∂ξ, ∂Aμ∂ξσ, ∂Aμ∂ξl))
+
+    Ãθ_r = blockdiag([sparse(map.Aθ_r) for _ ∈ 1:g.nt]...)
+
+    for t ∈ 1:(g.nt-1)
+        iix = (t*m.nu_r+1):(t+1)*m.nu_r
+        iiy = ((t-1)*m.nu_r+1):(t*m.nu_r)
+        Ãθ_r[iix, iiy] += -m.ϕ * m.c * sparse(I, m.nu_r, m.nu_r)
+    end
+
+    Ãθ_r_inv = inv(Matrix(Ãθ_r))
+    
+    H_GN = (∂Au∂η + ∂Aμ∂η)' * Ãθ_r_inv' * m.BV_r' * m.Γ_e_inv * m.BV_r * Ãθ_r_inv * (∂Au∂η + ∂Aμ∂η)
+
+    return map, H_GN
 
 end
