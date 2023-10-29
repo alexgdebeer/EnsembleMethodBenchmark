@@ -404,7 +404,7 @@ function compute_map(
     pr::MaternField,
     d_obs::AbstractVector,
     η0::AbstractVector,
-)
+)::GNResult
 
     η = copy(η0) 
     u_r = nothing
@@ -457,14 +457,14 @@ function compute_map(
 
 end
 
-function compute_laplace_alt(
+function compute_laplace(
     g::Grid,
     m::ReducedOrderModel,
     pr::MaternField,
     d_obs::AbstractVector,
     η0::AbstractVector;
     n_eigvals::Int=30
-)
+)::Tuple{GNResult, AbstractMatrix, AbstractMatrix}
 
     map = compute_map(g, m, pr, d_obs, η0)
     !map.converged && @warn "MAP optimisation failed to converge."
