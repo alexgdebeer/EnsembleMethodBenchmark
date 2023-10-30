@@ -1,5 +1,5 @@
 include("setup.jl")
-include("InferenceAlgorithms/eki.jl")
+include("InferenceAlgorithms/InferenceAlgorithms.jl")
 
 Ne = 1000
 ηs, θs, Fs, Gs, αs = run_eki_dmc(F, G, pr, d_obs, μ_e, Γ_e, L_e, Ne)

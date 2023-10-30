@@ -1,5 +1,5 @@
 include("setup.jl")
-include("InferenceAlgorithms/pcn.jl")
+include("InferenceAlgorithms/InferenceAlgorithms.jl")
 
 NF = 9 * grid_c.nt # TODO: put n_wells somewhere?
 Ni = 500_000

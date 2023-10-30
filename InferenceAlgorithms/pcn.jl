@@ -1,6 +1,3 @@
-using Distributions
-using Printf
-
 function run_chain(
     F::Function,
     G::Function,

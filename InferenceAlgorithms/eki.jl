@@ -1,6 +1,3 @@
-using LinearAlgebra
-using Printf
-
 function calculate_deviations(
     xs::AbstractMatrix, 
     N::Int

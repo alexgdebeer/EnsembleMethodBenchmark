@@ -1,5 +1,5 @@
 include("setup.jl")
-include("InferenceAlgorithms/map.jl")
+include("InferenceAlgorithms/InferenceAlgorithms.jl")
 
 η0 = vec(rand(pr, 1))
 map, Γ_post, L_post = compute_laplace(grid_c, model_r, pr, d_obs, η0)
