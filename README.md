@@ -6,3 +6,4 @@
  - Read papers on RTO and implement.
  - Check MCMC convergence diagnostics.
  - Plot prior predictive UQ.
+ - LMAP: record number of PDE solves.
