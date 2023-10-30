@@ -1,15 +1,11 @@
 include("setup.jl")
 include("InferenceAlgorithms/eki.jl")
 
-NF = grid_c.nx^2 * grid_c.nt
 Ne = 1000
+ηs, θs, Fs, Gs, αs = run_eki_dmc(F, G, pr, d_obs, μ_e, Γ_e, L_e, Ne)
 
-ηs, Fs, Gs, αs = run_eki_dmc(F_r, G, pr, d_obs, μ_e, Γ_e, NF, Ne)
-
-lnps = hcat([transform(pr, η) for η in eachcol(ηs[end])]...)
-
-μ_post = reshape(mean(lnps, dims=2), grid_c.nx, grid_c.nx)
-σ_post = reshape(std(lnps, dims=2), grid_c.nx, grid_c.nx)
+μ_post = reshape(mean(θs[end], dims=2), grid_c.nx, grid_c.nx)
+σ_post = reshape(std(θs[end], dims=2), grid_c.nx, grid_c.nx)
 
 # Hyperparameters
 σs_pri = [pr.σ_bounds[1] + cdf(Normal(), σ) * pr.Δσ for σ ∈ ηs[1][end-1, :]]

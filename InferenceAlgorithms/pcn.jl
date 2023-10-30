@@ -5,7 +5,7 @@ function run_chain(
     F::Function,
     G::Function,
     pr::MaternField,
-    y::AbstractVector,
+    d_obs::AbstractVector,
     μ_e::AbstractVector,
     L_e::AbstractMatrix,
     η0::AbstractVector,
@@ -24,7 +24,7 @@ function run_chain(
     norm = Normal()
 
     logpri(η) = -sum(η.^2)
-    loglik(G) = -sum((L_e*(G+μ_e-y)).^2)
+    loglik(G) = -sum((L_e*(G+μ_e-d_obs)).^2)
     logpost(η, G) = logpri(η) + loglik(G)
 
     ξs = Matrix{Float64}(undef, pr.Nθ, Nb)
@@ -149,7 +149,7 @@ function run_pcn(
     F::Function,
     G::Function,
     pr::MaternField,
-    y::AbstractVector,
+    d_obs::AbstractVector,
     μ_e::AbstractVector,
     L_e::AbstractMatrix,
     NF::Int,
@@ -164,25 +164,13 @@ function run_pcn(
 
     verbose && println("Chain | Iters | ξ acc. | ω acc. | logpost   | time (s)")
 
-    NG = length(y)
-
-    # for i ∈ 1:Nc 
-
-        # h5open("data/mcmc/chain_$i.h5", "cw") do f
-        #     create_dataset(f, "ηs", datatype(Float64), dataspace(pr.Nη, Ni), chunk=(pr.Nη, Nb))
-        #     create_dataset(f, "θs", datatype(Float64), dataspace(pr.Nθ, Ni), chunk=(pr.Nθ, Nb))
-        #     create_dataset(f, "Fs", datatype(Float64), dataspace(NF, Ni), chunk=(NF, Nb))
-        #     create_dataset(f, "Gs", datatype(Float64), dataspace(NG, Ni), chunk=(NG, Nb))
-        #     create_dataset(f, "τs", datatype(Float64), dataspace(1, Ni), chunk=(1, Nb))
-        # end
-
-    # end
+    NG = length(d_obs)
 
     Threads.@threads for chain_num ∈ 1:Nc
 
         η0 = vec(rand(pr))
         run_chain(
-            F, G, pr, y, μ_e, L_e, η0, 
+            F, G, pr, d_obs, μ_e, L_e, η0, 
             NF, NG, Ni, Nb, β, δ,
             B_wells, chain_num,
             verbose=verbose
