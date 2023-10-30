@@ -1,8 +1,6 @@
 using Distributions
 using Printf
 
-# TODO: check this code!!
-
 function run_chain(
     F::Function,
     G::Function,
@@ -12,6 +10,7 @@ function run_chain(
     L_e::AbstractMatrix,
     η0::AbstractVector,
     NF::Int,
+    NG::Int,
     Ni::Int, 
     Nb::Int,
     β::Real,
@@ -21,8 +20,8 @@ function run_chain(
     verbose::Bool=true
 )
 
+    θ0 = transform(pr, η0)
     norm = Normal()
-    NG = length(y)
 
     logpri(η) = -sum(η.^2)
     loglik(G) = -sum((L_e*(G+μ_e-y)).^2)
@@ -30,6 +29,7 @@ function run_chain(
 
     ξs = Matrix{Float64}(undef, pr.Nθ, Nb)
     ωs = Matrix{Float64}(undef, pr.Nω, Nb)
+    θs = Matrix{Float64}(undef, pr.Nθ, Nb)
     Fs = Matrix{Float64}(undef, NF, Nb)
     Gs = Matrix{Float64}(undef, NG, Nb)
     τs = Vector{Float64}(undef, Nb)
@@ -39,13 +39,15 @@ function run_chain(
 
     ξs[:, 1] = η0[1:pr.Nθ]
     ωs[:, 1] = η0[pr.Nθ+1:end]
+    θs[:, 1] = θ0
 
-    F_f = F(η0)
+    F_f = F(θ0)
     Fs[:, 1] = B_wells * F_f
     Gs[:, 1] = G(F_f)
     τs[1] = logpost(η0, Gs[:, 1])
 
     t0 = time()
+    n_chunk = 1
     for i ∈ 1:(Ni-1)
 
         ind_c = (i-1) % Nb + 1
@@ -55,7 +57,9 @@ function run_chain(
         ξ_p = √(1-β^2) * ξs[:, ind_c] + β*ζ_ξ
 
         η_p = vcat(ξ_p, ωs[:, ind_c])
-        F_f = F(η_p)
+        θ_p = transform(pr, η_p)
+
+        F_f = F(θ_p)
         F_p = B_wells * F_f
         G_p = G(F_f)
 
@@ -64,10 +68,12 @@ function run_chain(
         if h ≥ rand()
             α_ξ += 1
             ξs[:, ind_p] = ξ_p
+            θs[:, ind_p] = θ_p
             Fs[:, ind_p] = F_p
             Gs[:, ind_p] = G_p
         else
             ξs[:, ind_p] = ξs[:, ind_c]
+            θs[:, ind_p] = θs[:, ind_c]
             Fs[:, ind_p] = Fs[:, ind_c]
             Gs[:, ind_p] = Gs[:, ind_c]
         end
@@ -76,7 +82,9 @@ function run_chain(
         ω_p = ωs[:, ind_c] + δ*ζ_ω
 
         η_p = vcat(ξs[:, ind_p], ω_p)
-        F_f = F(η_p)
+        θ_p = transform(pr, η_p)
+
+        F_f = F(θ_p)
         F_p = B_wells * F_f
         G_p = G(F_f)
 
@@ -86,6 +94,7 @@ function run_chain(
         if h ≥ rand()
             α_ω += 1
             ωs[:, ind_p] = ω_p
+            θs[:, ind_p] = θ_p
             Fs[:, ind_p] = F_p 
             Gs[:, ind_p] = G_p
         else
@@ -98,12 +107,22 @@ function run_chain(
         if (i+1) % Nb == 0
 
             ηs = vcat(ξs, ωs)
-            n_batch = i ÷ Nb
 
-            h5write("data/mcmc/chain_$n_chain.h5", "ηs_$n_batch", ηs)
-            h5write("data/mcmc/chain_$n_chain.h5", "Fs_$n_batch", Fs)
-            h5write("data/mcmc/chain_$n_chain.h5", "Gs_$n_batch", Gs)
-            h5write("data/mcmc/chain_$n_chain.h5", "τs_$n_batch", τs)
+            # h5open("data/mcmc/chain_$n_chain.h5", "cw") do f
+            #     HDF5.do_write_chunk(f["ηs"], n_chunk, ηs)
+            #     HDF5.do_write_chunk(f["θs"], n_chunk, θs)
+            #     HDF5.do_write_chunk(f["Fs"], n_chunk, Fs)
+            #     HDF5.do_write_chunk(f["Gs"], n_chunk, Gs)
+            #     HDF5.do_write_chunk(f["τs"], n_chunk, τs)
+            # end
+
+            h5write("data/mcmc/chain_$n_chain.h5", "ηs_$n_chunk", ηs)
+            h5write("data/mcmc/chain_$n_chain.h5", "θs_$n_chunk", θs)
+            h5write("data/mcmc/chain_$n_chain.h5", "Fs_$n_chunk", Fs)
+            h5write("data/mcmc/chain_$n_chain.h5", "Gs_$n_chunk", Gs)
+            h5write("data/mcmc/chain_$n_chain.h5", "τs_$n_chunk", τs)
+
+            n_chunk += 1
 
             if verbose
 
@@ -121,6 +140,8 @@ function run_chain(
         end
 
     end
+
+    return nothing
 
 end
 
@@ -143,13 +164,27 @@ function run_pcn(
 
     verbose && println("Chain | Iters | ξ acc. | ω acc. | logpost   | time (s)")
 
-    Threads.@threads for n_chain ∈ 1:Nc
+    NG = length(y)
+
+    # for i ∈ 1:Nc 
+
+        # h5open("data/mcmc/chain_$i.h5", "cw") do f
+        #     create_dataset(f, "ηs", datatype(Float64), dataspace(pr.Nη, Ni), chunk=(pr.Nη, Nb))
+        #     create_dataset(f, "θs", datatype(Float64), dataspace(pr.Nθ, Ni), chunk=(pr.Nθ, Nb))
+        #     create_dataset(f, "Fs", datatype(Float64), dataspace(NF, Ni), chunk=(NF, Nb))
+        #     create_dataset(f, "Gs", datatype(Float64), dataspace(NG, Ni), chunk=(NG, Nb))
+        #     create_dataset(f, "τs", datatype(Float64), dataspace(1, Ni), chunk=(1, Nb))
+        # end
+
+    # end
+
+    Threads.@threads for chain_num ∈ 1:Nc
 
         η0 = vec(rand(pr))
         run_chain(
             F, G, pr, y, μ_e, L_e, η0, 
-            NF, Ni, Nb, β, δ,
-            B_wells, n_chain,
+            NF, NG, Ni, Nb, β, δ,
+            B_wells, chain_num,
             verbose=verbose
         )
 
