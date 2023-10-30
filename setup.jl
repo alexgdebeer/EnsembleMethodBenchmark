@@ -45,8 +45,8 @@ grid_f = Grid(xmax, tmax, Δx_f, Δt_f)
 # Well parameters 
 # ----------------
 
-q_c = 30.0 / Δx_c^2                 # Extraction rate, (m^3 / day) / m^3
-q_f = 30.0 / Δx_f^2                 # Extraction rate, (m^3 / day) / m^3
+q_c = 50.0 / Δx_c^2                 # Extraction rate, (m^3 / day) / m^3
+q_f = 50.0 / Δx_f^2                 # Extraction rate, (m^3 / day) / m^3
 
 well_radius = 50.0
 well_change_times = [0, 40, 80]
@@ -111,28 +111,18 @@ d_obs += rand(MvNormal(Γ_ϵ))
 # Model functions
 # ----------------
 
-function F(η::AbstractVector)
-    θ = transform(pr, η)
-    return solve(grid_c, model_c, θ)
-end
-
-function G(us::AbstractVector)
-    return model_c.B * us
-end
-
-function F_r(η::AbstractVector)
-    θ = transform(pr, η)
-    return solve(grid_c, model_r, θ)
-end
+F(η::AbstractVector) = solve(grid_c, model_c, transform(pr, η))
+G(us::AbstractVector) = model_c.B * us
 
 # ----------------
 # POD
 # ----------------
 
 # Generate POD basis 
-# μ_ui, V_ri, μ_ε, Γ_ε = generate_pod_data(grid_c, F, G, pr, 100, 0.999, "pod$(grid_c.nx)")
-μ_ui, V_ri, μ_ε, Γ_ε = read_pod_data("pod$(grid_c.nx)")
+# μ_ui, V_ri, μ_ε, Γ_ε = generate_pod_data(grid_c, model_c, pr, 100, 0.999, "pod/grid_$(grid_c.nx)")
+μ_ui, V_ri, μ_ε, Γ_ε = read_pod_data("pod/grid_$(grid_c.nx)")
 
+μ_e = μ_ε .+ 0.0
 Γ_e = Hermitian(Γ_ϵ + Γ_ε)
 Γ_e_inv = Hermitian(inv(Γ_e))
 L_e = cholesky(Γ_e_inv).U
@@ -157,4 +147,4 @@ model_r = ReducedOrderModel(
 
 # end
 
-# animate(u_t, grid_f, (8, 8), "plots/animations/test")
+animate(u_t, grid_f, (50, 50), "plots/animations/test")

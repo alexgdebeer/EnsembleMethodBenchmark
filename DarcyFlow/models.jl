@@ -47,6 +47,115 @@ struct Well
 
 end
 
+abstract type AbstractModel end
+
+struct Model <: AbstractModel
+
+    ϕ::Real
+    μ::Real
+    c::Real
+    u0::Real
+
+    Q::SparseMatrixCSC
+    B::SparseMatrixCSC
+
+    ny::Int
+    nyi::Int
+
+    function Model(
+        g::Grid,
+        ϕ::Real, 
+        μ::Real, 
+        c::Real, 
+        u0::Real,
+        wells::AbstractVector{Well},
+        well_change_times::AbstractVector,
+        x_obs::AbstractVector,
+        y_obs::AbstractVector,
+        t_obs::AbstractVector
+    )
+
+        nyi = length(x_obs)
+        ny = nyi * length(t_obs)
+
+        t_obs_inds = [findfirst(g.ts .>= t) for t ∈ t_obs]
+
+        Q = build_Q(g, wells, well_change_times)
+        B = build_B(g, ny, nyi, x_obs, y_obs, t_obs_inds)
+
+        return new(ϕ, μ, c, u0, Q, B, ny, nyi)
+
+    end
+
+end
+
+struct ReducedOrderModel <: AbstractModel
+
+    ϕ::Real
+    μ::Real
+    c::Real
+    u0::Real
+
+    Q::SparseMatrixCSC
+    B::SparseMatrixCSC
+    BV_r::SparseMatrixCSC
+
+    μ_ui::AbstractVector
+    V_ri::AbstractMatrix
+    
+    μ_e::AbstractVector
+    Γ_e::AbstractMatrix 
+    Γ_e_inv::AbstractMatrix
+    L_e::AbstractMatrix
+
+    nu_r::Int
+    ny::Int
+    nyi::Int
+
+    function ReducedOrderModel(
+        g::Grid,
+        ϕ::Real, 
+        μ::Real, 
+        c::Real, 
+        u0::Real,
+        wells::AbstractVector{Well},
+        well_change_times::AbstractVector,
+        x_obs::AbstractVector,
+        y_obs::AbstractVector,
+        t_obs::AbstractVector,
+        μ_ui::AbstractVector,
+        V_ri::AbstractMatrix,
+        μ_e::AbstractVector,
+        Γ_e::AbstractMatrix
+    )
+
+        nu_r = size(V_ri, 2)
+        nyi = length(x_obs)
+        ny = nyi * length(t_obs)
+
+        t_obs_inds = [findfirst(g.ts .>= t) for t ∈ t_obs]
+
+        Q = build_Q(g, wells, well_change_times)
+        B = build_B(g, ny, nyi, x_obs, y_obs, t_obs_inds)
+
+        V_r = sparse(kron(sparse(I, g.nt, g.nt), V_ri))
+        BV_r = B * V_r
+
+        Γ_e_inv = Hermitian(inv(Γ_e))
+        L_e = cholesky(Γ_e_inv).U
+
+        return new(
+            ϕ, μ, c, u0, 
+            Q, B, BV_r, 
+            μ_ui, V_ri, 
+            μ_e, Γ_e, Γ_e_inv, L_e,
+            nu_r, ny, nyi
+        )
+
+    end
+
+end
+
 """Builds the operator that maps from model states to observations."""
 function build_B(
     g::Grid,
@@ -131,112 +240,5 @@ function build_Q(
 
     Q = sparse(Q_i, Q_j, Q_v, g.nx^2, g.nt)
     return Q
-
-end
-
-struct Model
-
-    ϕ::Real
-    μ::Real
-    c::Real
-    u0::Real
-
-    Q::SparseMatrixCSC
-    B::SparseMatrixCSC
-
-    ny::Int
-    nyi::Int
-
-    function Model(
-        g::Grid,
-        ϕ::Real, 
-        μ::Real, 
-        c::Real, 
-        u0::Real,
-        wells::AbstractVector{Well},
-        well_change_times::AbstractVector,
-        x_obs::AbstractVector,
-        y_obs::AbstractVector,
-        t_obs::AbstractVector
-    )
-
-        nyi = length(x_obs)
-        ny = nyi * length(t_obs)
-
-        t_obs_inds = [findfirst(g.ts .>= t) for t ∈ t_obs]
-
-        Q = build_Q(g, wells, well_change_times)
-        B = build_B(g, ny, nyi, x_obs, y_obs, t_obs_inds)
-
-        return new(ϕ, μ, c, u0, Q, B, ny, nyi)
-
-    end
-
-end
-
-struct ReducedOrderModel
-
-    ϕ::Real
-    μ::Real
-    c::Real
-    u0::Real
-
-    Q::SparseMatrixCSC
-    B::SparseMatrixCSC
-    BV_r::SparseMatrixCSC
-
-    μ_ui::AbstractVector
-    V_ri::AbstractMatrix
-    
-    μ_e::AbstractVector
-    Γ_e::AbstractMatrix 
-    Γ_e_inv::AbstractMatrix
-    L_e::AbstractMatrix
-
-    nu_r::Int
-    ny::Int
-    nyi::Int
-
-    function ReducedOrderModel(
-        g::Grid,
-        ϕ::Real, 
-        μ::Real, 
-        c::Real, 
-        u0::Real,
-        wells::AbstractVector{Well},
-        well_change_times::AbstractVector,
-        x_obs::AbstractVector,
-        y_obs::AbstractVector,
-        t_obs::AbstractVector,
-        μ_ui::AbstractVector,
-        V_ri::AbstractMatrix,
-        μ_e::AbstractVector,
-        Γ_e::AbstractMatrix
-    )
-
-        nu_r = size(V_ri, 2)
-        nyi = length(x_obs)
-        ny = nyi * length(t_obs)
-
-        t_obs_inds = [findfirst(g.ts .>= t) for t ∈ t_obs]
-
-        Q = build_Q(g, wells, well_change_times)
-        B = build_B(g, ny, nyi, x_obs, y_obs, t_obs_inds)
-
-        V_r = sparse(kron(sparse(I, g.nt, g.nt), V_ri))
-        BV_r = B * V_r
-
-        Γ_e_inv = Hermitian(inv(Γ_e))
-        L_e = cholesky(Γ_e_inv).U
-
-        return new(
-            ϕ, μ, c, u0, 
-            Q, B, BV_r, 
-            μ_ui, V_ri, 
-            μ_e, Γ_e, Γ_e_inv, L_e,
-            nu_r, ny, nyi
-        )
-
-    end
 
 end
