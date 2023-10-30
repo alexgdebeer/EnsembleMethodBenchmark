@@ -58,6 +58,7 @@ struct Model <: AbstractModel
 
     Q::SparseMatrixCSC
     B::SparseMatrixCSC
+    B_wells::SparseMatrixCSC
 
     ny::Int
     nyi::Int
@@ -81,9 +82,9 @@ struct Model <: AbstractModel
         t_obs_inds = [findfirst(g.ts .>= t) for t ∈ t_obs]
 
         Q = build_Q(g, wells, well_change_times)
-        B = build_B(g, ny, nyi, x_obs, y_obs, t_obs_inds)
+        B, B_wells = build_B(g, ny, nyi, x_obs, y_obs, t_obs_inds)
 
-        return new(ϕ, μ, c, u0, Q, B, ny, nyi)
+        return new(ϕ, μ, c, u0, Q, B, B_wells, ny, nyi)
 
     end
 
@@ -98,6 +99,7 @@ struct ReducedOrderModel <: AbstractModel
 
     Q::SparseMatrixCSC
     B::SparseMatrixCSC
+    B_wells::SparseMatrixCSC
     BV_r::SparseMatrixCSC
 
     μ_ui::AbstractVector
@@ -136,7 +138,7 @@ struct ReducedOrderModel <: AbstractModel
         t_obs_inds = [findfirst(g.ts .>= t) for t ∈ t_obs]
 
         Q = build_Q(g, wells, well_change_times)
-        B = build_B(g, ny, nyi, x_obs, y_obs, t_obs_inds)
+        B, B_wells = build_B(g, ny, nyi, x_obs, y_obs, t_obs_inds)
 
         V_r = sparse(kron(sparse(I, g.nt, g.nt), V_ri))
         BV_r = B * V_r
@@ -146,7 +148,7 @@ struct ReducedOrderModel <: AbstractModel
 
         return new(
             ϕ, μ, c, u0, 
-            Q, B, BV_r, 
+            Q, B, B_wells, BV_r, 
             μ_ui, V_ri, 
             μ_e, Γ_e, Γ_e_inv, L_e,
             nu_r, ny, nyi
@@ -164,7 +166,7 @@ function build_B(
     x_obs::AbstractVector,
     y_obs::AbstractVector,
     t_obs_inds::AbstractVector 
-)::SparseMatrixCSC
+)::Tuple{SparseMatrixCSC, SparseMatrixCSC}
 
     function get_cell_index(xi::Int, yi::Int)
         return xi + g.nx * (yi-1)
@@ -209,7 +211,9 @@ function build_B(
         B[(ii+1):(ii+nyi), (jj+1):(jj+g.nx^2)] = Bi
     end
 
-    return B 
+    B_wells = blockdiag([Bi for _ ∈ 1:grid_c.nt]...)
+
+    return B, B_wells
 
 end
 
