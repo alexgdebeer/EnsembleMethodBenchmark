@@ -108,13 +108,6 @@ d_obs = model_f.B * u_t
 d_obs += rand(MvNormal(Γ_ϵ))
 
 # ----------------
-# Model functions
-# ----------------
-
-F(η::AbstractVector) = solve(grid_c, model_c, transform(pr, η))
-G(us::AbstractVector) = model_c.B * us
-
-# ----------------
 # POD
 # ----------------
 
@@ -132,6 +125,13 @@ model_r = ReducedOrderModel(
     x_obs, y_obs, t_obs, μ_ui, V_ri, μ_ε, Γ_e
 )
 
+# ----------------
+# Model functions
+# ----------------
+
+F(θ::AbstractVector) = solve(grid_c, model_r, θ)
+G(u::AbstractVector) = model_c.B * u
+
 # if TEST_POD
 
 #     θs_test = rand(pr, 20)
@@ -147,4 +147,4 @@ model_r = ReducedOrderModel(
 
 # end
 
-animate(u_t, grid_f, (50, 50), "plots/animations/test")
+# animate(u_t, grid_f, (50, 50), "plots/animations/test")

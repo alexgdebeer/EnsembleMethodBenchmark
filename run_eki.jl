@@ -4,7 +4,7 @@ include("InferenceAlgorithms/eki.jl")
 NF = grid_c.nx^2 * grid_c.nt
 Ne = 1000
 
-ηs, Fs, Gs, αs = run_eki_dmc(F_r, G, pr, y_obs, μ_ε, Γ_e, NF, Ne)
+ηs, Fs, Gs, αs = run_eki_dmc(F_r, G, pr, d_obs, μ_e, Γ_e, NF, Ne)
 
 lnps = hcat([transform(pr, η) for η in eachcol(ηs[end])]...)
 
