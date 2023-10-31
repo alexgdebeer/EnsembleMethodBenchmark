@@ -12,7 +12,7 @@ map, Γ_post, L_post = compute_laplace(grid_c, model_r, pr, d_obs, η0)
 Fs = hcat([F(θi) for θi ∈ eachcol(θs)]...)
 Gs = hcat([G(Fi) for Fi ∈ eachcol(Fs)]...)
 
-μ_post = copy(map.θ)
+μ_post = reshape(copy(map.θ), grid_c.nx, grid_c.nx)
 σ_post = reshape(std(θs, dims=2), grid_c.nx, grid_c.nx)
 
 h5write(RESULTS_FNAME, "ηs", ηs)
