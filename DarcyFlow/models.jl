@@ -211,7 +211,7 @@ function build_B(
         B[(ii+1):(ii+nyi), (jj+1):(jj+g.nx^2)] = Bi
     end
 
-    B_wells = blockdiag([Bi for _ ∈ 1:grid_c.nt]...)
+    B_wells = blockdiag([Bi for _ ∈ 1:g.nt]...)
 
     return B, B_wells
 
