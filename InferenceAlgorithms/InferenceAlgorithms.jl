@@ -7,5 +7,5 @@ using SparseArrays
 using Printf
 
 include("eki.jl")
-include("map.jl")
+include("optimisation.jl")
 include("pcn.jl")
