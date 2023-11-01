@@ -1,7 +1,7 @@
 include("setup.jl")
 include("InferenceAlgorithms/InferenceAlgorithms.jl")
 
-NF = 9 * grid_c.nt # TODO: put n_wells somewhere?
+NF = n_wells * grid_c.nt
 Ni = 500_000
 
 β = 0.025
