@@ -6,6 +6,6 @@ using SparseArrays
 
 using Printf
 
-include("eki.jl")
+include("ensemble_methods.jl")
 include("optimisation.jl")
 include("pcn.jl")

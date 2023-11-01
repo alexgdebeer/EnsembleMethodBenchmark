@@ -105,19 +105,11 @@ function run_chain(
 
             ηs = vcat(ξs, ωs)
 
-            # h5open("data/mcmc/chain_$n_chain.h5", "cw") do f
-            #     HDF5.do_write_chunk(f["ηs"], n_chunk, ηs)
-            #     HDF5.do_write_chunk(f["θs"], n_chunk, θs)
-            #     HDF5.do_write_chunk(f["Fs"], n_chunk, Fs)
-            #     HDF5.do_write_chunk(f["Gs"], n_chunk, Gs)
-            #     HDF5.do_write_chunk(f["τs"], n_chunk, τs)
-            # end
-
-            h5write("data/mcmc/chain_$n_chain.h5", "ηs_$n_chunk", ηs)
-            h5write("data/mcmc/chain_$n_chain.h5", "θs_$n_chunk", θs)
-            h5write("data/mcmc/chain_$n_chain.h5", "Fs_$n_chunk", Fs)
-            h5write("data/mcmc/chain_$n_chain.h5", "Gs_$n_chunk", Gs)
-            h5write("data/mcmc/chain_$n_chain.h5", "τs_$n_chunk", τs)
+            h5write("data/pcn/chain_$n_chain.h5", "ηs_$n_chunk", ηs)
+            h5write("data/pcn/chain_$n_chain.h5", "θs_$n_chunk", θs)
+            h5write("data/pcn/chain_$n_chain.h5", "Fs_$n_chunk", Fs)
+            h5write("data/pcn/chain_$n_chain.h5", "Gs_$n_chunk", Gs)
+            h5write("data/pcn/chain_$n_chain.h5", "τs_$n_chunk", τs)
 
             n_chunk += 1
 
