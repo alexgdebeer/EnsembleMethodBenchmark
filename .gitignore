@@ -1,14 +1,4 @@
-.DS_Store
+Manifest.toml
 
-# Large files
-*.csv
-*.gif
-*.jld2
-*.pdf
-*.txt
-
-# Geothermal model files
-*.h5
-*.json
-*.msh
-*.yaml
+data/
+plots/
