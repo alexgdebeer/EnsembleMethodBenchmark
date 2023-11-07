@@ -9,7 +9,7 @@ EKI:
  - Add better printing.
 
 EnRML:
- - Move code into repository.
+ - Add localisation.
  
 LMAP: 
  - Finish writing up description of algorithm.
