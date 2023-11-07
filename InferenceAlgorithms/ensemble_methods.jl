@@ -18,81 +18,6 @@ function compute_Δs(
 
 end
 
-function run_eki_dmc(
-    F::Function,
-    G::Function,
-    pr::MaternField, 
-    d_obs::AbstractVector,
-    μ_e::AbstractVector,
-    Γ_e::AbstractMatrix,
-    L_e::AbstractMatrix,
-    Ne::Int,
-    localisation::Bool=false, # TODO: add localisation options
-    verbose::Bool=true
-)
-
-    compute_θs(ηs) = hcat([transform(pr, η_i) for η_i ∈ eachcol(ηs)]...)
-    compute_Fs(θs) = hcat([F(θ_i) for θ_i ∈ eachcol(θs)]...)
-    compute_Gs(Fs) = hcat([G(F_i) for F_i ∈ eachcol(Fs)]...)
-
-    NG = length(d_obs)
-
-    ηs = [rand(pr, Ne)]
-    θs = [compute_θs(ηs[1])]
-    Fs = [compute_Fs(θs[1])]
-    Gs = [compute_Gs(Fs[1])]
-    αs = []
-
-    t = 0
-    converged = false
-
-    while !converged
-
-        # Generate new inflation factor
-        φs = [0.5sum((L_e * (d_obs - Gs[end][:, i])).^2) for i ∈ 1:Ne]
-        α_i = min(max(NG / 2mean(φs), √(NG / 2var(φs))), 1-t)^-1
-
-        @info "Data-misfit mean: $(NG / 2mean(φs))"
-        @info "Data-misfit variance: $(√(NG / 2var(φs)))"
-
-        push!(αs, α_i) 
-        t += α_i^-1
-        if abs(t - 1.0) < 1e-8
-            converged = true
-        end 
-
-        Δη = compute_Δs(ηs[end], Ne)
-        ΔG = compute_Δs(Gs[end], Ne)
-
-        C_GG = ΔG * ΔG'
-        C_ηG = Δη * ΔG'
-
-        # TODO: covariance localisation
-
-        es = rand(MvNormal(αs[end] * Γ_e), Ne) # TODO: tidy up
-
-        ηs_i = ηs[end] + C_ηG * inv(C_GG + αs[end] * Γ_e) * (d_obs .+ es - Gs[end] .- μ_e)
-        θs_i = compute_θs(ηs_i)
-        Fs_i = compute_Fs(θs_i)
-        Gs_i = compute_Gs(Fs_i)
-
-        push!(ηs, ηs_i)
-        push!(θs, θs_i)
-        push!(Fs, Fs_i)
-        push!(Gs, Gs_i)
-
-        if verbose
-            @info "Iteration $(length(αs)) complete. t = $(t)."
-        end
-
-    end
-
-    return ηs, θs, Fs, Gs, αs
-
-end
-
-"""Returns the truncated singular value decomposition of a matrix A, under the 
-requirement that the total energy retained is no less than a given amount."""
 function tsvd(
     A::AbstractMatrix; 
     e::Real=0.99
@@ -110,9 +35,6 @@ function tsvd(
 
 end
 
-
-"""Runs the Levenberg-Marquardt iterative ensemble smoother, as described in 
-Chen and Oliver (2013)."""
 function run_enrml(
     F::Function, 
     G::Function,
@@ -248,5 +170,123 @@ function run_enrml(
     end
 
     return ηs[:, :, 1:i], θs[:, :, 1:i], Fs[:, :, 1:i], Gs[:, :, 1:i], Ss[1:i], λs[1:i-1]
+
+end
+
+function run_eki_dmc(
+    F::Function,
+    G::Function,
+    pr::MaternField, 
+    d_obs::AbstractVector,
+    μ_e::AbstractVector,
+    Γ_e::AbstractMatrix,
+    L_e::AbstractMatrix,
+    Ne::Int,
+    localisation::Bool=false, # TODO: add localisation options
+    verbose::Bool=true
+)
+
+    compute_θs(ηs) = hcat([transform(pr, η_i) for η_i ∈ eachcol(ηs)]...)
+    compute_Fs(θs) = hcat([F(θ_i) for θ_i ∈ eachcol(θs)]...)
+    compute_Gs(Fs) = hcat([G(F_i) for F_i ∈ eachcol(Fs)]...)
+
+    NG = length(d_obs)
+
+    ηs = [rand(pr, Ne)]
+    θs = [compute_θs(ηs[1])]
+    Fs = [compute_Fs(θs[1])]
+    Gs = [compute_Gs(Fs[1])]
+    αs = []
+
+    t = 0
+    converged = false
+
+    while !converged
+
+        # Generate new inflation factor
+        φs = [0.5sum((L_e * (d_obs - Gs[end][:, i])).^2) for i ∈ 1:Ne]
+        α_i = min(max(NG / 2mean(φs), √(NG / 2var(φs))), 1-t)^-1
+
+        @info "Data-misfit mean: $(NG / 2mean(φs))"
+        @info "Data-misfit variance: $(√(NG / 2var(φs)))"
+
+        push!(αs, α_i) 
+        t += α_i^-1
+        if abs(t - 1.0) < 1e-8
+            converged = true
+        end 
+
+        Δη = compute_Δs(ηs[end], Ne)
+        ΔG = compute_Δs(Gs[end], Ne)
+
+        C_GG = ΔG * ΔG'
+        C_ηG = Δη * ΔG'
+
+        # TODO: covariance localisation
+
+        es = rand(MvNormal(αs[end] * Γ_e), Ne) # TODO: tidy up
+
+        ηs_i = ηs[end] + C_ηG * inv(C_GG + αs[end] * Γ_e) * (d_obs .+ es - Gs[end] .- μ_e)
+        θs_i = compute_θs(ηs_i)
+        Fs_i = compute_Fs(θs_i)
+        Gs_i = compute_Gs(Fs_i)
+
+        push!(ηs, ηs_i)
+        push!(θs, θs_i)
+        push!(Fs, Fs_i)
+        push!(Gs, Gs_i)
+
+        if verbose
+            @info "Iteration $(length(αs)) complete. t = $(t)."
+        end
+
+    end
+
+    return ηs, θs, Fs, Gs, αs
+
+end
+
+# TODO: use these in EKI and EnRML
+compute_θs(ηs, pr) = hcat([transform(pr, η_i) for η_i ∈ eachcol(ηs)]...)
+compute_Fs(θs, F) = hcat([F(θ_i) for θ_i ∈ eachcol(θs)]...)
+compute_Gs(Fs, G) = hcat([G(F_i) for F_i ∈ eachcol(Fs)]...)
+
+function run_eks(
+    F::Function,
+    G::Function,
+    pr::MaternField,
+    d_obs::AbstractVector,
+    μ_e::AbstractVector,
+    Γ_e::AbstractMatrix,
+    L_e::AbstractMatrix,
+    Ne::Int,
+    verbose::Bool=true
+)
+
+    NG = length(d_obs)
+
+    ηs = [rand(pr, Ne)]
+    θs = [compute_θs(ηs[1], pr)]
+    Fs = [compute_Fs(θs[1], F)]
+    Gs = [compute_Gs(Fs[1], G)]
+    Δts = []
+
+    t = 0
+    converged = false 
+
+    while !converged
+
+        C_ηη = cov(ηs[end], dims=2)
+
+        # TODO: compute timestep
+        
+        A_split = I + Δt * C_ηη
+        B_split = ηs[end] - Δt * (1.0 / Ne) * ... * Γ_e_inv * 
+
+        √(2 * Δts[end])
+
+
+    end
+
 
 end
