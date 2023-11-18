@@ -3,15 +3,22 @@ using LinearAlgebra
 using LinearSolve
 using SparseArrays
 using SpecialFunctions: gamma
-# TODO: check Python code -- why is there no l^2 in the A equation?
 
 # Gradients of basis functions
 ∇s = [-1.0 1.0 0.0; -1.0 0.0 1.0]
 
 # Transformation matrix inverses
 Tinvs = Dict(
-    :lower => [[1.0 -1.0; 0.0 1.0], [0.0 1.0; -1.0 0.0], [-1.0 0.0; 1.0 -1.0]],
-    :upper => [[-1.0 1.0; 1.0 0.0], [1.0 0.0; 0.0 -1.0], [0.0 -1.0; -1.0 1.0]]
+    :lower => [
+        [ 1.0 -1.0;  0.0  1.0], 
+        [ 0.0  1.0; -1.0  0.0], 
+        [-1.0  0.0;  1.0 -1.0]
+    ],
+    :upper => [
+        [-1.0  1.0;  1.0  0.0], 
+        [ 1.0  0.0;  0.0 -1.0], 
+        [ 0.0 -1.0; -1.0  1.0]
+    ]
 )
 
 function gauss_to_unif(
