@@ -10,6 +10,9 @@ EKI:
 
 EnRML:
  - Add localisation.
+
+EKS:
+ - Finish writing code.
  
 LMAP: 
  - Finish writing up description of algorithm.
@@ -17,9 +20,6 @@ LMAP:
 
 MCMC: 
  - Finish checking convergence diagnostics.
-
-Plotting:
- - a lot...
 
 RTO:
  - Finish reading papers and implement the algorithm.
