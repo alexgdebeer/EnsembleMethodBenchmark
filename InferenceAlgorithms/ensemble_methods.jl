@@ -173,76 +173,132 @@ function run_enrml(
 
 end
 
+"""Runs an ensemble of sets of parameters, and returns the results."""
+function run_ensemble(
+    ηs::AbstractMatrix, 
+    F::Function, 
+    G::Function, 
+    pr::MaternField
+)
+
+    θs = hcat([transform(pr, η_i) for η_i ∈ eachcol(ηs)]...)
+    Fs = hcat([F(θ_i) for θ_i ∈ eachcol(θs)]...)
+    Gs = hcat([G(F_i) for F_i ∈ eachcol(Fs)]...)
+
+    return θs, Fs, Gs
+
+end
+
+"""Uses the standard EKI update to update the current ensemble."""
+function eki_update(
+    ηs_i::AbstractMatrix, 
+    Gs_i::AbstractMatrix, 
+    α_i::Real, 
+    y::AbstractVector, 
+    μ_e::AbstractVector, 
+    C_e::AbstractMatrix
+)
+
+    
+
+    # TODO: tidy this up... (could use a block approach, similar to EnsembleKalmanProcesses)
+    Ne = size(ηs_i, 2)
+    Δη = compute_Δs(ηs_i, Ne)
+    ΔG = compute_Δs(Gs_i, Ne)
+
+    C_GG = ΔG * ΔG'
+    C_ηG = Δη * ΔG'
+
+    # TODO: covariance localisation
+
+    ys = rand(MvNormal(y, α_i * C_e), Ne)
+
+    return ηs_i + C_ηG * inv(C_GG + α_i*C_e) * (ys - Gs_i .- μ_e)
+
+end
+
+"""Computes the EKI inflation factor following Iglesias and Yang 
+(2021)."""
+function compute_α_dmc(
+    t::Real, 
+    Gs::AbstractMatrix, 
+    μ_e::AbstractVector,
+    y::AbstractVector, 
+    NG::Int, 
+    C_e_invsqrt::AbstractMatrix
+)
+
+    φs = 0.5 * sum((C_e_invsqrt * (y .- Gs .- μ_e)).^2, dims=1)
+
+    μ_φ = mean(φs)
+    var_φ = var(φs)
+    
+    α_inv = max(NG / 2μ_φ, √(NG / 2var_φ))
+    α_inv = min(α_inv, 1-t)
+
+    return α_inv ^ -1
+
+end
+
+"""Runs the EKI-DMC algorithm described in Iglesias and Yang (2021)."""
 function run_eki_dmc(
     F::Function,
     G::Function,
     pr::MaternField, 
-    d_obs::AbstractVector,
+    y::AbstractVector,
     μ_e::AbstractVector,
-    Γ_e::AbstractMatrix,
-    L_e::AbstractMatrix,
+    C_e::AbstractMatrix,
     Ne::Int,
     localisation::Bool=false, # TODO: add localisation options
     verbose::Bool=true
 )
 
-    compute_θs(ηs) = hcat([transform(pr, η_i) for η_i ∈ eachcol(ηs)]...)
-    compute_Fs(θs) = hcat([F(θ_i) for θ_i ∈ eachcol(θs)]...)
-    compute_Gs(Fs) = hcat([G(F_i) for F_i ∈ eachcol(Fs)]...)
+    C_e_invsqrt = √(inv(C_e))
 
-    NG = length(d_obs)
+    NG = length(y)
 
-    ηs = [rand(pr, Ne)]
-    θs = [compute_θs(ηs[1])]
-    Fs = [compute_Fs(θs[1])]
-    Gs = [compute_Gs(Fs[1])]
-    αs = []
+    ηs_i = rand(pr, Ne)
+    θs_i, Fs_i, Gs_i = run_ensemble(ηs_i, F, G, pr)
 
+    ηs = [ηs_i]
+    θs = [θs_i]
+    Fs = [Fs_i]
+    Gs = [Gs_i]
+
+    i = 0
     t = 0
     converged = false
 
     while !converged
 
-        # Generate new inflation factor
-        φs = [0.5sum((L_e * (d_obs - Gs[end][:, i])).^2) for i ∈ 1:Ne]
-        α_i = min(max(NG / 2mean(φs), √(NG / 2var(φs))), 1-t)^-1
-
-        @info "Data-misfit mean: $(NG / 2mean(φs))"
-        @info "Data-misfit variance: $(√(NG / 2var(φs)))"
-
-        push!(αs, α_i) 
+        α_i = compute_α_dmc(t, Gs_i, μ_e, y, NG, C_e_invsqrt)
         t += α_i^-1
         if abs(t - 1.0) < 1e-8
             converged = true
         end 
 
-        Δη = compute_Δs(ηs[end], Ne)
-        ΔG = compute_Δs(Gs[end], Ne)
-
-        C_GG = ΔG * ΔG'
-        C_ηG = Δη * ΔG'
-
-        # TODO: covariance localisation
-
-        es = rand(MvNormal(αs[end] * Γ_e), Ne) # TODO: tidy up
-
-        ηs_i = ηs[end] + C_ηG * inv(C_GG + αs[end] * Γ_e) * (d_obs .+ es - Gs[end] .- μ_e)
-        θs_i = compute_θs(ηs_i)
-        Fs_i = compute_Fs(θs_i)
-        Gs_i = compute_Gs(Fs_i)
+        ηs_i = eki_update(ηs_i, Gs_i, α_i, y, μ_e, C_e)
+        θs_i, Fs_i, Gs_i = run_ensemble(ηs_i, F, G, pr)
 
         push!(ηs, ηs_i)
         push!(θs, θs_i)
         push!(Fs, Fs_i)
         push!(Gs, Gs_i)
 
+        i += 1
         if verbose
-            @info "Iteration $(length(αs)) complete. t = $(t)."
+            @info "Iteration $i complete. t = $t." # TODO: improve this printing...
         end
 
     end
 
-    return ηs, θs, Fs, Gs, αs
+    # TODO: make into function?
+    ηs = cat(ηs..., dims=3)
+    θs = cat(θs..., dims=3)
+    Fs = cat(Fs..., dims=3)
+    Gs = cat(Gs..., dims=3)
+
+    return ηs, θs, Fs, Gs
 
 end
 
@@ -251,15 +307,17 @@ compute_θs(ηs, pr) = hcat([transform(pr, η_i) for η_i ∈ eachcol(ηs)]...)
 compute_Fs(θs, F) = hcat([F(θ_i) for θ_i ∈ eachcol(θs)]...)
 compute_Gs(Fs, G) = hcat([G(F_i) for F_i ∈ eachcol(Fs)]...)
 
+# TODO: read ALDI paper and do the generalised square root 
 function run_eks(
     F::Function,
     G::Function,
     pr::MaternField,
     d_obs::AbstractVector,
     μ_e::AbstractVector,
-    Γ_e::AbstractMatrix,
-    L_e::AbstractMatrix,
-    Ne::Int,
+    C_e::AbstractMatrix,
+    Ne::Int;
+    Δt₀::Real=10.0,
+    t_stop::Real=2.0,
     verbose::Bool=true
 )
 
@@ -269,24 +327,43 @@ function run_eks(
     θs = [compute_θs(ηs[1], pr)]
     Fs = [compute_Fs(θs[1], F)]
     Gs = [compute_Gs(Fs[1], G)]
-    Δts = []
+
+    verbose && println("It. | Δt       | t        | misfit ")
 
     t = 0
-    converged = false 
+    i = 1
+    while true
 
-    while !converged
-
-        C_ηη = cov(ηs[end], dims=2)
-
-        # TODO: compute timestep
+        Ḡ = mean(Gs[end], dims=2)
+        η̄ = mean(ηs[end], dims=2)
+       
+        C_ηη = cov(ηs[end], dims=2, corrected=false)
+        D = (1.0 / Ne) * (Gs[end] .- Ḡ)' * (C_e \ (Gs[end] .+ μ_e .- d_obs))
+        ζ = rand(MvNormal(C_ηη + 1e-8 * I), Ne)
         
-        A_split = I + Δt * C_ηη
-        B_split = ηs[end] - Δt * (1.0 / Ne) * ... * Γ_e_inv * 
+        Δt = Δt₀ / (norm(D) + 1e-6)
+        t += Δt
 
-        √(2 * Δts[end])
+        μ_misfit = mean(abs.(Gs[end] .+ μ_e .- d_obs))
+        verbose && @printf "%3i | %.2e | %.2e | %.2e \n" i Δt t μ_misfit
+        
+        A_n = I + Δt * C_ηη
+        B_n = ηs[end] - 
+            Δt * (ηs[end] .- η̄) * D +
+            Δt * ((NG + 1) / Ne) * (ηs[end] .- η̄)
 
+        ηs_i = (A_n \ B_n) + √(2 * Δt) * ζ
+    
+        push!(ηs, ηs_i)
+        push!(θs, compute_θs(ηs[end], pr))
+        push!(Fs, compute_Fs(θs[end], F))
+        push!(Gs, compute_Gs(Fs[end], G))
+
+        i += 1
+        t ≥ t_stop && break
 
     end
 
+    return ηs, θs, Fs, Gs
 
 end
