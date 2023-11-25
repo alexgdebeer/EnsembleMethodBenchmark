@@ -187,7 +187,7 @@ function compute_gain_eki(
     for i ∈ 1:Nη
         for j ∈ 1:NG 
             ρ_ij = R_ηG[i, j]
-            s = 0.5 * log((1+ρ_ij) / (1-ρ_ij))
+            s = log((1+ρ_ij) / (1-ρ_ij)) / 2
             σ_s = (tanh(s + √(Ne-3)^-1) - tanh(s - √(Ne-3)^-1)) / 2
             P[i, j] = ρ_ij^2 / (ρ_ij^2 + σ_s^2)
         end
@@ -265,7 +265,7 @@ function compute_α_dmc(
     C_e_invsqrt::AbstractMatrix
 )
 
-    φs = 0.5 * sum((C_e_invsqrt * (y .- Gs .- μ_e)).^2, dims=1)
+    φs = 0.5 * sum((C_e_invsqrt * (Gs .+ μ_e .- ys)).^2, dims=1)
 
     μ_φ = mean(φs)
     var_φ = var(φs)
@@ -342,31 +342,31 @@ end
 # Things to update 
 # ----------------
 
-
-function compute_enrml_gain(
+# TODO: tidy
+function compute_gain_enrml(
     Δη::AbstractMatrix,
     UG::AbstractMatrix,
-    ΛG::AbstractMatrix,
+    ΛG::AbstractVector,
     VG::AbstractMatrix,
-    Γ_e_sqi::AbstractMatrix,
+    C_e_invsqrt::AbstractMatrix,
     λ::Real, 
+    localiser::Localiser
 )
-    return Δη * VG * ΛG * inv((λ+1)I + ΛG.^2) * UG' * Γ_e_sqi
-end
 
-function compute_Δs(
-    xs::AbstractMatrix, 
-    N::Int
-)::AbstractMatrix
-
-    return (xs .- mean(xs, dims=2)) ./ √(N-1)
+    return Δη * VG * Diagonal(ΛG) * inv((λ+1)I + Diagonal(ΛG.^2)) * UG' * C_e_invsqrt # TODO: tidy this up...
 
 end
 
-function tsvd(
-    A::AbstractMatrix; 
-    e::Real=0.99
-)::Tuple{AbstractMatrix, AbstractVector, AbstractMatrix}
+function compute_Δs(xs::AbstractMatrix)
+
+    N = size(xs, 2)
+    Δs = (xs .- mean(xs, dims=2)) ./ √(N-1)
+    return Δs
+
+end
+
+function tsvd(A::AbstractMatrix; e::Real=0.99
+)
 
     U, Λ, V = svd(A)
     minimum(Λ) < 0 && error(minimum(Λ))
@@ -380,141 +380,151 @@ function tsvd(
 
 end
 
+function compute_S(Gs, ys, μ_e, C_e_invsqrt)
+    # TODO: check whether perturbed observations should be in here...
+    φs = sum((C_e_invsqrt * (Gs .+ μ_e .- ys)).^2, dims=1)
+    return mean(φs)
+end
+
+function enrml_update(
+    ηs::AbstractMatrix, 
+    Gs::AbstractMatrix, 
+    ys::AbstractMatrix, 
+    μ_e::AbstractVector, 
+    C_e_invsqrt::AbstractMatrix,
+    ηs_pr::AbstractMatrix,
+    Uη_pr::AbstractMatrix,
+    Λη_pr::AbstractVector,
+    λ::Real,
+    localiser::Localiser 
+)
+
+    Δη = compute_Δs(ηs)
+    ΔG = compute_Δs(Gs)
+
+    UG, ΛG, VG = tsvd(C_e_invsqrt * ΔG)
+    K = compute_gain_enrml(Δη, UG, ΛG, VG, C_e_invsqrt, λ, localiser)
+
+    # Calculate corrections based on prior deviations
+    δη_pr = Δη * VG * inv((λ + 1)I + Diagonal(ΛG).^2) * VG' * Δη' *
+            Uη_pr * Diagonal(1 ./ Λη_pr.^2) * Uη_pr' * (ηs - ηs_pr)
+
+    # Calculate corrections based on fit to observations
+    δη_obs = K * (Gs .+ μ_e .- ys)
+
+    return ηs - δη_pr - δη_obs
+
+end
+
 function run_enrml(
     F::Function, 
     G::Function,
     pr::MaternField,
-    d_obs::AbstractVector,
+    y::AbstractVector,
     μ_e::AbstractVector,
-    Γ_e::AbstractMatrix,
-    Ne::Int,
-    NF::Int,
-    i_max::Int;
+    C_e::AbstractMatrix,
+    Ne::Int;
     γ::Real=10,
     λ_min::Real=0.01,
-    localisation::Bool=false, # TODO: add localisation options
-    verbose::Bool=true
+    max_cuts::Int=5,
+    max_its::Int=20,
+    localiser::Localiser=IdentityLocaliser()
 )
 
-    # TODO: make these functions available to both algorithms
-    compute_θs(ηs) = hcat([transform(pr, η_i) for η_i ∈ eachcol(ηs)]...)
-    compute_Fs(θs) = hcat([F(θ_i) for θ_i ∈ eachcol(θs)]...)
-    compute_Gs(Fs) = hcat([G(F_i) for F_i ∈ eachcol(Fs)]...)
-
-    """Returns the mean and standard deviations of the sum-of-squares data 
-    misfit of each ensemble member."""
-    # TODO: this can probably be combined with the equivalent function in EKI-DMC
-    function compute_S(Gs, ds_p, Γ_e_sqi)
-        ΔG_sums = sum((Γ_e_sqi * (Gs - ds_p)).^2, dims=1)
-        return mean(ΔG_sums)
-    end
+    println("It. | stat | ΔS       | Δη_max   | λ")
 
     # Define convergence parameters
     ΔS_min = 0.01 # Minimum reduction in objective
-    Δη_min = 0.5 # Greatest allowable change in a parameter of an ensemble member (prior standard deviations)
+    Δη_min = 0.5 # Greatest allowable change in any parameter of an ensemble member (prior standard deviations)
 
-    NG = length(d_obs)
+    C_e_invsqrt = √(inv(C_e))
+    NG = length(y)
 
-    ηs = zeros(pr.Nη, Ne, i_max+1)
-    θs = zeros(pr.Nθ, Ne, i_max+1)
-    Fs = zeros(NF, Ne, i_max+1)
-    Gs = zeros(NG, Ne, i_max+1)
-    Ss = zeros(i_max+1)
-    λs = zeros(i_max+1)
+    ηs = []
+    θs = []
+    Fs = []
+    Gs = []
+    Ss = []
+    λs = []
 
-    # Define set of indices of successful parameter sets
-    inds = 1:Ne
+    ys = rand(MvNormal(y, C_e), Ne)
 
-    # Compute scaling matrices # TODO: edit
-    Γ_e_sqi = sqrt(inv(Γ_e))
+    ηs_pr = rand(pr, Ne)
+    θs_pr, Fs_pr, Gs_pr = run_ensemble(ηs_pr, F, G, pr)
+    S_pr = compute_S(Gs_pr, ys, μ_e, C_e_invsqrt)
+    λ = 10^floor(log10(S_pr / 2NG))
 
-    ds_p = rand(MvNormal(d_obs, Γ_e), Ne)
+    push!(ηs, ηs_pr)
+    push!(θs, θs_pr)
+    push!(Fs, Fs_pr)
+    push!(Gs, Gs_pr)
+    push!(Ss, S_pr)
+    push!(λs, λ)
 
-    ηs[:, :, 1] = rand(pr, Ne)
-    θs[:, :, 1] = compute_θs(ηs[:, :, 1])
-    Fs[:, :, 1] = compute_Fs(θs[:, :, 1])
-    Gs[:, :, 1] = compute_Gs(Fs[:, :, 1])
-
-    Ss[1] = compute_S(Gs[:, :, 1], ds_p, Γ_e_sqi)
-    λs[1] = 10^floor(log10(Ss[1] / 2NG))
-
-    Δη_pri = compute_Δs(ηs[:, :, 1], length(inds))
-    Uη_pri, Λη_pri, = tsvd(Δη_pri)
-
-    if verbose
-        println("It. | status   | ΔS       | Δη_max   | λ")
-    end
+    Δη_pr = compute_Δs(ηs_pr)
+    Uη_pr, Λη_pr, = tsvd(Δη_pr)
 
     i = 1
+    en_ind = 1 # Index of current ensemble
     n_cuts = 0
+    while i ≤ max_its
 
-    while i ≤ i_max
+        ηs_i = enrml_update(
+            ηs[en_ind], Gs[en_ind], ys, μ_e, C_e_invsqrt, 
+            ηs_pr, Uη_pr, Λη_pr, λ, localiser
+        )
 
-        Δη = compute_Δs(ηs[:, :, i], Ne)
-        ΔG = compute_Δs(Gs[:, :, i], Ne)
+        θs_i, Fs_i, Gs_i = @time run_ensemble(ηs_i, F, G, pr)
+        S_i = compute_S(Gs_i, ys, μ_e, C_e_invsqrt)
 
-        UG, ΛG, VG = tsvd(Γ_e_sqi * ΔG)
-        K = compute_enrml_gain(Δη, UG, Diagonal(ΛG), VG, Γ_e_sqi, λs[i])
+        push!(ηs, ηs_i)
+        push!(θs, θs_i)
+        push!(Fs, Fs_i)
+        push!(Gs, Gs_i)
+        push!(Ss, S_i)
+        push!(λs, λ)
+        i += 1
 
-        # Calculate corrections based on prior deviations
-        δη_pri = Δη * VG * inv((λs[i] + 1)I + Diagonal(ΛG).^2) * VG' * Δη' *
-                 Uη_pri * Diagonal(1 ./ Λη_pri.^2) * Uη_pri' *
-                 (ηs[:, :, i] - ηs[:, :, 1])
+        if S_i ≤ Ss[en_ind]
 
-        # Calculate corrections based on fit to observations
-        δη_obs = K * (Gs[:,:,i] .+ μ_e .- ds_p)
+            ΔS = 1 - S_i / Ss[en_ind]
+            Δη_max = maximum(abs.(ηs_i - ηs[en_ind]))
 
-        ηs[:, :, i+1] = ηs[:, :, i] - δη_pri - δη_obs
-        θs[:, :, i+1] = compute_θs(ηs[:, :, i+1])
-        Fs[:, :, i+1] = compute_Fs(θs[:, :, i+1])
-        Gs[:, :, i+1] = compute_Gs(Fs[:, :, i+1])
-
-        Ss[i+1] = compute_S(Gs[:, :, i+1], ds_p, Γ_e_sqi)
-
-        if Ss[i+1] ≤ Ss[i]
-
+            en_ind = i
             n_cuts = 0
-            ΔS = 1 - Ss[i+1] / Ss[i]
-            Δη_max = maximum(abs.(ηs[:, :, i+1] - ηs[:, :, i]))
+            λ = max(λ / γ, λ_min)
 
-            # Check for convergence
-            if (ΔS ≤ ΔS_min) && (Δη_max ≤ Δη_min) # TODO: change S to Φ potentially?
+            @printf(
+                "%2i  | acc. | %.2e | %.2e | %.2e \n", 
+                i-1, ΔS, Δη_max, λ
+            )
+
+            if (ΔS ≤ ΔS_min) && (Δη_max ≤ Δη_min)
                 @info "Convergence criteria met."
-                return ηs[:, :, 1:i+1], θs[:, :, 1:i+1], Fs[:, :, 1:i+1], Gs[:, :, 1:i+1], Ss[1:i+1], λs[1:i]
+                return ηs, θs, Fs, Gs, Ss, λs, en_ind
             end
-            
-            i += 1
-            λs[i] = max(λs[i-1] / γ, λ_min)
 
-            if verbose
-                @printf(
-                    "%2i  | accepted | %.2e | %.2e | %.2e \n",
-                    i-1, ΔS, Δη_max, λs[i]
-                )
-            end
-             
         else 
 
             n_cuts += 1
-            if n_cuts == 5 
-                @info "Terminating algorithm: $n_cuts consecutive cuts to the step size."
-                return ηs[:, :, 1:i], θs[:, :, 1:i], Fs[:, :, 1:i], Gs[:, :, 1:i], Ss[1:i], λs[1:i]
+            if n_cuts == max_cuts
+                @info "Terminating: $n_cuts consecutive cuts made."
+                return ηs, θs, Fs, Gs, Ss, λs, en_ind
             end
 
-            λs[i] *= γ
+            λ *= γ
             
-            if verbose
-                @printf(
-                    "%2i  | rejected | -------- | -------- | %.2e \n",
-                    i-1, λs[i]
-                )
-            end
+            @printf(
+                "%2i  | rej. | -------- | -------- | %.2e \n", 
+                i-1, λ
+            )
 
         end
 
     end
 
-    return ηs[:, :, 1:i], θs[:, :, 1:i], Fs[:, :, 1:i], Gs[:, :, 1:i], Ss[1:i], λs[1:i-1]
+    @info "Terminating: maximum number of iterations exceeded."
+    return ηs, θs, Fs, Gs, Ss, λs, en_ind
 
 end
 
