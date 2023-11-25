@@ -1,3 +1,348 @@
+TOL = 1e-8 # Convergence tolerance
+
+abstract type Localiser end
+
+struct IdentityLocaliser <: Localiser end
+struct FisherLocaliser <: Localiser end
+
+mutable struct CycleLocaliser <: Localiser
+
+    num_cycle::Int 
+    P # TODO: compute once and for all?
+    
+    function CycleLocaliser(num_cycle=50)
+        return new(num_cycle, nothing)
+    end
+
+end
+
+struct BootstrapLocaliser <: Localiser
+
+    num_boot::Int 
+    σ::Real 
+    tol::Real
+
+    function BootstrapLocaliser(num_boot=50, σ=0.6, tol=1e-8) 
+        return new(num_boot, σ, tol)
+    end
+
+end
+
+struct PowerLocaliser <: Localiser
+    α::Real 
+    PowerLocaliser(α=0.4) = new(α)
+end
+
+function compute_covs(
+    ηs::AbstractMatrix, 
+    Gs::AbstractMatrix
+)
+
+    Nη = size(ηs, 1)
+
+    C = cov([ηs; Gs], dims=2)
+    C_ηG = C[1:Nη, (Nη+1):end]
+    C_GG = C[(Nη+1):end, (Nη+1):end]
+
+    return C_ηG, C_GG
+
+end
+
+function compute_cors(
+    ηs::AbstractMatrix,
+    Gs::AbstractMatrix
+)
+
+    Nη = size(ηs, 1)
+
+    R = cor([ηs; Gs], dims=2)
+    R_ηG = R[1:Nη, (Nη+1):end]
+    R_GG = R[(Nη+1):end, (Nη+1):end]
+
+    return R_ηG, R_GG
+
+end
+
+function compute_gain_eki(
+    ηs::AbstractMatrix,
+    Gs::AbstractMatrix,
+    α::Real,
+    C_e::AbstractMatrix
+)
+
+    C_ηG, C_GG = compute_covs(ηs, Gs)
+    return C_ηG * inv(C_GG + α * C_e)
+
+end
+
+"""Computes the EKI gain without applying any localisation."""
+function compute_gain_eki(
+    localiser::IdentityLocaliser,
+    ηs::AbstractMatrix,
+    Gs::AbstractMatrix,
+    α::Real,
+    C_e::AbstractMatrix
+)
+
+    return compute_gain_eki(ηs, Gs, α, C_e)
+
+end
+
+"""Computes the EKI gain using the localisation scheme outlined by 
+Zhang and Oliver (2010)."""
+function compute_gain_eki(
+    localiser::BootstrapLocaliser,
+    ηs::AbstractMatrix,
+    Gs::AbstractMatrix,
+    α::Real,
+    C_e::AbstractMatrix
+)
+
+    Nη, Ne = size(ηs)
+    NG, Ne = size(Gs)
+    K = compute_gain_eki(ηs, Gs, α, C_e)
+    Ks_boot = zeros(Nη, NG, localiser.num_boot)
+
+    for k ∈ 1:localiser.num_boot 
+        inds_res = rand(1:Ne, Ne)
+        ηs_res = ηs[:, inds_res]
+        Gs_res = Gs[:, inds_res]
+        K_res = compute_gain_eki(ηs_res, Gs_res, α, C_e)
+        Ks_boot[:, :, k] = K_res
+    end
+
+    var_Kis = mean((Ks_boot .- K).^2, dims=3)[:, :, 1]
+    R² = var_Kis ./ (K.^2 .+ localiser.tol)
+    P = 1 ./ (1 .+ R² * (1 + 1 / localiser.σ^2)) # TODO: tidy? this has no relation to α above
+
+    return P .* K 
+
+end
+
+"""Computes the EKI gain using a variant of the localisation scheme 
+outlined by Luo and Bhakta (2022)."""
+function compute_gain_eki(
+    localiser::CycleLocaliser,
+    ηs::AbstractMatrix,
+    Gs::AbstractMatrix,
+    α::Real,
+    C_e::AbstractMatrix
+)
+
+    function gaspari_cohn(z)
+        if 0 ≤ z ≤ 1 
+            return -(1/4)z^5 + (1/2)z^4 + (5/8)z^3 - (5/3)z^2 + 1
+        elseif 1 < z ≤ 2 
+            return (1/12)z^5 - (1/2)z^4 + (5/8)z^3 + (5/3)z^2 - 5z + 4 - (2/3)z^-1
+        else
+            return 0.0
+        end
+    end
+
+    Nη, Ne = size(ηs)
+    NG, Ne = size(Gs)
+
+    K = compute_gain_eki(ηs, Gs, α, C_e)
+    R_ηG = compute_cors(ηs, Gs)[1]
+
+    P = zeros(Nη, NG)
+    R_ηGs = zeros(Nη, NG, Ne-1)
+
+    for i ∈ 1:min(localiser.num_cycle, Ne-1)
+        ηs_cycled = circshift(ηs, (0, i))
+        R_ηGs[:, :, i] = compute_cors(ηs_cycled, Gs)[1]
+    end
+
+    σs_e = median(abs.(R_ηGs), dims=3) ./ 0.6745
+
+    for i ∈ 1:Nη
+        for j ∈ 1:NG
+            z = (1 - abs(R_ηG[i, j])) / (1 - σs_e[i, j])
+            P[i, j] = gaspari_cohn(z)
+        end
+    end
+
+    return P .* K
+
+end
+
+"""Computes the EKI gain using the localisation scheme outlined by 
+Flowerdew (2015)."""
+function compute_gain_eki(
+    localiser::FisherLocaliser,
+    ηs::AbstractMatrix,
+    Gs::AbstractMatrix,
+    α::Real,
+    C_e::AbstractMatrix
+)
+
+    Nη, Ne = size(ηs)
+    NG, Ne = size(Gs)
+
+    K = compute_gain_eki(ηs, Gs, α, C_e)
+
+    R_ηG = compute_cors(ηs, Gs)[1]
+    P = zeros(size(R_ηG))
+
+    for i ∈ 1:Nη
+        for j ∈ 1:NG 
+            ρ_ij = R_ηG[i, j]
+            s = 0.5 * log((1+ρ_ij) / (1-ρ_ij))
+            σ_s = (tanh(s + √(Ne-3)^-1) - tanh(s - √(Ne-3)^-1)) / 2
+            P[i, j] = ρ_ij^2 / (ρ_ij^2 + σ_s^2)
+        end
+    end
+
+    return P .* K
+
+end
+
+"""Computes the EKI gain using the localisation scheme outlined by 
+Lee (2021)."""
+function compute_gain_eki(
+    localiser::PowerLocaliser,
+    ηs::AbstractMatrix,
+    Gs::AbstractMatrix,
+    α::Real, 
+    C_e::AbstractMatrix
+)
+
+    V_η = Diagonal(std(ηs, dims=2)[:])
+    V_G = Diagonal(std(Gs, dims=2)[:])
+
+    R_ηG, R_GG = compute_cors(ηs, Gs)
+
+    R_ηG_sec = R_ηG .* abs.(R_ηG) .^ localiser.α
+    R_GG_sec = R_GG .* abs.(R_GG) .^ localiser.α
+
+    C_ηG_sec = V_η * R_ηG_sec * V_G
+    C_GG_sec = V_G * R_GG_sec * V_G
+
+    return C_ηG_sec * inv(C_GG_sec + α * C_e)
+
+end
+
+function run_ensemble(
+    ηs::AbstractMatrix, 
+    F::Function, 
+    G::Function, 
+    pr::MaternField
+)
+
+    θs = hcat([transform(pr, η_i) for η_i ∈ eachcol(ηs)]...)
+    Fs = hcat([F(θ_i) for θ_i ∈ eachcol(θs)]...)
+    Gs = hcat([G(F_i) for F_i ∈ eachcol(Fs)]...)
+
+    return θs, Fs, Gs
+
+end
+
+"""Uses the standard EKI update to update the current ensemble."""
+function eki_update(
+    ηs::AbstractMatrix, 
+    Gs::AbstractMatrix, 
+    α::Real, 
+    y::AbstractVector, 
+    μ_e::AbstractVector, 
+    C_e::AbstractMatrix,
+    localiser::Localiser
+)
+
+    ys = rand(MvNormal(y, α * C_e), Ne)
+    K = compute_gain_eki(localiser, ηs, Gs, α, C_e)
+    return ηs + K * (ys - Gs .- μ_e)
+
+end
+
+"""Computes the EKI inflation factor following Iglesias and Yang 
+(2021)."""
+function compute_α_dmc(
+    t::Real, 
+    Gs::AbstractMatrix, 
+    μ_e::AbstractVector,
+    y::AbstractVector, 
+    NG::Int, 
+    C_e_invsqrt::AbstractMatrix
+)
+
+    φs = 0.5 * sum((C_e_invsqrt * (y .- Gs .- μ_e)).^2, dims=1)
+
+    μ_φ = mean(φs)
+    var_φ = var(φs)
+    
+    α_inv = max(NG / 2μ_φ, √(NG / 2var_φ))
+    α_inv = min(α_inv, 1-t)
+
+    return α_inv ^ -1
+
+end
+
+"""Runs the EKI-DMC algorithm (Iglesias and Yang, 2021)."""
+function run_eki_dmc(
+    F::Function,
+    G::Function,
+    pr::MaternField, 
+    y::AbstractVector,
+    μ_e::AbstractVector,
+    C_e::AbstractMatrix,
+    Ne::Int,
+    localiser::Localiser=IdentityLocaliser(),
+    verbose::Bool=true
+)
+
+    C_e_invsqrt = √(inv(C_e))
+
+    NG = length(y)
+
+    ηs_i = rand(pr, Ne)
+    θs_i, Fs_i, Gs_i = run_ensemble(ηs_i, F, G, pr)
+
+    ηs = [ηs_i]
+    θs = [θs_i]
+    Fs = [Fs_i]
+    Gs = [Gs_i]
+
+    i = 0
+    t = 0
+    converged = false
+
+    while !converged
+
+        α_i = compute_α_dmc(t, Gs_i, μ_e, y, NG, C_e_invsqrt)
+        t += α_i^-1
+        if abs(t - 1.0) < TOL
+            converged = true
+        end
+
+        ηs_i = eki_update(ηs_i, Gs_i, α_i, y, μ_e, C_e, localiser)
+        θs_i, Fs_i, Gs_i = run_ensemble(ηs_i, F, G, pr)
+
+        push!(ηs, ηs_i)
+        push!(θs, θs_i)
+        push!(Fs, Fs_i)
+        push!(Gs, Gs_i)
+
+        i += 1
+        if verbose
+            @info "Iteration $i complete. t = $t." # TODO: improve this printing...
+        end
+
+    end
+
+    ηs = cat(ηs..., dims=3)
+    θs = cat(θs..., dims=3)
+    Fs = cat(Fs..., dims=3)
+    Gs = cat(Gs..., dims=3)
+
+    return ηs, θs, Fs, Gs
+
+end
+
+# ----------------
+# Things to update 
+# ----------------
+
+
 function compute_enrml_gain(
     Δη::AbstractMatrix,
     UG::AbstractMatrix,
@@ -170,135 +515,6 @@ function run_enrml(
     end
 
     return ηs[:, :, 1:i], θs[:, :, 1:i], Fs[:, :, 1:i], Gs[:, :, 1:i], Ss[1:i], λs[1:i-1]
-
-end
-
-"""Runs an ensemble of sets of parameters, and returns the results."""
-function run_ensemble(
-    ηs::AbstractMatrix, 
-    F::Function, 
-    G::Function, 
-    pr::MaternField
-)
-
-    θs = hcat([transform(pr, η_i) for η_i ∈ eachcol(ηs)]...)
-    Fs = hcat([F(θ_i) for θ_i ∈ eachcol(θs)]...)
-    Gs = hcat([G(F_i) for F_i ∈ eachcol(Fs)]...)
-
-    return θs, Fs, Gs
-
-end
-
-"""Uses the standard EKI update to update the current ensemble."""
-function eki_update(
-    ηs_i::AbstractMatrix, 
-    Gs_i::AbstractMatrix, 
-    α_i::Real, 
-    y::AbstractVector, 
-    μ_e::AbstractVector, 
-    C_e::AbstractMatrix
-)
-
-    
-
-    # TODO: tidy this up... (could use a block approach, similar to EnsembleKalmanProcesses)
-    Ne = size(ηs_i, 2)
-    Δη = compute_Δs(ηs_i, Ne)
-    ΔG = compute_Δs(Gs_i, Ne)
-
-    C_GG = ΔG * ΔG'
-    C_ηG = Δη * ΔG'
-
-    # TODO: covariance localisation
-
-    ys = rand(MvNormal(y, α_i * C_e), Ne)
-
-    return ηs_i + C_ηG * inv(C_GG + α_i*C_e) * (ys - Gs_i .- μ_e)
-
-end
-
-"""Computes the EKI inflation factor following Iglesias and Yang 
-(2021)."""
-function compute_α_dmc(
-    t::Real, 
-    Gs::AbstractMatrix, 
-    μ_e::AbstractVector,
-    y::AbstractVector, 
-    NG::Int, 
-    C_e_invsqrt::AbstractMatrix
-)
-
-    φs = 0.5 * sum((C_e_invsqrt * (y .- Gs .- μ_e)).^2, dims=1)
-
-    μ_φ = mean(φs)
-    var_φ = var(φs)
-    
-    α_inv = max(NG / 2μ_φ, √(NG / 2var_φ))
-    α_inv = min(α_inv, 1-t)
-
-    return α_inv ^ -1
-
-end
-
-"""Runs the EKI-DMC algorithm described in Iglesias and Yang (2021)."""
-function run_eki_dmc(
-    F::Function,
-    G::Function,
-    pr::MaternField, 
-    y::AbstractVector,
-    μ_e::AbstractVector,
-    C_e::AbstractMatrix,
-    Ne::Int,
-    localisation::Bool=false, # TODO: add localisation options
-    verbose::Bool=true
-)
-
-    C_e_invsqrt = √(inv(C_e))
-
-    NG = length(y)
-
-    ηs_i = rand(pr, Ne)
-    θs_i, Fs_i, Gs_i = run_ensemble(ηs_i, F, G, pr)
-
-    ηs = [ηs_i]
-    θs = [θs_i]
-    Fs = [Fs_i]
-    Gs = [Gs_i]
-
-    i = 0
-    t = 0
-    converged = false
-
-    while !converged
-
-        α_i = compute_α_dmc(t, Gs_i, μ_e, y, NG, C_e_invsqrt)
-        t += α_i^-1
-        if abs(t - 1.0) < 1e-8
-            converged = true
-        end 
-
-        ηs_i = eki_update(ηs_i, Gs_i, α_i, y, μ_e, C_e)
-        θs_i, Fs_i, Gs_i = run_ensemble(ηs_i, F, G, pr)
-
-        push!(ηs, ηs_i)
-        push!(θs, θs_i)
-        push!(Fs, Fs_i)
-        push!(Gs, Gs_i)
-
-        i += 1
-        if verbose
-            @info "Iteration $i complete. t = $t." # TODO: improve this printing...
-        end
-
-    end
-
-    # TODO: make into function?
-    ηs = cat(ηs..., dims=3)
-    θs = cat(θs..., dims=3)
-    Fs = cat(Fs..., dims=3)
-    Gs = cat(Gs..., dims=3)
-
-    return ηs, θs, Fs, Gs
 
 end
 
