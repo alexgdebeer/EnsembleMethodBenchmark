@@ -397,6 +397,25 @@ function compute_gain_enrml(
 
 end
 
+"""Computes the EnRML gain matrix without applying any localisation."""
+function compute_gain_enrml(
+    localiser::IdentityLocaliser,
+    ηs::AbstractMatrix,
+    Gs::AbstractMatrix,
+    Δη::AbstractMatrix,
+    UG::AbstractMatrix,
+    ΛG::AbstractVector,
+    VG::AbstractMatrix,
+    C_e_invsqrt::AbstractMatrix,
+    λ::Real
+)
+
+    return compute_gain_enrml(Δη, UG, ΛG, VG, C_e_invsqrt, λ)
+
+end
+
+"""Computes the EnRML gain using the localisation method outlined by
+Flowerdew (2015)."""
 function compute_gain_enrml(
     localiser::FisherLocaliser,
     ηs::AbstractMatrix,
@@ -555,7 +574,7 @@ function run_enrml(
     Uη_pr, Λη_pr, = tsvd(Δη_pr)
 
     i = 1
-    en_ind = 1 # Index of current ensemble
+    en_ind = 1
     n_cuts = 0
     while i ≤ max_its
 
