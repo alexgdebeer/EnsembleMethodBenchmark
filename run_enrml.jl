@@ -1,22 +1,24 @@
-using HDF5
-
 include("setup.jl")
 include("InferenceAlgorithms/InferenceAlgorithms.jl")
 
-RESULTS_FNAME = "data/enrml/enrml.h5"
+Ne = 100
+fname = "data/enrml/enrml_noloc.h5"
 
-Ne = 1000
-NF = grid_c.nx^2 * grid_c.nt
-i_max = 20
-ηs, θs, Fs, Gs, λs = run_enrml(F, G, pr, d_obs, μ_e, Γ_e, Ne, NF, i_max)
+n_trials = 10
+results = Dict()
 
-μ_post_η = mean(ηs[:, :, end], dims=2)
-μ_post = reshape(transform(pr, μ_post_η), grid_c.nx, grid_c.nx)
-σ_post = reshape(std(θs[:, :, end], dims=2), grid_c.nx, grid_c.nx)
+for i ∈ 1:n_trials 
+    
+    ηs, θs, Fs, Gs, Ss, λs, en_ind = run_enrml(
+        F, G, pr, d_obs, μ_e, Γ_e, Ne; 
+        localiser=IdentityLocaliser()
+    )
 
-h5write(RESULTS_FNAME, "ηs", ηs[:, :, end])
-h5write(RESULTS_FNAME, "θs", θs[:, :, end])
-h5write(RESULTS_FNAME, "Fs", model_r.B_wells * Fs[:, :, end])
-h5write(RESULTS_FNAME, "Gs", Gs[:, :, end])
-h5write(RESULTS_FNAME, "μ", μ_post)
-h5write(RESULTS_FNAME, "σ", σ_post)
+    results["ηs_$i"] = ηs[en_ind]
+    results["θs_$i"] = θs[en_ind]
+    results["Fs_$i"] = Fs[en_ind]
+    results["Gs_$i"] = Gs[en_ind]
+
+end
+
+save_results(results, fname)
