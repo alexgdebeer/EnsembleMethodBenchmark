@@ -322,8 +322,9 @@ function run_eki_dmc(
     localiser::Localiser=IdentityLocaliser()
 )
 
-    C_e_invsqrt = √(inv(C_e))
+    println("It. | t")
 
+    C_e_invsqrt = √(inv(C_e))
     NG = length(y)
 
     ηs_i = rand(pr, Ne)
@@ -355,7 +356,7 @@ function run_eki_dmc(
         push!(Gs, Gs_i)
 
         i += 1
-        @info "Iteration $i complete. t = $t." # TODO: improve this printing...
+        @printf "%2i  | %.2e \n" i t
 
     end
 
@@ -397,7 +398,7 @@ function compute_gain_enrml(
     λ::Real
 )
 
-    return Δη * VG * Diagonal(ΛG) * inv((λ+1)I + Diagonal(ΛG.^2)) * UG' * C_e_invsqrt # TODO: tidy this up...
+    return Δη * VG * Diagonal(ΛG) * inv((λ+1)I + Diagonal(ΛG.^2)) * UG' * C_e_invsqrt
 
 end
 
@@ -431,6 +432,48 @@ function compute_gain_enrml(
     end
 
     return P .* K
+
+end
+
+"""Computes the EnRML gain using the localisation method outlined by 
+Zhang and Oliver (2010)."""
+function compute_gain_enrml(
+    localiser::BootstrapLocaliser,
+    ηs::AbstractMatrix,
+    Gs::AbstractMatrix,
+    Δη::AbstractMatrix,
+    UG::AbstractMatrix,
+    ΛG::AbstractVector,
+    VG::AbstractMatrix,
+    C_e_invsqrt::AbstractMatrix,
+    λ::Real
+)
+
+    Nη, Ne = size(ηs)
+    NG, Ne = size(Gs)
+    K = compute_gain_enrml(Δη, UG, ΛG, VG, C_e_invsqrt, λ)
+    Ks_boot = zeros(Nη, NG, localiser.num_boot)
+
+    for k ∈ 1:localiser.num_boot
+
+        inds_res = rand(1:Ne, Ne)
+
+        Δη_res = compute_Δs(ηs[:, inds_res])
+        ΔG_res = compute_Δs(Gs[:, inds_res])
+        UG_res, ΛG_res, VG_res = tsvd(ΔG_res)
+
+        Ks_boot[:, :, k] = compute_gain_enrml(
+            Δη_res, UG_res, ΛG_res, VG_res, 
+            C_e_invsqrt, λ
+        )
+
+    end
+
+    var_Kis = mean((Ks_boot .- K).^2, dims=3)[:, :, 1]
+    R² = var_Kis ./ (K.^2 .+ localiser.tol)
+    P = 1 ./ (1 .+ R² * (1 + 1 / localiser.σ^2))
+
+    return P .* K 
 
 end
 
@@ -482,14 +525,12 @@ function run_enrml(
     λ_min::Real=0.01,
     max_cuts::Int=5,
     max_its::Int=20,
+    ΔS_min::Real=0.01,
+    Δη_min::Real=0.5,
     localiser::Localiser=IdentityLocaliser()
 )
 
     println("It. | stat | ΔS       | Δη_max   | λ")
-
-    # Define convergence parameters (TODO: make these into arguments)
-    ΔS_min = 0.01 # Minimum reduction in objective
-    Δη_min = 0.5 # Greatest allowable change in any parameter of an ensemble member (prior standard deviations)
 
     C_e_invsqrt = √(inv(C_e))
     NG = length(y)
@@ -528,7 +569,7 @@ function run_enrml(
             ηs_pr, Uη_pr, Λη_pr, λ, localiser
         )
 
-        θs_i, Fs_i, Gs_i = @time run_ensemble(ηs_i, F, G, pr)
+        θs_i, Fs_i, Gs_i = run_ensemble(ηs_i, F, G, pr)
         S_i = compute_S(Gs_i, ys, μ_e, C_e_invsqrt)
 
         push!(ηs, ηs_i)
@@ -576,6 +617,11 @@ function run_enrml(
         end
 
     end
+
+    ηs = cat(ηs..., dims=3)
+    θs = cat(θs..., dims=3)
+    Fs = cat(Fs..., dims=3)
+    Gs = cat(Gs..., dims=3)
 
     @info "Terminating: maximum number of iterations exceeded."
     return ηs, θs, Fs, Gs, Ss, λs, en_ind
