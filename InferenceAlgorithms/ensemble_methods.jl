@@ -3,15 +3,18 @@ TOL = 1e-8 # Convergence tolerance
 abstract type Localiser end
 
 struct IdentityLocaliser <: Localiser end
+
 struct FisherLocaliser <: Localiser end
+struct PriorOptimalLocaliser <: Localiser end
+struct PostOptimalLocaliser <: Localiser end
 
-mutable struct CycleLocaliser <: Localiser
+mutable struct ShuffleLocaliser <: Localiser
 
-    num_cycle::Int 
-    P # TODO: compute once and for all?
+    n_shuffle::Int 
+    P::Union{AbstractMatrix, Nothing}
     
-    function CycleLocaliser(num_cycle=50)
-        return new(num_cycle, nothing)
+    function ShuffleLocaliser(n_shuffle=50)
+        return new(n_shuffle, nothing)
     end
 
 end
@@ -33,16 +36,24 @@ struct PowerLocaliser <: Localiser
     PowerLocaliser(α=0.4) = new(α)
 end
 
+function compute_Δs(xs::AbstractMatrix)
+
+    N = size(xs, 2)
+    Δs = (xs .- mean(xs, dims=2)) ./ √(N-1)
+    return Δs
+
+end
+
 function compute_covs(
     ηs::AbstractMatrix, 
     Gs::AbstractMatrix
 )
 
-    Nη = size(ηs, 1)
+    Δη = compute_Δs(ηs)
+    ΔG = compute_Δs(Gs)
 
-    C = cov([ηs; Gs], dims=2)
-    C_ηG = C[1:Nη, (Nη+1):end]
-    C_GG = C[(Nη+1):end, (Nη+1):end]
+    C_ηG = Δη * ΔG'
+    C_GG = ΔG * ΔG'
 
     return C_ηG, C_GG
 
@@ -53,11 +64,12 @@ function compute_cors(
     Gs::AbstractMatrix
 )
 
-    Nη = size(ηs, 1)
+    V_η = Diagonal(std(ηs, dims=2)[:])
+    V_G = Diagonal(std(Gs, dims=2)[:])
 
-    R = cor([ηs; Gs], dims=2)
-    R_ηG = R[1:Nη, (Nη+1):end]
-    R_GG = R[(Nη+1):end, (Nη+1):end]
+    C_ηG, C_GG = compute_covs(ηs, Gs)
+    R_ηG = inv(V_η) * C_ηG * inv(V_G)
+    R_GG = inv(V_G) * C_GG * inv(V_G)
 
     return R_ηG, R_GG
 
@@ -113,7 +125,7 @@ function compute_gain_eki(
 
     var_Kis = mean((Ks_boot .- K).^2, dims=3)[:, :, 1]
     R² = var_Kis ./ (K.^2 .+ localiser.tol)
-    P = 1 ./ (1 .+ R² * (1 + 1 / localiser.σ^2)) # TODO: tidy? this has no relation to α above
+    P = 1 ./ (1 .+ R² * (1 + 1 / localiser.σ^2))
 
     return P .* K 
 
@@ -122,14 +134,27 @@ end
 """Computes the EKI gain using a variant of the localisation scheme 
 outlined by Luo and Bhakta (2022)."""
 function compute_gain_eki(
-    localiser::CycleLocaliser,
+    localiser::ShuffleLocaliser,
     ηs::AbstractMatrix,
     Gs::AbstractMatrix,
     α::Real,
     C_e::AbstractMatrix
 )
 
-    function gaspari_cohn(z)
+    function get_shuffled_inds(N::Int)
+
+        inds = shuffle(1:N)
+        for i ∈ 1:N 
+            if inds[i] == i 
+                inds[(i%N)+1], inds[i] = inds[i], inds[(i%N)+1]
+            end
+        end
+
+        return inds
+
+    end
+
+    function gaspari_cohn(z::Real)
         if 0 ≤ z ≤ 1 
             return -(1/4)z^5 + (1/2)z^4 + (5/8)z^3 - (5/3)z^2 + 1
         elseif 1 < z ≤ 2 
@@ -139,18 +164,25 @@ function compute_gain_eki(
         end
     end
 
+    K = compute_gain_eki(ηs, Gs, α, C_e)
+
+    if localiser.P !== nothing 
+        return localiser.P .* K
+    end
+    println("computing localisation matrix...")
+
     Nη, Ne = size(ηs)
     NG, Ne = size(Gs)
 
-    K = compute_gain_eki(ηs, Gs, α, C_e)
     R_ηG = compute_cors(ηs, Gs)[1]
 
     P = zeros(Nη, NG)
-    R_ηGs = zeros(Nη, NG, Ne-1)
+    R_ηGs = zeros(Nη, NG, localiser.n_shuffle)
 
-    for i ∈ 1:min(localiser.num_cycle, Ne-1)
-        ηs_cycled = circshift(ηs, (0, i))
-        R_ηGs[:, :, i] = compute_cors(ηs_cycled, Gs)[1]
+    for i ∈ 1:localiser.n_shuffle
+        inds = get_shuffled_inds(Ne)
+        ηs_shuffled = ηs[:, inds]
+        R_ηGs[:, :, i] = compute_cors(ηs_shuffled, Gs)[1]
     end
 
     σs_e = median(abs.(R_ηGs), dims=3) ./ 0.6745
@@ -162,6 +194,7 @@ function compute_gain_eki(
         end
     end
 
+    localiser.P = P
     return P .* K
 
 end
@@ -265,7 +298,7 @@ function compute_α_dmc(
     C_e_invsqrt::AbstractMatrix
 )
 
-    φs = 0.5 * sum((C_e_invsqrt * (Gs .+ μ_e .- ys)).^2, dims=1)
+    φs = 0.5 * sum((C_e_invsqrt * (Gs .+ μ_e .- y)).^2, dims=1)
 
     μ_φ = mean(φs)
     var_φ = var(φs)
@@ -285,9 +318,8 @@ function run_eki_dmc(
     y::AbstractVector,
     μ_e::AbstractVector,
     C_e::AbstractMatrix,
-    Ne::Int,
-    localiser::Localiser=IdentityLocaliser(),
-    verbose::Bool=true
+    Ne::Int;
+    localiser::Localiser=IdentityLocaliser()
 )
 
     C_e_invsqrt = √(inv(C_e))
@@ -323,9 +355,7 @@ function run_eki_dmc(
         push!(Gs, Gs_i)
 
         i += 1
-        if verbose
-            @info "Iteration $i complete. t = $t." # TODO: improve this printing...
-        end
+        @info "Iteration $i complete. t = $t." # TODO: improve this printing...
 
     end
 
@@ -339,31 +369,8 @@ function run_eki_dmc(
 end
 
 # ----------------
-# Things to update 
+# EnRML
 # ----------------
-
-# TODO: tidy
-function compute_gain_enrml(
-    Δη::AbstractMatrix,
-    UG::AbstractMatrix,
-    ΛG::AbstractVector,
-    VG::AbstractMatrix,
-    C_e_invsqrt::AbstractMatrix,
-    λ::Real, 
-    localiser::Localiser
-)
-
-    return Δη * VG * Diagonal(ΛG) * inv((λ+1)I + Diagonal(ΛG.^2)) * UG' * C_e_invsqrt # TODO: tidy this up...
-
-end
-
-function compute_Δs(xs::AbstractMatrix)
-
-    N = size(xs, 2)
-    Δs = (xs .- mean(xs, dims=2)) ./ √(N-1)
-    return Δs
-
-end
 
 function tsvd(A::AbstractMatrix; e::Real=0.99
 )
@@ -377,6 +384,53 @@ function tsvd(A::AbstractMatrix; e::Real=0.99
             return U[:, 1:i], Λ[1:i], V[:, 1:i]
         end
     end
+
+end
+
+# TODO: tidy
+function compute_gain_enrml(
+    Δη::AbstractMatrix,
+    UG::AbstractMatrix,
+    ΛG::AbstractVector,
+    VG::AbstractMatrix,
+    C_e_invsqrt::AbstractMatrix,
+    λ::Real
+)
+
+    return Δη * VG * Diagonal(ΛG) * inv((λ+1)I + Diagonal(ΛG.^2)) * UG' * C_e_invsqrt # TODO: tidy this up...
+
+end
+
+function compute_gain_enrml(
+    localiser::FisherLocaliser,
+    ηs::AbstractMatrix,
+    Gs::AbstractMatrix,
+    Δη::AbstractMatrix,
+    UG::AbstractMatrix,
+    ΛG::AbstractVector,
+    VG::AbstractMatrix,
+    C_e_invsqrt::AbstractMatrix,
+    λ::Real
+)
+
+    Nη, Ne = size(ηs)
+    NG, Ne = size(Gs)
+
+    K = compute_gain_enrml(Δη, UG, ΛG, VG, C_e_invsqrt, λ)
+
+    R_ηG = compute_cors(ηs, Gs)[1]
+    P = zeros(size(R_ηG))
+
+    for i ∈ 1:Nη
+        for j ∈ 1:NG 
+            ρ_ij = R_ηG[i, j]
+            s = log((1+ρ_ij) / (1-ρ_ij)) / 2
+            σ_s = (tanh(s + √(Ne-3)^-1) - tanh(s - √(Ne-3)^-1)) / 2
+            P[i, j] = ρ_ij^2 / (ρ_ij^2 + σ_s^2)
+        end
+    end
+
+    return P .* K
 
 end
 
@@ -403,7 +457,7 @@ function enrml_update(
     ΔG = compute_Δs(Gs)
 
     UG, ΛG, VG = tsvd(C_e_invsqrt * ΔG)
-    K = compute_gain_enrml(Δη, UG, ΛG, VG, C_e_invsqrt, λ, localiser)
+    K = compute_gain_enrml(localiser, ηs, Gs, Δη, UG, ΛG, VG, C_e_invsqrt, λ)
 
     # Calculate corrections based on prior deviations
     δη_pr = Δη * VG * inv((λ + 1)I + Diagonal(ΛG).^2) * VG' * Δη' *
@@ -433,7 +487,7 @@ function run_enrml(
 
     println("It. | stat | ΔS       | Δη_max   | λ")
 
-    # Define convergence parameters
+    # Define convergence parameters (TODO: make these into arguments)
     ΔS_min = 0.01 # Minimum reduction in objective
     Δη_min = 0.5 # Greatest allowable change in any parameter of an ensemble member (prior standard deviations)
 
@@ -506,18 +560,18 @@ function run_enrml(
 
         else 
 
-            n_cuts += 1
-            if n_cuts == max_cuts
-                @info "Terminating: $n_cuts consecutive cuts made."
-                return ηs, θs, Fs, Gs, Ss, λs, en_ind
-            end
-
-            λ *= γ
-            
             @printf(
                 "%2i  | rej. | -------- | -------- | %.2e \n", 
                 i-1, λ
             )
+
+            n_cuts += 1
+            λ *= γ
+
+            if n_cuts == max_cuts
+                @info "Terminating: $n_cuts consecutive cuts made."
+                return ηs, θs, Fs, Gs, Ss, λs, en_ind
+            end
 
         end
 
