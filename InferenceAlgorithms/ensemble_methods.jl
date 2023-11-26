@@ -360,11 +360,6 @@ function run_eki_dmc(
 
     end
 
-    ηs = cat(ηs..., dims=3)
-    θs = cat(θs..., dims=3)
-    Fs = cat(Fs..., dims=3)
-    Gs = cat(Gs..., dims=3)
-
     return ηs, θs, Fs, Gs
 
 end
@@ -388,7 +383,6 @@ function tsvd(A::AbstractMatrix; e::Real=0.99
 
 end
 
-# TODO: tidy
 function compute_gain_enrml(
     Δη::AbstractMatrix,
     UG::AbstractMatrix,
@@ -398,7 +392,8 @@ function compute_gain_enrml(
     λ::Real
 )
 
-    return Δη * VG * Diagonal(ΛG) * inv((λ+1)I + Diagonal(ΛG.^2)) * UG' * C_e_invsqrt
+    Ψ = Diagonal(ΛG ./ (λ .+ 1.0 .+ ΛG.^2))
+    return Δη * VG * Ψ * UG' * C_e_invsqrt
 
 end
 
@@ -617,11 +612,6 @@ function run_enrml(
         end
 
     end
-
-    ηs = cat(ηs..., dims=3)
-    θs = cat(θs..., dims=3)
-    Fs = cat(Fs..., dims=3)
-    Gs = cat(Gs..., dims=3)
 
     @info "Terminating: maximum number of iterations exceeded."
     return ηs, θs, Fs, Gs, Ss, λs, en_ind
