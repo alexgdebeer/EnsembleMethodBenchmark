@@ -368,8 +368,7 @@ end
 # EnRML
 # ----------------
 
-function tsvd(A::AbstractMatrix; e::Real=0.99
-)
+function tsvd(A::AbstractMatrix; e::Real=0.99)
 
     U, Λ, V = svd(A)
     minimum(Λ) < 0 && error(minimum(Λ))
@@ -538,7 +537,7 @@ function run_enrml(
     γ::Real=10,
     λ_min::Real=0.01,
     max_cuts::Int=5,
-    max_its::Int=20,
+    max_its::Int=30,
     ΔS_min::Real=0.01,
     Δη_min::Real=0.5,
     localiser::Localiser=IdentityLocaliser()
@@ -637,12 +636,6 @@ function run_enrml(
 
 end
 
-# TODO: use these in EKI and EnRML
-compute_θs(ηs, pr) = hcat([transform(pr, η_i) for η_i ∈ eachcol(ηs)]...)
-compute_Fs(θs, F) = hcat([F(θ_i) for θ_i ∈ eachcol(θs)]...)
-compute_Gs(Fs, G) = hcat([G(F_i) for F_i ∈ eachcol(Fs)]...)
-
-# TODO: read ALDI paper and do the generalised square root 
 function run_eks(
     F::Function,
     G::Function,
@@ -651,54 +644,70 @@ function run_eks(
     μ_e::AbstractVector,
     C_e::AbstractMatrix,
     Ne::Int;
-    Δt₀::Real=10.0,
-    t_stop::Real=2.0,
-    verbose::Bool=true
+    Δt₀::Real=2.0,
+    t_stop::Real=2.0
 )
+
+    println("It. | Δt       | t        | misfit ")
 
     NG = length(d_obs)
 
-    ηs = [rand(pr, Ne)]
-    θs = [compute_θs(ηs[1], pr)]
-    Fs = [compute_Fs(θs[1], F)]
-    Gs = [compute_Gs(Fs[1], G)]
+    ηs = []
+    θs = []
+    Fs = []
+    Gs = []
 
-    verbose && println("It. | Δt       | t        | misfit ")
+    ηs_i = rand(pr, Ne)
+    θs_i, Fs_i, Gs_i = @time run_ensemble(ηs_i, F, G, pr)
+
+    push!(ηs, ηs_i)
+    push!(θs, θs_i)
+    # push!(Fs, Fs_i)
+    push!(Gs, Gs_i)
 
     t = 0
     i = 1
     while true
 
-        Ḡ = mean(Gs[end], dims=2)
-        η̄ = mean(ηs[end], dims=2)
+        μ_G = mean(Gs_i, dims=2)
+        μ_η = mean(ηs_i, dims=2)
        
-        C_ηη = cov(ηs[end], dims=2, corrected=false)
-        D = (1.0 / Ne) * (Gs[end] .- Ḡ)' * (C_e \ (Gs[end] .+ μ_e .- d_obs))
+        C_ηη = cov(ηs[end], dims=2) # TODO: localisation / sampling error correction?
+        D = (1.0 / Ne) * (Gs_i .- μ_G)' * (C_e \ (Gs_i .+ μ_e .- d_obs))
         ζ = rand(MvNormal(C_ηη + 1e-8 * I), Ne)
         
         Δt = Δt₀ / (norm(D) + 1e-6)
         t += Δt
 
         μ_misfit = mean(abs.(Gs[end] .+ μ_e .- d_obs))
-        verbose && @printf "%3i | %.2e | %.2e | %.2e \n" i Δt t μ_misfit
+        @printf "%3i | %.2e | %.2e | %.2e \n" i Δt t μ_misfit
         
         A_n = I + Δt * C_ηη
-        B_n = ηs[end] - 
-            Δt * (ηs[end] .- η̄) * D +
-            Δt * ((NG + 1) / Ne) * (ηs[end] .- η̄)
+        B_n = ηs_i - 
+            Δt * (ηs_i .- μ_η) * D +
+            Δt * ((NG + 1) / Ne) * (ηs_i .- μ_η)
 
-        ηs_i = (A_n \ B_n) + √(2 * Δt) * ζ
-    
+        ηs_i = @time (A_n \ B_n) + √(2 * Δt) * ζ
+        θs_i, Fs_i, Gs_i = @time run_ensemble(ηs_i, F, G, pr)
+
         push!(ηs, ηs_i)
-        push!(θs, compute_θs(ηs[end], pr))
-        push!(Fs, compute_Fs(θs[end], F))
-        push!(Gs, compute_Gs(Fs[end], G))
+        push!(θs, θs_i)
+        # push!(Fs, Fs_i)
+        push!(Gs, Gs_i)
 
         i += 1
-        t ≥ t_stop && break
+        if t ≥ t_stop 
+            return ηs, θs, Fs, Gs
+        end
 
     end
 
-    return ηs, θs, Fs, Gs
+end
+
+function save_results(results::Dict, fname::AbstractString)
+
+    for (k, v) in pairs(results)
+        h5write(fname, k, v)
+    end
 
 end
