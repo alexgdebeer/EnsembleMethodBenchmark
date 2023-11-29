@@ -11,7 +11,8 @@ EnRML:
  - Finish adding localisation options.
 
 EKS:
- - Finish writing code.
+ - Add localisation? (SEC, Lee 2021)
+ - Read paper on ALDI, and consider using the generalised square root.
  
 LMAP: 
  - Record number of PDE solves.
@@ -26,3 +27,5 @@ RTO:
 General:
  - Set up a framework for comparing the results of MCMC and the other methods.
  - Save everything to files.
+ - Save the number of iterations everything is doing.
+ - Add covariance inflation?
