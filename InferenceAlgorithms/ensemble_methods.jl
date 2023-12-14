@@ -1,12 +1,13 @@
 TOL = 1e-8 # Convergence tolerance
 
 abstract type Localiser end
+abstract type Inflator end
 
 struct IdentityLocaliser <: Localiser end
+struct IdentityInflator <: Inflator end
 
 struct FisherLocaliser <: Localiser end
-struct PriorOptimalLocaliser <: Localiser end
-struct PostOptimalLocaliser <: Localiser end
+struct LedoitWolfLocaliser <: Localiser end
 
 mutable struct ShuffleLocaliser <: Localiser
 
@@ -21,12 +22,12 @@ end
 
 struct BootstrapLocaliser <: Localiser
 
-    num_boot::Int 
+    n_boot::Int 
     σ::Real 
     tol::Real
 
-    function BootstrapLocaliser(num_boot=50, σ=0.6, tol=1e-8) 
-        return new(num_boot, σ, tol)
+    function BootstrapLocaliser(n_boot=50, σ=0.6, tol=1e-8) 
+        return new(n_boot, σ, tol)
     end
 
 end
@@ -34,6 +35,11 @@ end
 struct PowerLocaliser <: Localiser
     α::Real 
     PowerLocaliser(α=0.4) = new(α)
+end
+
+struct AdaptiveInflator <: Inflator
+    n_dummy_params::Int 
+    AdaptiveInflator(n_dummy_params=50) = new(n_dummy_params)
 end
 
 function compute_Δs(xs::AbstractMatrix)
@@ -113,9 +119,9 @@ function compute_gain_eki(
     Nη, Ne = size(ηs)
     NG, Ne = size(Gs)
     K = compute_gain_eki(ηs, Gs, α, C_e)
-    Ks_boot = zeros(Nη, NG, localiser.num_boot)
+    Ks_boot = zeros(Nη, NG, localiser.n_boot)
 
-    for k ∈ 1:localiser.num_boot 
+    for k ∈ 1:localiser.n_boot 
         inds_res = rand(1:Ne, Ne)
         ηs_res = ηs[:, inds_res]
         Gs_res = Gs[:, inds_res]
@@ -169,7 +175,6 @@ function compute_gain_eki(
     if localiser.P !== nothing 
         return localiser.P .* K
     end
-    println("computing localisation matrix...")
 
     Nη, Ne = size(ηs)
     NG, Ne = size(Gs)
@@ -255,6 +260,74 @@ function compute_gain_eki(
 
 end
 
+using CovarianceEstimation
+
+"""Computes the EKI gain after estimating the sample covariance matrix 
+using the estimator outlined by Ledoit and Wolf (2004)."""
+function compute_gain_eki(
+    localiser::LedoitWolfLocaliser,
+    ηs::AbstractMatrix,
+    Gs::AbstractMatrix,
+    α::Real,
+    C_e::AbstractMatrix
+)
+
+    function lw_norm_sq(A, p)
+        return sum(A.^2) / p
+    end
+    
+    Ξs = [ηs; Gs]
+
+    # ΔΞ = compute_Δs(Ξs)
+    # S = ΔΞ * ΔΞ'
+    
+
+    Nη, Ne = size(ηs)
+    # NΞ = size(Ξs, 1)
+
+    # # Compute empirical covariance matrix
+    # ΔΞ = compute_Δs(Ξs)
+    # S = ΔΞ * ΔΞ'
+    # display(S)
+
+    # m = tr(S) / NΞ
+    # d_sq = lw_norm_sq(S-m*I, NΞ)
+    # b_sq = 0.0
+    # for Ξ_k ∈ eachcol(Ξs)
+    #     b_sq += lw_norm_sq(Ξ_k*Ξ_k' - S, NΞ) / Ne^2
+    # end
+    # b_sq = min(b_sq, d_sq)
+    # a_sq = d_sq - b_sq
+
+    # C_LW = (b_sq / d_sq) * m * I + (a_sq / d_sq) * S
+    
+    F = I
+    κ   = n #(-1) if using correction
+    γ   = n / n # appears to just be 1?
+    Xc² = Xc.^2
+
+    ΣS² = sumij2(S) # Sum of squares of all elements of S
+    λ   = sumij(cov(Xc²)) / γ^2 - ΣS² # What is γ? Note the square here...
+    λ  /= κ * (ΣS² - 2tr(S) + pvar)
+    T(κ/wn)
+
+    target = DiagonalUnitVariance()
+    shrinkage = :ss # Ledoit-Wolf optimal shrinkage 
+    method = LinearShrinkage(target, shrinkage)
+    C_LW = cov(method, Matrix(Ξs'))
+
+    C_ηG = C_LW[1:Nη, (Nη+1):end]
+    C_GG = C_LW[(Nη+1):end, (Nη+1):end]
+
+    # display(C_ηG)
+    # display(S[1:Nη, (Nη+1):end])
+    # display(C_GG)
+    # display(S[(Nη+1):end, (Nη+1):end])
+
+    return C_ηG * inv(C_GG + α * C_e)
+
+end
+
 function run_ensemble(
     ηs::AbstractMatrix, 
     F::Function, 
@@ -284,6 +357,58 @@ function eki_update(
     ys = rand(MvNormal(y, α * C_e), Ne)
     K = compute_gain_eki(localiser, ηs, Gs, α, C_e)
     return ηs + K * (ys - Gs .- μ_e)
+
+end
+
+"""Updates the current ensemble without using any inflation."""
+function eki_update(
+    ηs::AbstractMatrix,
+    Gs::AbstractMatrix,
+    α::Real,
+    t::AbstractVector,
+    μ_e::AbstractVector,
+    C_e::AbstractMatrix,
+    localiser::Localiser,
+    inflator::IdentityInflator
+)
+
+    return eki_update(ηs, Gs, α, t, μ_e, C_e, localiser)
+
+end
+
+"""Updates the current ensemble using the adaptive localisation 
+method outlined by Evensen (2009)."""
+function eki_update(
+    ηs::AbstractMatrix,
+    Gs::AbstractMatrix,
+    α::Real,
+    t::AbstractVector,
+    μ_e::AbstractVector,
+    C_e::AbstractMatrix,
+    localiser::Localiser,
+    inflator::AdaptiveInflator
+)
+
+    Nη, Ne = size(ηs)
+
+    dummy_params = rand(Normal(), (inflator.n_dummy_params, Ne))
+    for r ∈ eachrow(dummy_params)
+        μ, σ = mean(r), std(r)
+        r = (r .- μ) ./ σ
+    end
+    
+    ηs_aug = eki_update(
+        [ηs; dummy_params], Gs,
+        α, t, μ_e, C_e, localiser
+    )
+
+    ηs_new = ηs_aug[1:Nη, :]
+    dummy_params = ηs_aug[Nη+1:end, :]
+    ρ = 1 / mean(std(dummy_params, dims=2))
+    @info "Inflation factor: $(ρ)."
+
+    μ_η = mean(ηs_new, dims=2)
+    return ρ * (ηs_new .- μ_η) .+ μ_η
 
 end
 
@@ -319,7 +444,8 @@ function run_eki_dmc(
     μ_e::AbstractVector,
     C_e::AbstractMatrix,
     Ne::Int;
-    localiser::Localiser=IdentityLocaliser()
+    localiser::Localiser=IdentityLocaliser(),
+    inflator::Inflator=IdentityInflator()
 )
 
     println("It. | t")
@@ -347,7 +473,7 @@ function run_eki_dmc(
             converged = true
         end
 
-        ηs_i = eki_update(ηs_i, Gs_i, α_i, y, μ_e, C_e, localiser)
+        ηs_i = eki_update(ηs_i, Gs_i, α_i, y, μ_e, C_e, localiser, inflator)
         θs_i, Fs_i, Gs_i = run_ensemble(ηs_i, F, G, pr)
 
         push!(ηs, ηs_i)
@@ -465,9 +591,9 @@ function compute_gain_enrml(
     Nη, Ne = size(ηs)
     NG, Ne = size(Gs)
     K = compute_gain_enrml(Δη, UG, ΛG, VG, C_e_invsqrt, λ)
-    Ks_boot = zeros(Nη, NG, localiser.num_boot)
+    Ks_boot = zeros(Nη, NG, localiser.n_boot)
 
-    for k ∈ 1:localiser.num_boot
+    for k ∈ 1:localiser.n_boot
 
         inds_res = rand(1:Ne, Ne)
 
