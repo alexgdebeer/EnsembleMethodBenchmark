@@ -88,11 +88,9 @@ function compute_gain_eki(
 
     σs_e = median(abs.(R_ηGs), dims=3) ./ 0.6745
 
-    for i ∈ 1:Nη
-        for j ∈ 1:NG
-            z = (1 - abs(R_ηG[i, j])) / (1 - σs_e[i, j])
-            P[i, j] = gaspari_cohn(z)
-        end
+    for i ∈ 1:Nη, j ∈ 1:NG
+        z = (1 - abs(R_ηG[i, j])) / (1 - σs_e[i, j])
+        P[i, j] = gaspari_cohn(z)
     end
 
     localiser.P = P
@@ -118,13 +116,11 @@ function compute_gain_eki(
     R_ηG = compute_cors(ηs, Gs)[1]
     P = zeros(size(R_ηG))
 
-    for i ∈ 1:Nη
-        for j ∈ 1:NG 
-            ρ_ij = R_ηG[i, j]
-            s = log((1+ρ_ij) / (1-ρ_ij)) / 2
-            σ_s = (tanh(s + √(Ne-3)^-1) - tanh(s - √(Ne-3)^-1)) / 2
-            P[i, j] = ρ_ij^2 / (ρ_ij^2 + σ_s^2)
-        end
+    for i ∈ 1:Nη, j ∈ 1:NG 
+        ρ_ij = R_ηG[i, j]
+        s = log((1+ρ_ij) / (1-ρ_ij)) / 2
+        σ_s = (tanh(s + √(Ne-3)^-1) - tanh(s - √(Ne-3)^-1)) / 2
+        P[i, j] = ρ_ij^2 / (ρ_ij^2 + σ_s^2)
     end
 
     return P .* K
