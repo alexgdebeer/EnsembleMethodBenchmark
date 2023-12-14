@@ -67,34 +67,7 @@ function compute_gain_eki(
 )
 
     K = compute_gain_eki(ηs, Gs, α, C_e)
-
-    if localiser.P !== nothing 
-        return localiser.P .* K
-    end
-
-    Nη, Ne = size(ηs)
-    NG, Ne = size(Gs)
-
-    R_ηG = compute_cors(ηs, Gs)[1]
-
-    P = zeros(Nη, NG)
-    R_ηGs = zeros(Nη, NG, localiser.n_shuffle)
-
-    for i ∈ 1:localiser.n_shuffle
-        inds = get_shuffled_inds(Ne)
-        ηs_shuffled = ηs[:, inds]
-        R_ηGs[:, :, i] = compute_cors(ηs_shuffled, Gs)[1]
-    end
-
-    σs_e = median(abs.(R_ηGs), dims=3) ./ 0.6745
-
-    for i ∈ 1:Nη, j ∈ 1:NG
-        z = (1 - abs(R_ηG[i, j])) / (1 - σs_e[i, j])
-        P[i, j] = gaspari_cohn(z)
-    end
-
-    localiser.P = P
-    return P .* K
+    return localiser(localiser, ηs, Gs, K)
 
 end
 
@@ -108,22 +81,8 @@ function compute_gain_eki(
     C_e::AbstractMatrix
 )
 
-    Nη, Ne = size(ηs)
-    NG, Ne = size(Gs)
-
     K = compute_gain_eki(ηs, Gs, α, C_e)
-
-    R_ηG = compute_cors(ηs, Gs)[1]
-    P = zeros(size(R_ηG))
-
-    for i ∈ 1:Nη, j ∈ 1:NG 
-        ρ_ij = R_ηG[i, j]
-        s = log((1+ρ_ij) / (1-ρ_ij)) / 2
-        σ_s = (tanh(s + √(Ne-3)^-1) - tanh(s - √(Ne-3)^-1)) / 2
-        P[i, j] = ρ_ij^2 / (ρ_ij^2 + σ_s^2)
-    end
-
-    return P .* K
+    return localise(localiser, ηs, Gs, K)
 
 end
 
@@ -214,12 +173,7 @@ function eki_update(
 )
 
     Nη, Ne = size(ηs)
-
-    dummy_params = rand(Normal(), (inflator.n_dummy_params, Ne))
-    for r ∈ eachrow(dummy_params)
-        μ, σ = mean(r), std(r)
-        r = (r .- μ) ./ σ
-    end
+    dummy_params = generate_dummy_params(inflator, Ne)
     
     ηs_aug = eki_update(
         [ηs; dummy_params], Gs,

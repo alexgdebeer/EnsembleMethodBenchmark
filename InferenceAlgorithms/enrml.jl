@@ -49,9 +49,7 @@ function compute_gain_enrml(
 end
 
 """Computes the EnRML gain using the localisation method outlined by
-Flowerdew (2015).
-
-TODO: move parts of this function common to EKI and EnRML to a separate file."""
+Flowerdew (2015)."""
 function compute_gain_enrml(
     localiser::FisherLocaliser,
     ηs::AbstractMatrix,
@@ -64,22 +62,8 @@ function compute_gain_enrml(
     λ::Real
 )
 
-    Nη, Ne = size(ηs)
-    NG, Ne = size(Gs)
-
     K = compute_gain_enrml(Δη, UG, ΛG, VG, C_e_invsqrt, λ)
-
-    R_ηG = compute_cors(ηs, Gs)[1]
-    P = zeros(size(R_ηG))
-
-    for i ∈ 1:Nη, j ∈ 1:NG 
-        ρ_ij = R_ηG[i, j]
-        s = log((1+ρ_ij) / (1-ρ_ij)) / 2
-        σ_s = (tanh(s + √(Ne-3)^-1) - tanh(s - √(Ne-3)^-1)) / 2
-        P[i, j] = ρ_ij^2 / (ρ_ij^2 + σ_s^2)
-    end
-
-    return P .* K
+    return localise(localiser, ηs, Gs, K)
 
 end
 
@@ -126,9 +110,7 @@ function compute_gain_enrml(
 end
 
 """Computes the EnRML gain using a variant of the localisation method 
-outlined by Luo and Bhakta (2020).
-
-TODO: Consider moving the parts common to this localisation method for both EKI and EnRML to a separate file."""
+outlined by Luo and Bhakta (2020)."""
 function compute_gain_enrml(
     localiser::BootstrapLocaliser,
     ηs::AbstractMatrix,
@@ -140,37 +122,9 @@ function compute_gain_enrml(
     C_e_invsqrt::AbstractMatrix,
     λ::Real
 )
-    @warn "Check me please!!"
 
     K = compute_gain_enrml(Δη, UG, ΛG, VG, C_e_invsqrt, λ)
-
-    if localiser.P !== nothing 
-        return localiser.P .* K
-    end
-
-    Nη, Ne = size(ηs)
-    NG, Ne = size(Gs)
-
-    R_ηG = compute_cors(ηs, Gs)[1]
-
-    P = zeros(Nη, NG)
-    R_ηGs = zeros(Nη, NG, localiser.n_shuffle)
-
-    for i ∈ 1:localiser.n_shuffle
-        inds = get_shuffled_inds(Ne)
-        ηs_shuffled = ηs[:, inds]
-        R_ηGs[:, :, i] = compute_cors(ηs_shuffled, Gs)[1]
-    end
-
-    σs_e = median(abs.(R_ηGs), dims=3) ./ 0.6745
-
-    for i ∈ 1:Nη, j ∈ 1:NG
-        z = (1 - abs(R_ηG[i, j])) / (1 - σs_e[i, j])
-        P[i, j] = gaspari_cohn(z)
-    end
-
-    localiser.P = P
-    return P .* K
+    return localiser(localiser, ηs, Gs, K)
 
 end
 
@@ -244,12 +198,7 @@ function enrml_update(
 )
 
     Nη, Ne = size(ηs)
-
-    dummy_params = rand(Normal(), (inflator.n_dummy_params, Ne))
-    for r ∈ eachrow(dummy_params)
-        μ, σ = mean(r), std(r)
-        r = (r .- μ) ./ σ
-    end
+    dummy_params = generate_dummy_params(inflator, Ne)
 
     ηs_pr_aug = [ηs_pr; dummy_params]
     Uη_pr_aug, Λη_pr_aug, = tsvd(ηs_pr_aug)
