@@ -189,14 +189,14 @@ function eki_update(
     ηs::AbstractMatrix,
     Gs::AbstractMatrix,
     α::Real,
-    t::AbstractVector,
+    y::AbstractVector,
     μ_e::AbstractVector,
     C_e::AbstractMatrix,
     localiser::Localiser,
     inflator::IdentityInflator
 )
 
-    return eki_update(ηs, Gs, α, t, μ_e, C_e, localiser)
+    return eki_update(ηs, Gs, α, y, μ_e, C_e, localiser)
 
 end
 
@@ -206,7 +206,7 @@ function eki_update(
     ηs::AbstractMatrix,
     Gs::AbstractMatrix,
     α::Real,
-    t::AbstractVector,
+    y::AbstractVector,
     μ_e::AbstractVector,
     C_e::AbstractMatrix,
     localiser::Localiser,
@@ -223,7 +223,7 @@ function eki_update(
     
     ηs_aug = eki_update(
         [ηs; dummy_params], Gs,
-        α, t, μ_e, C_e, localiser
+        α, y, μ_e, C_e, localiser
     )
 
     ηs_new = ηs_aug[1:Nη, :]

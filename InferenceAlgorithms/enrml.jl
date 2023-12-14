@@ -1,4 +1,3 @@
-
 function tsvd(A::AbstractMatrix; e::Real=0.99)
 
     U, Λ, V = svd(A)
@@ -11,6 +10,11 @@ function tsvd(A::AbstractMatrix; e::Real=0.99)
         end
     end
 
+end
+
+function compute_S(Gs, ys, μ_e, C_e_invsqrt)
+    φs = sum((C_e_invsqrt * (Gs .+ μ_e .- ys)).^2, dims=1)
+    return mean(φs)
 end
 
 function compute_gain_enrml(
@@ -45,7 +49,9 @@ function compute_gain_enrml(
 end
 
 """Computes the EnRML gain using the localisation method outlined by
-Flowerdew (2015)."""
+Flowerdew (2015).
+
+TODO: move parts of this function common to EKI and EnRML to a separate file."""
 function compute_gain_enrml(
     localiser::FisherLocaliser,
     ηs::AbstractMatrix,
@@ -66,13 +72,11 @@ function compute_gain_enrml(
     R_ηG = compute_cors(ηs, Gs)[1]
     P = zeros(size(R_ηG))
 
-    for i ∈ 1:Nη
-        for j ∈ 1:NG 
-            ρ_ij = R_ηG[i, j]
-            s = log((1+ρ_ij) / (1-ρ_ij)) / 2
-            σ_s = (tanh(s + √(Ne-3)^-1) - tanh(s - √(Ne-3)^-1)) / 2
-            P[i, j] = ρ_ij^2 / (ρ_ij^2 + σ_s^2)
-        end
+    for i ∈ 1:Nη, j ∈ 1:NG 
+        ρ_ij = R_ηG[i, j]
+        s = log((1+ρ_ij) / (1-ρ_ij)) / 2
+        σ_s = (tanh(s + √(Ne-3)^-1) - tanh(s - √(Ne-3)^-1)) / 2
+        P[i, j] = ρ_ij^2 / (ρ_ij^2 + σ_s^2)
     end
 
     return P .* K
@@ -122,7 +126,9 @@ function compute_gain_enrml(
 end
 
 """Computes the EnRML gain using a variant of the localisation method 
-outlined by Luo and Bhakta (2020)."""
+outlined by Luo and Bhakta (2020).
+
+TODO: Consider moving the parts common to this localisation method for both EKI and EnRML to a separate file."""
 function compute_gain_enrml(
     localiser::BootstrapLocaliser,
     ηs::AbstractMatrix,
@@ -158,11 +164,9 @@ function compute_gain_enrml(
 
     σs_e = median(abs.(R_ηGs), dims=3) ./ 0.6745
 
-    for i ∈ 1:Nη
-        for j ∈ 1:NG
-            z = (1 - abs(R_ηG[i, j])) / (1 - σs_e[i, j])
-            P[i, j] = gaspari_cohn(z)
-        end
+    for i ∈ 1:Nη, j ∈ 1:NG
+        z = (1 - abs(R_ηG[i, j])) / (1 - σs_e[i, j])
+        P[i, j] = gaspari_cohn(z)
     end
 
     localiser.P = P
@@ -170,11 +174,7 @@ function compute_gain_enrml(
 
 end
 
-function compute_S(Gs, ys, μ_e, C_e_invsqrt)
-    φs = sum((C_e_invsqrt * (Gs .+ μ_e .- ys)).^2, dims=1)
-    return mean(φs)
-end
-
+"""Computes an EnRML update, following Chen and Oliver (2013)."""
 function enrml_update(
     ηs::AbstractMatrix, 
     Gs::AbstractMatrix, 
@@ -205,6 +205,70 @@ function enrml_update(
 
 end
 
+"""Computes an EnRML update without applying any inflation."""
+function enrml_update(
+    ηs::AbstractMatrix, 
+    Gs::AbstractMatrix, 
+    ys::AbstractMatrix, 
+    μ_e::AbstractVector, 
+    C_e_invsqrt::AbstractMatrix,
+    ηs_pr::AbstractMatrix,
+    Uη_pr::AbstractMatrix,
+    Λη_pr::AbstractVector,
+    λ::Real,
+    localiser::Localiser,
+    inflator::IdentityInflator
+)
+
+    return enrml_update(
+        ηs, Gs, ys, μ_e, C_e_invsqrt, 
+        ηs_pr, Uη_pr, Λη_pr, λ, localiser
+    )
+
+end
+
+"""Updates the current ensemble using the adaptive inflation method 
+outlined by Evensen (2009)."""
+function enrml_update(
+    ηs::AbstractMatrix, 
+    Gs::AbstractMatrix, 
+    ys::AbstractMatrix, 
+    μ_e::AbstractVector, 
+    C_e_invsqrt::AbstractMatrix,
+    ηs_pr::AbstractMatrix,
+    Uη_pr::AbstractMatrix,
+    Λη_pr::AbstractVector,
+    λ::Real,
+    localiser::Localiser,
+    inflator::AdaptiveInflator
+)
+
+    Nη, Ne = size(ηs)
+
+    dummy_params = rand(Normal(), (inflator.n_dummy_params, Ne))
+    for r ∈ eachrow(dummy_params)
+        μ, σ = mean(r), std(r)
+        r = (r .- μ) ./ σ
+    end
+
+    ηs_pr_aug = [ηs_pr; dummy_params]
+    Uη_pr_aug, Λη_pr_aug, = tsvd(ηs_pr_aug)
+
+    ηs_aug = enrml_update(
+        [ηs; dummy_params], Gs, ys, μ_e, C_e_invsqrt, 
+        ηs_pr_aug, Uη_pr_aug, Λη_pr_aug, λ, localiser
+    )
+
+    ηs_new = ηs_aug[1:Nη, :]
+    dummy_params = ηs_aug[Nη+1:end, :]
+    ρ = 1 / mean(std(dummy_params, dims=2))
+    @info "Inflation factor: $(ρ)."
+
+    μ_η = mean(ηs_new, dims=2)
+    return ρ * (ηs_new .- μ_η) .+ μ_η
+
+end
+
 function run_enrml(
     F::Function, 
     G::Function,
@@ -219,7 +283,8 @@ function run_enrml(
     max_its::Int=30,
     ΔS_min::Real=0.01,
     Δη_min::Real=0.5,
-    localiser::Localiser=IdentityLocaliser()
+    localiser::Localiser=IdentityLocaliser(),
+    inflator::Inflator=IdentityInflator()
 )
 
     println("It. | stat | ΔS       | Δη_max   | λ")
@@ -258,7 +323,7 @@ function run_enrml(
 
         ηs_i = enrml_update(
             ηs[en_ind], Gs[en_ind], ys, μ_e, C_e_invsqrt, 
-            ηs_pr, Uη_pr, Λη_pr, λ, localiser
+            ηs_pr, Uη_pr, Λη_pr, λ, localiser, inflator
         )
 
         θs_i, Fs_i, Gs_i = run_ensemble(ηs_i, F, G, pr)
