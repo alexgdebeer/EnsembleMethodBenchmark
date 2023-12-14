@@ -15,14 +15,15 @@ You should then be able to run any of the scripts in the top level of the reposi
 ## TODO:
 
 EKI:
- - 
+ - Currently looking good.
 
 EnRML:
- - Finish adding localisation options.
+ - Experiment with convergence tolerances.
 
 EKS:
  - Add localisation? (SEC, Lee 2021)
  - Read paper on ALDI, and consider using the generalised square root.
+ - Split into EKS (uncorrected) and ALDI (corrected).
  
 LMAP: 
  - Record number of PDE solves.
