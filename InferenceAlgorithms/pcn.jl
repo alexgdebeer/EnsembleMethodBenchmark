@@ -14,6 +14,7 @@ function run_chain(
     δ::Real,
     B_wells::AbstractMatrix, 
     n_chain::Int;
+    thin::Int=10,
     verbose::Bool=true
 )
 
@@ -105,11 +106,11 @@ function run_chain(
 
             ηs = vcat(ξs, ωs)
 
-            h5write("data/pcn/chain_$n_chain.h5", "ηs_$n_chunk", ηs)
-            h5write("data/pcn/chain_$n_chain.h5", "θs_$n_chunk", θs)
-            h5write("data/pcn/chain_$n_chain.h5", "Fs_$n_chunk", Fs)
-            h5write("data/pcn/chain_$n_chain.h5", "Gs_$n_chunk", Gs)
-            h5write("data/pcn/chain_$n_chain.h5", "τs_$n_chunk", τs)
+            h5write("data/pcn/chain_$n_chain.h5", "ηs_$n_chunk", ηs[:, 1:thin:end])
+            h5write("data/pcn/chain_$n_chain.h5", "θs_$n_chunk", θs[:, 1:thin:end])
+            h5write("data/pcn/chain_$n_chain.h5", "Fs_$n_chunk", Fs[:, 1:thin:end])
+            h5write("data/pcn/chain_$n_chain.h5", "Gs_$n_chunk", Gs[:, 1:thin:end])
+            h5write("data/pcn/chain_$n_chain.h5", "τs_$n_chunk", τs[:, 1:thin:end])
 
             n_chunk += 1
 
