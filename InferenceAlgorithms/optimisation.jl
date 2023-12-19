@@ -19,6 +19,8 @@ struct GNResult
 
 end
 
+sqnorm(x) = sum(x.^2)
+
 function get_full_state(
     p_r::AbstractVector,
     g::Grid,
@@ -591,7 +593,8 @@ function J_rto(
 
     p = get_full_state(p_r, g, m)
 
-    res = (Λ^2 + I)^-0.5 * (Φ' * θ + Λ * Ψ' * m.L_e * (m.B * p + m.μ_e - y) - Φ' * η)
+    res = (Λ^2 + I)^-0.5 * 
+        (Φ' * θ + Λ * Ψ' * m.L_e * (m.B * p + m.μ_e - y) - Φ' * η)
     
     return 0.5 * sum(res.^2)
 
@@ -813,9 +816,7 @@ function optimise_rto(
 
 end
 
-using FiniteDiff
-
-sqnorm(x) = sum(x.^2)
+# using FiniteDiff
 
 function compute_weight_rto(
     sol::GNResult,
@@ -871,33 +872,6 @@ function run_rto(
 
     θ0 = vec(rand(pr))
     map = compute_map(g, m, pr, y, θ0)
-
-    # # TEMP: debugging...
-
-    # function test_func(θ)
-
-    #     u = transform(pr, θ)
-    #     Au = m.c * m.ϕ * sparse(I, g.nx^2, g.nx^2) + 
-    #         (g.Δt / m.μ) * g.∇h' * spdiagm(g.A * exp.(u)) * g.∇h
-    #     Au_r = m.V_ri' * Au * m.V_ri
-
-    #     p_r = solve_forward(Au, Au_r, g, m)
-    #     p = get_full_state(p_r, g, m)
-
-    #     return m.L_e * (m.B * p + m.μ_e - y)
-
-    # end
-
-    # Jac = FiniteDiff.finite_difference_jacobian(test_func, map.θ)
-
-    # U, S, V = svd(Jac)
-
-    # # display(Jac)
-    # # x = rand(Normal(), NG)
-    # # display(Jac' * x)
-    # # display(compute_Jtx(x, map.θ, map.u, map.Au_r, map.∂Ap∂u, map.∂Aμ∂u, g, m, pr))
-
-    # # error("stop here...")
 
     λs, Ψ, Φ, info = svdsolve(jac_func, NG, n_svd, :LR, krylovdim=100)
     info.converged != length(λs) && @warn "svdsolve did not converge."
