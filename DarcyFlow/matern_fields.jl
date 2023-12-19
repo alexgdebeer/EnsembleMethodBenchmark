@@ -111,8 +111,8 @@ struct MaternField
     N::AbstractMatrix
     L::AbstractMatrix
 
-    Nη::Int
-    Nθ::Int 
+    Nθ::Int
+    Nu::Int 
     Nω::Int
 
     function MaternField(
@@ -140,15 +140,15 @@ function Base.rand(
     mf::MaternField, 
     n::Int=1
 )::AbstractMatrix   
-    return rand(Normal(), mf.Nη, n)
+    return rand(Normal(), mf.Nθ, n)
 end
 
 function transform(
     mf::MaternField, 
-    η::AbstractVecOrMat
+    θ::AbstractVecOrMat
 )::AbstractVector
 
-    ξ..., ξ_σ, ξ_l = η
+    ξ..., ξ_σ, ξ_l = θ
 
     σ = gauss_to_unif(ξ_σ, mf.σ_bounds...)
     l = gauss_to_unif(ξ_l, mf.l_bounds...)

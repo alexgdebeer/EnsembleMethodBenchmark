@@ -54,7 +54,7 @@ struct Model <: AbstractModel
     ϕ::Real
     μ::Real
     c::Real
-    u0::Real
+    p0::Real
 
     Q::SparseMatrixCSC
     B::SparseMatrixCSC
@@ -68,7 +68,7 @@ struct Model <: AbstractModel
         ϕ::Real, 
         μ::Real, 
         c::Real, 
-        u0::Real,
+        p0::Real,
         wells::AbstractVector{Well},
         well_change_times::AbstractVector,
         x_obs::AbstractVector,
@@ -84,7 +84,7 @@ struct Model <: AbstractModel
         Q = build_Q(g, wells, well_change_times)
         B, B_wells = build_B(g, ny, nyi, x_obs, y_obs, t_obs_inds)
 
-        return new(ϕ, μ, c, u0, Q, B, B_wells, ny, nyi)
+        return new(ϕ, μ, c, p0, Q, B, B_wells, ny, nyi)
 
     end
 
@@ -95,22 +95,22 @@ struct ReducedOrderModel <: AbstractModel
     ϕ::Real
     μ::Real
     c::Real
-    u0::Real
+    p0::Real
 
     Q::SparseMatrixCSC
     B::SparseMatrixCSC
     B_wells::SparseMatrixCSC
     BV_r::SparseMatrixCSC
 
-    μ_ui::AbstractVector
+    μ_pi::AbstractVector
     V_ri::AbstractMatrix
     
     μ_e::AbstractVector
-    Γ_e::AbstractMatrix 
-    Γ_e_inv::AbstractMatrix
+    C_e::AbstractMatrix 
+    C_e_inv::AbstractMatrix
     L_e::AbstractMatrix
 
-    nu_r::Int
+    np_r::Int
     ny::Int
     nyi::Int
 
@@ -119,19 +119,19 @@ struct ReducedOrderModel <: AbstractModel
         ϕ::Real, 
         μ::Real, 
         c::Real, 
-        u0::Real,
+        p0::Real,
         wells::AbstractVector{Well},
         well_change_times::AbstractVector,
         x_obs::AbstractVector,
         y_obs::AbstractVector,
         t_obs::AbstractVector,
-        μ_ui::AbstractVector,
+        μ_pi::AbstractVector,
         V_ri::AbstractMatrix,
         μ_e::AbstractVector,
-        Γ_e::AbstractMatrix
+        C_e::AbstractMatrix
     )
 
-        nu_r = size(V_ri, 2)
+        np_r = size(V_ri, 2)
         nyi = length(x_obs)
         ny = nyi * length(t_obs)
 
@@ -143,15 +143,15 @@ struct ReducedOrderModel <: AbstractModel
         V_r = sparse(kron(sparse(I, g.nt, g.nt), V_ri))
         BV_r = B * V_r
 
-        Γ_e_inv = Hermitian(inv(Γ_e))
-        L_e = cholesky(Γ_e_inv).U
+        C_e_inv = Hermitian(inv(C_e))
+        L_e = cholesky(C_e_inv).U
 
         return new(
-            ϕ, μ, c, u0, 
+            ϕ, μ, c, p0, 
             Q, B, B_wells, BV_r, 
-            μ_ui, V_ri, 
-            μ_e, Γ_e, Γ_e_inv, L_e,
-            nu_r, ny, nyi
+            μ_pi, V_ri, 
+            μ_e, C_e, C_e_inv, L_e,
+            np_r, ny, nyi
         )
 
     end
