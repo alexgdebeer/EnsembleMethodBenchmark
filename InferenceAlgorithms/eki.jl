@@ -67,7 +67,7 @@ function compute_gain_eki(
 )
 
     K = compute_gain_eki(θs, Gs, α, C_e)
-    return localiser(localiser, θs, Gs, K)
+    return localise(localiser, θs, Gs, K)
 
 end
 
