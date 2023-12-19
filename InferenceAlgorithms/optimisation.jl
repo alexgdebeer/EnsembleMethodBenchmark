@@ -493,7 +493,7 @@ function compute_Jx(
     g::Grid,
     m::ReducedOrderModel,
     pr::MaternField
-)::AbstractVector
+)
 
     ∂Ap∂θx = compute_∂Ax∂θx(∂Ap∂u, θ, u, x, pr)
     ∂Aμ∂θx = compute_∂Ax∂θx(∂Aμ∂u, θ, u, x, pr)
@@ -505,7 +505,6 @@ function compute_Jx(
 
 end
 
-# TODO: clean this up...
 function compute_JX(
     X::AbstractMatrix, 
     θ::AbstractVector,
@@ -518,12 +517,12 @@ function compute_JX(
     pr::MaternField
 )
 
-    function fwd(
+    function solve_forward_lu(
         Au_r::LU,
         b::AbstractVector,
         g::Grid,
         m::ReducedOrderModel
-    )::AbstractVector
+    )
 
         b = reshape(b, m.np_r, g.nt)
         p = zeros(m.np_r, g.nt)
@@ -547,7 +546,7 @@ function compute_JX(
         ∂Ap∂θx = compute_∂Ax∂θx(∂Ap∂u, θ, u, x, pr)
         ∂Aμ∂θx = compute_∂Ax∂θx(∂Aμ∂u, θ, u, x, pr)
 
-        p_inc = fwd(Au_r_fac, ∂Ap∂θx + ∂Aμ∂θx, g, m)
+        p_inc = solve_forward_lu(Au_r_fac, ∂Ap∂θx + ∂Aμ∂θx, g, m)
         JX[:, i] = -m.L_e * m.BV_r * p_inc
     
     end
@@ -566,7 +565,7 @@ function compute_Jtx(
     g::Grid,
     m::ReducedOrderModel,
     pr::MaternField
-)::AbstractVector
+)
 
     λ = solve_adjoint_inc(Au_r, m.BV_r' * m.L_e' * x, g, m)
 
@@ -577,6 +576,8 @@ function compute_Jtx(
     return Jtx
 
 end
+
+G(p, m, y) = m.L_e * (m.B * p + m.μ_e - y)
 
 """Least-squares RTO functional."""
 function J_rto(
@@ -593,10 +594,8 @@ function J_rto(
 
     p = get_full_state(p_r, g, m)
 
-    res = (Λ^2 + I)^-0.5 * 
-        (Φ' * θ + Λ * Ψ' * m.L_e * (m.B * p + m.μ_e - y) - Φ' * η)
-    
-    return 0.5 * sum(res.^2)
+    res = (Λ^2 + I)^-0.5 * (Λ * Ψ' * G(p, m, y) + Φ' * (θ - η))
+    return 0.5 * sqnorm(res)
 
 end
 
@@ -617,13 +616,12 @@ function compute_∇Lθ_rto(
     η::AbstractVector
 )
 
-    v_comp = (I - Φ * Φ') * η
     p = get_full_state(p_r, g, m)
 
-    ∇Lθ = Φ * (Λ^2 + I)^-1 * Φ' * θ
-    ∇Lθ += Φ * (Λ^2 + I)^-1 * (Λ * Ψ' * m.L_e * (m.B * p + m.μ_e - y) - Φ' * v_comp - Φ' * η)
-    ∇Lθ += compute_∂Ax∂θtx(∂Ap∂u, θ, u, λ, pr) + compute_∂Ax∂θtx(∂Aμ∂u, θ, u, λ, pr)
+    Gputλ = compute_∂Ax∂θtx(∂Ap∂u, θ, u, λ, pr) + 
+            compute_∂Ax∂θtx(∂Aμ∂u, θ, u, λ, pr)
 
+    ∇Lθ = Φ * (Λ^2 + I)^-1 * (Φ' * θ + (Λ * Ψ' * G(p, m, y) - Φ' * η)) + Gputλ
     return ∇Lθ
 
 end
@@ -784,7 +782,7 @@ function optimise_rto(
             p_r = solve_forward(Au, Au_r, g, m)
         end
         p = get_full_state(p_r, g, m)
-        b_inc = m.BV_r' * m.L_e * Ψ * Λ' * (Λ^2 + I)^-1 * (Λ * Ψ' * L_e * (m.B * p + m.μ_e - y) + Φ' * (θ - η))
+        b_inc = m.BV_r' * m.L_e' * Ψ * Λ' * (Λ^2 + I)^-1 * (Λ * Ψ' * G(p, m, y) + Φ' * (θ - η))
         λ = solve_adjoint_inc(Au_r, -b_inc, g, m)
 
         ∂Ap∂u = compute_∂Ap∂u(u, p_r, g, m)
@@ -815,8 +813,6 @@ function optimise_rto(
     end
 
 end
-
-# using FiniteDiff
 
 function compute_weight_rto(
     sol::GNResult,
@@ -879,6 +875,8 @@ function run_rto(
     Ψ = hcat(Ψ...)
     Λ = Diagonal(λs)
     Φ = hcat(Φ...)
+
+    println("Min λ: $(minimum(λs))")
     
     samples = [map]
     lnws = [compute_weight_rto(map, y, g, m, pr, Ψ, Λ, Φ)]
