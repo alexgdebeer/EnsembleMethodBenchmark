@@ -2,13 +2,13 @@ include("setup.jl")
 include("InferenceAlgorithms/InferenceAlgorithms.jl")
 
 NF = n_wells * grid_c.nt
-Ni = 500_000
+Ni = 2_000_000
 
 β = 0.025
 δ = 0.20
 
 Nb = 100
-Nc = 4
+Nc = 5
 
 run_pcn(
     F, G, pr, d_obs, 

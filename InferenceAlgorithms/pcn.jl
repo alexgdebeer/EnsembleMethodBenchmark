@@ -5,7 +5,7 @@ function run_chain(
     d_obs::AbstractVector,
     μ_e::AbstractVector,
     L_e::AbstractMatrix,
-    η0::AbstractVector,
+    θ0::AbstractVector,
     NF::Int,
     NG::Int,
     Ni::Int, 
@@ -18,16 +18,16 @@ function run_chain(
     verbose::Bool=true
 )
 
-    θ0 = transform(pr, η0)
+    u0 = transform(pr, θ0)
     norm = Normal()
 
-    logpri(η) = -sum(η.^2)
+    logpri(θ) = -sum(θ.^2)
     loglik(G) = -sum((L_e*(G+μ_e-d_obs)).^2)
     logpost(η, G) = logpri(η) + loglik(G)
 
     ξs = Matrix{Float64}(undef, pr.Nθ, Nb)
     ωs = Matrix{Float64}(undef, pr.Nω, Nb)
-    θs = Matrix{Float64}(undef, pr.Nθ, Nb)
+    us = Matrix{Float64}(undef, pr.Nu, Nb)
     Fs = Matrix{Float64}(undef, NF, Nb)
     Gs = Matrix{Float64}(undef, NG, Nb)
     τs = Vector{Float64}(undef, Nb)
@@ -35,14 +35,14 @@ function run_chain(
     α_ξ = 0
     α_ω = 0
 
-    ξs[:, 1] = η0[1:pr.Nθ]
-    ωs[:, 1] = η0[pr.Nθ+1:end]
-    θs[:, 1] = θ0
+    ξs[:, 1] = θ0[1:pr.Nu]
+    ωs[:, 1] = θ0[pr.Nu+1:end]
+    us[:, 1] = u0
 
-    F_f = F(θ0)
+    F_f = F(u0)
     Fs[:, 1] = B_wells * F_f
     Gs[:, 1] = G(F_f)
-    τs[1] = logpost(η0, Gs[:, 1])
+    τs[1] = logpost(θ0, Gs[:, 1])
 
     t0 = time()
     n_chunk = 1
@@ -51,13 +51,13 @@ function run_chain(
         ind_c = (i-1) % Nb + 1
         ind_p = i % Nb + 1
 
-        ζ_ξ = rand(norm, pr.Nθ)
+        ζ_ξ = rand(norm, pr.Nu)
         ξ_p = √(1-β^2) * ξs[:, ind_c] + β*ζ_ξ
 
-        η_p = vcat(ξ_p, ωs[:, ind_c])
-        θ_p = transform(pr, η_p)
+        θ_p = vcat(ξ_p, ωs[:, ind_c])
+        u_p = transform(pr, θ_p)
 
-        F_f = F(θ_p)
+        F_f = F(u_p)
         F_p = B_wells * F_f
         G_p = G(F_f)
 
@@ -66,12 +66,12 @@ function run_chain(
         if h ≥ rand()
             α_ξ += 1
             ξs[:, ind_p] = ξ_p
-            θs[:, ind_p] = θ_p
+            us[:, ind_p] = u_p
             Fs[:, ind_p] = F_p
             Gs[:, ind_p] = G_p
         else
             ξs[:, ind_p] = ξs[:, ind_c]
-            θs[:, ind_p] = θs[:, ind_c]
+            us[:, ind_p] = us[:, ind_c]
             Fs[:, ind_p] = Fs[:, ind_c]
             Gs[:, ind_p] = Gs[:, ind_c]
         end
@@ -79,10 +79,10 @@ function run_chain(
         ζ_ω = rand(norm, pr.Nω)
         ω_p = ωs[:, ind_c] + δ*ζ_ω
 
-        η_p = vcat(ξs[:, ind_p], ω_p)
-        θ_p = transform(pr, η_p)
+        θ_p = vcat(ξs[:, ind_p], ω_p)
+        u_p = transform(pr, θ_p)
 
-        F_f = F(θ_p)
+        F_f = F(u_p)
         F_p = B_wells * F_f
         G_p = G(F_f)
 
@@ -92,22 +92,22 @@ function run_chain(
         if h ≥ rand()
             α_ω += 1
             ωs[:, ind_p] = ω_p
-            θs[:, ind_p] = θ_p
+            us[:, ind_p] = u_p
             Fs[:, ind_p] = F_p 
             Gs[:, ind_p] = G_p
         else
             ωs[:, ind_p] = ωs[:, ind_c]
         end
 
-        η = vcat(ξs[:, ind_p], ωs[:, ind_p])
-        τs[ind_p] = logpost(η, Gs[:, ind_p])
+        θ = vcat(ξs[:, ind_p], ωs[:, ind_p])
+        τs[ind_p] = logpost(θ, Gs[:, ind_p])
 
         if (i+1) % Nb == 0
 
-            ηs = vcat(ξs, ωs)
+            θs = vcat(ξs, ωs)
 
-            h5write("data/pcn/chain_$n_chain.h5", "ηs_$n_chunk", ηs[:, 1:thin:end])
             h5write("data/pcn/chain_$n_chain.h5", "θs_$n_chunk", θs[:, 1:thin:end])
+            h5write("data/pcn/chain_$n_chain.h5", "us_$n_chunk", us[:, 1:thin:end])
             h5write("data/pcn/chain_$n_chain.h5", "Fs_$n_chunk", Fs[:, 1:thin:end])
             h5write("data/pcn/chain_$n_chain.h5", "Gs_$n_chunk", Gs[:, 1:thin:end])
             h5write("data/pcn/chain_$n_chain.h5", "τs_$n_chunk", τs[:, 1:thin:end])
@@ -158,9 +158,9 @@ function run_pcn(
 
     Threads.@threads for chain_num ∈ 1:Nc
 
-        η0 = vec(rand(pr))
+        θ0 = vec(rand(pr))
         run_chain(
-            F, G, pr, d_obs, μ_e, L_e, η0, 
+            F, G, pr, d_obs, μ_e, L_e, θ0, 
             NF, NG, Ni, Nb, β, δ,
             B_wells, chain_num,
             verbose=verbose
