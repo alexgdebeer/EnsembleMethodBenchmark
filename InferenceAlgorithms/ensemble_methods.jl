@@ -9,9 +9,10 @@ mutable struct ShuffleLocaliser <: Localiser
 
     n_shuffle::Int 
     P::Union{AbstractMatrix, Nothing}
+    groups::Union{AbstractVector, Nothing}
     
-    function ShuffleLocaliser(n_shuffle=50)
-        return new(n_shuffle, nothing)
+    function ShuffleLocaliser(; n_shuffle=50, groups=nothing)
+        return new(n_shuffle, nothing, groups)
     end
 
 end
@@ -22,7 +23,7 @@ struct BootstrapLocaliser <: Localiser
     σ::Real 
     tol::Real
 
-    function BootstrapLocaliser(n_boot=50, σ=0.6, tol=1e-8) 
+    function BootstrapLocaliser(; n_boot=50, σ=0.6, tol=1e-8) 
         return new(n_boot, σ, tol)
     end
 
@@ -30,12 +31,12 @@ end
 
 struct PowerLocaliser <: Localiser
     α::Real 
-    PowerLocaliser(α=0.4) = new(α)
+    PowerLocaliser(; α=0.4) = new(α)
 end
 
 struct AdaptiveInflator <: Inflator
     n_dummy_params::Int 
-    AdaptiveInflator(n_dummy_params=50) = new(n_dummy_params)
+    AdaptiveInflator(; n_dummy_params=50) = new(n_dummy_params)
 end
 
 function compute_Δs(xs::AbstractMatrix)
@@ -129,11 +130,25 @@ function localise(
         R_θGs[:, :, i] = compute_cors(θs_shuffled, Gs)[1]
     end
 
-    σs_e = median(abs.(R_θGs), dims=3) ./ 0.6745
+    # TODO: clean this rubbish up
+    if localiser.groups === nothing
+        
+        σs_e = median(abs.(R_θGs), dims=3) ./ 0.6745
+        for i ∈ 1:Nθ, j ∈ 1:NG
+            z = (1 - abs(R_θG[i, j])) / (1 - σs_e[i, j])
+            P[i, j] = gaspari_cohn(z)
+        end
 
-    for i ∈ 1:Nθ, j ∈ 1:NG
-        z = (1 - abs(R_θG[i, j])) / (1 - σs_e[i, j])
-        P[i, j] = gaspari_cohn(z)
+    else
+
+        for group ∈ localiser.groups
+            σs_e = median(abs.(R_θGs[group, :, :])) / 0.6745
+            for i ∈ group, j ∈ 1:NG 
+                z = (1 - abs(R_θG[i, j])) / (1 - σs_e)
+                P[i, j] = gaspari_cohn(z)
+            end
+        end
+
     end
 
     localiser.P = P
