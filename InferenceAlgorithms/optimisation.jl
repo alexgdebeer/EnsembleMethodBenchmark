@@ -621,7 +621,7 @@ function compute_∇Lθ_rto(
     Gputλ = compute_∂Ax∂θtx(∂Ap∂u, θ, u, λ, pr) + 
             compute_∂Ax∂θtx(∂Aμ∂u, θ, u, λ, pr)
 
-    ∇Lθ = Φ * (Λ^2 + I)^-1 * (Φ' * θ + (Λ * Ψ' * G(p, m, y) - Φ' * η)) + Gputλ
+    ∇Lθ = Φ * (Λ^2 + I)^-1 * (Λ * Ψ' * G(p, m, y) + Φ' * (θ - η)) + Gputλ
     return ∇Lθ
 
 end
