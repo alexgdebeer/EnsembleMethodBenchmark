@@ -34,9 +34,9 @@ end
 """Computes the EnRML gain matrix without applying any localisation."""
 function compute_gain_enrml(
     localiser::IdentityLocaliser,
-    ηs::AbstractMatrix,
+    θs::AbstractMatrix,
     Gs::AbstractMatrix,
-    Δη::AbstractMatrix,
+    Δθ::AbstractMatrix,
     UG::AbstractMatrix,
     ΛG::AbstractVector,
     VG::AbstractMatrix,
@@ -44,7 +44,7 @@ function compute_gain_enrml(
     λ::Real
 )
 
-    return compute_gain_enrml(Δη, UG, ΛG, VG, C_e_invsqrt, λ)
+    return compute_gain_enrml(Δθ, UG, ΛG, VG, C_e_invsqrt, λ)
 
 end
 
@@ -52,9 +52,9 @@ end
 Flowerdew (2015)."""
 function compute_gain_enrml(
     localiser::FisherLocaliser,
-    ηs::AbstractMatrix,
+    θs::AbstractMatrix,
     Gs::AbstractMatrix,
-    Δη::AbstractMatrix,
+    Δθ::AbstractMatrix,
     UG::AbstractMatrix,
     ΛG::AbstractVector,
     VG::AbstractMatrix,
@@ -62,8 +62,8 @@ function compute_gain_enrml(
     λ::Real
 )
 
-    K = compute_gain_enrml(Δη, UG, ΛG, VG, C_e_invsqrt, λ)
-    return localise(localiser, ηs, Gs, K)
+    K = compute_gain_enrml(Δθ, UG, ΛG, VG, C_e_invsqrt, λ)
+    return localise(localiser, θs, Gs, K)
 
 end
 
@@ -71,9 +71,9 @@ end
 Zhang and Oliver (2010)."""
 function compute_gain_enrml(
     localiser::BootstrapLocaliser,
-    ηs::AbstractMatrix,
+    θs::AbstractMatrix,
     Gs::AbstractMatrix,
-    Δη::AbstractMatrix,
+    Δθ::AbstractMatrix,
     UG::AbstractMatrix,
     ΛG::AbstractVector,
     VG::AbstractMatrix,
@@ -81,21 +81,21 @@ function compute_gain_enrml(
     λ::Real
 )
 
-    Nη, Ne = size(ηs)
+    Nθ, Ne = size(θs)
     NG, Ne = size(Gs)
-    K = compute_gain_enrml(Δη, UG, ΛG, VG, C_e_invsqrt, λ)
-    Ks_boot = zeros(Nη, NG, localiser.n_boot)
+    K = compute_gain_enrml(Δθ, UG, ΛG, VG, C_e_invsqrt, λ)
+    Ks_boot = zeros(Nθ, NG, localiser.n_boot)
 
     for k ∈ 1:localiser.n_boot
 
         inds_res = rand(1:Ne, Ne)
 
-        Δη_res = compute_Δs(ηs[:, inds_res])
+        Δθ_res = compute_Δs(θs[:, inds_res])
         ΔG_res = compute_Δs(Gs[:, inds_res])
         UG_res, ΛG_res, VG_res = tsvd(ΔG_res)
 
         Ks_boot[:, :, k] = compute_gain_enrml(
-            Δη_res, UG_res, ΛG_res, VG_res, 
+            Δθ_res, UG_res, ΛG_res, VG_res, 
             C_e_invsqrt, λ
         )
 
@@ -113,9 +113,9 @@ end
 outlined by Luo and Bhakta (2020)."""
 function compute_gain_enrml(
     localiser::BootstrapLocaliser,
-    ηs::AbstractMatrix,
+    θs::AbstractMatrix,
     Gs::AbstractMatrix,
-    Δη::AbstractMatrix,
+    Δθ::AbstractMatrix,
     UG::AbstractMatrix,
     ΛG::AbstractVector,
     VG::AbstractMatrix,
@@ -123,60 +123,60 @@ function compute_gain_enrml(
     λ::Real
 )
 
-    K = compute_gain_enrml(Δη, UG, ΛG, VG, C_e_invsqrt, λ)
-    return localiser(localiser, ηs, Gs, K)
+    K = compute_gain_enrml(Δθ, UG, ΛG, VG, C_e_invsqrt, λ)
+    return localiser(localiser, θs, Gs, K)
 
 end
 
 """Computes an EnRML update, following Chen and Oliver (2013)."""
 function enrml_update(
-    ηs::AbstractMatrix, 
+    θs::AbstractMatrix, 
     Gs::AbstractMatrix, 
     ys::AbstractMatrix, 
     μ_e::AbstractVector, 
     C_e_invsqrt::AbstractMatrix,
-    ηs_pr::AbstractMatrix,
-    Uη_pr::AbstractMatrix,
-    Λη_pr::AbstractVector,
+    θs_pr::AbstractMatrix,
+    Uθ_pr::AbstractMatrix,
+    Λθ_pr::AbstractVector,
     λ::Real,
     localiser::Localiser 
 )
 
-    Δη = compute_Δs(ηs)
+    Δθ = compute_Δs(θs)
     ΔG = compute_Δs(Gs)
 
     UG, ΛG, VG = tsvd(C_e_invsqrt * ΔG)
-    K = compute_gain_enrml(localiser, ηs, Gs, Δη, UG, ΛG, VG, C_e_invsqrt, λ)
+    K = compute_gain_enrml(localiser, θs, Gs, Δθ, UG, ΛG, VG, C_e_invsqrt, λ)
 
     # Calculate corrections based on prior deviations
-    δη_pr = Δη * VG * inv((λ + 1)I + Diagonal(ΛG).^2) * VG' * Δη' *
-            Uη_pr * Diagonal(1 ./ Λη_pr.^2) * Uη_pr' * (ηs - ηs_pr)
+    δθ_pr = Δθ * VG * inv((λ + 1)I + Diagonal(ΛG).^2) * VG' * Δθ' *
+            Uθ_pr * Diagonal(1 ./ Λθ_pr.^2) * Uθ_pr' * (θs - θs_pr)
 
     # Calculate corrections based on fit to observations
-    δη_obs = K * (Gs .+ μ_e .- ys)
+    δθ_obs = K * (Gs .+ μ_e .- ys)
 
-    return ηs - δη_pr - δη_obs
+    return θs - δθ_pr - δθ_obs
 
 end
 
 """Computes an EnRML update without applying any inflation."""
 function enrml_update(
-    ηs::AbstractMatrix, 
+    θs::AbstractMatrix, 
     Gs::AbstractMatrix, 
     ys::AbstractMatrix, 
     μ_e::AbstractVector, 
     C_e_invsqrt::AbstractMatrix,
-    ηs_pr::AbstractMatrix,
-    Uη_pr::AbstractMatrix,
-    Λη_pr::AbstractVector,
+    θs_pr::AbstractMatrix,
+    Uθ_pr::AbstractMatrix,
+    Λθ_pr::AbstractVector,
     λ::Real,
     localiser::Localiser,
     inflator::IdentityInflator
 )
 
     return enrml_update(
-        ηs, Gs, ys, μ_e, C_e_invsqrt, 
-        ηs_pr, Uη_pr, Λη_pr, λ, localiser
+        θs, Gs, ys, μ_e, C_e_invsqrt, 
+        θs_pr, Uθ_pr, Λθ_pr, λ, localiser
     )
 
 end
@@ -184,37 +184,37 @@ end
 """Updates the current ensemble using the adaptive inflation method 
 outlined by Evensen (2009)."""
 function enrml_update(
-    ηs::AbstractMatrix, 
+    θs::AbstractMatrix, 
     Gs::AbstractMatrix, 
     ys::AbstractMatrix, 
     μ_e::AbstractVector, 
     C_e_invsqrt::AbstractMatrix,
-    ηs_pr::AbstractMatrix,
-    Uη_pr::AbstractMatrix,
-    Λη_pr::AbstractVector,
+    θs_pr::AbstractMatrix,
+    Uθ_pr::AbstractMatrix,
+    Λθ_pr::AbstractVector,
     λ::Real,
     localiser::Localiser,
     inflator::AdaptiveInflator
 )
 
-    Nη, Ne = size(ηs)
+    Nθ, Ne = size(θs)
     dummy_params = generate_dummy_params(inflator, Ne)
 
-    ηs_pr_aug = [ηs_pr; dummy_params]
-    Uη_pr_aug, Λη_pr_aug, = tsvd(ηs_pr_aug)
+    θs_pr_aug = [θs_pr; dummy_params]
+    Uθ_pr_aug, Λθ_pr_aug, = tsvd(θs_pr_aug)
 
-    ηs_aug = enrml_update(
-        [ηs; dummy_params], Gs, ys, μ_e, C_e_invsqrt, 
-        ηs_pr_aug, Uη_pr_aug, Λη_pr_aug, λ, localiser
+    θs_aug = enrml_update(
+        [θs; dummy_params], Gs, ys, μ_e, C_e_invsqrt, 
+        θs_pr_aug, Uθ_pr_aug, Λθ_pr_aug, λ, localiser
     )
 
-    ηs_new = ηs_aug[1:Nη, :]
-    dummy_params = ηs_aug[Nη+1:end, :]
+    θs_new = θs_aug[1:Nθ, :]
+    dummy_params = θs_aug[Nθ+1:end, :]
     ρ = 1 / mean(std(dummy_params, dims=2))
     @info "Inflation factor: $(ρ)."
 
-    μ_η = mean(ηs_new, dims=2)
-    return ρ * (ηs_new .- μ_η) .+ μ_η
+    μ_θ = mean(θs_new, dims=2)
+    return ρ * (θs_new .- μ_θ) .+ μ_θ
 
 end
 
@@ -231,7 +231,7 @@ function run_enrml(
     max_cuts::Int=5,
     max_its::Int=30,
     ΔS_min::Real=0.01,
-    Δη_min::Real=0.5,
+    Δθ_min::Real=0.5,
     localiser::Localiser=IdentityLocaliser(),
     inflator::Inflator=IdentityInflator()
 )
@@ -241,8 +241,8 @@ function run_enrml(
     C_e_invsqrt = √(inv(C_e))
     NG = length(y)
 
-    ηs = []
     θs = []
+    us = []
     Fs = []
     Gs = []
     Ss = []
@@ -250,20 +250,20 @@ function run_enrml(
 
     ys = rand(MvNormal(y, C_e), Ne)
 
-    ηs_pr = rand(pr, Ne)
-    θs_pr, Fs_pr, Gs_pr = run_ensemble(ηs_pr, F, G, pr)
+    θs_pr = rand(pr, Ne)
+    us_pr, Fs_pr, Gs_pr = run_ensemble(θs_pr, F, G, pr)
     S_pr = compute_S(Gs_pr, ys, μ_e, C_e_invsqrt)
     λ = 10^floor(log10(S_pr / 2NG))
 
-    push!(ηs, ηs_pr)
     push!(θs, θs_pr)
+    push!(us, us_pr)
     push!(Fs, Fs_pr)
     push!(Gs, Gs_pr)
     push!(Ss, S_pr)
     push!(λs, λ)
 
-    Δη_pr = compute_Δs(ηs_pr)
-    Uη_pr, Λη_pr, = tsvd(Δη_pr)
+    Δθ_pr = compute_Δs(θs_pr)
+    Uθ_pr, Λθ_pr, = tsvd(Δθ_pr)
 
     i = 1
     en_ind = 1
@@ -271,15 +271,15 @@ function run_enrml(
     while i ≤ max_its
 
         ηs_i = enrml_update(
-            ηs[en_ind], Gs[en_ind], ys, μ_e, C_e_invsqrt, 
-            ηs_pr, Uη_pr, Λη_pr, λ, localiser, inflator
+            θs[en_ind], Gs[en_ind], ys, μ_e, C_e_invsqrt, 
+            θs_pr, Uθ_pr, Λθ_pr, λ, localiser, inflator
         )
 
-        θs_i, Fs_i, Gs_i = run_ensemble(ηs_i, F, G, pr)
+        us_i, Fs_i, Gs_i = run_ensemble(θs_i, F, G, pr)
         S_i = compute_S(Gs_i, ys, μ_e, C_e_invsqrt)
 
-        push!(ηs, ηs_i)
         push!(θs, θs_i)
+        push!(us, us_i)
         push!(Fs, Fs_i)
         push!(Gs, Gs_i)
         push!(Ss, S_i)
@@ -289,7 +289,7 @@ function run_enrml(
         if S_i ≤ Ss[en_ind]
 
             ΔS = 1 - S_i / Ss[en_ind]
-            Δη_max = maximum(abs.(ηs_i - ηs[en_ind]))
+            Δθ_max = maximum(abs.(θs_i - θs[en_ind]))
 
             en_ind = i
             n_cuts = 0
@@ -297,12 +297,12 @@ function run_enrml(
 
             @printf(
                 "%2i  | acc. | %.2e | %.2e | %.2e \n", 
-                i-1, ΔS, Δη_max, λ
+                i-1, ΔS, Δθ_max, λ
             )
 
-            if (ΔS ≤ ΔS_min) && (Δη_max ≤ Δη_min)
+            if (ΔS ≤ ΔS_min) && (Δθ_max ≤ Δθ_min)
                 @info "Convergence criteria met."
-                return ηs, θs, Fs, Gs, Ss, λs, en_ind
+                return θs, us, Fs, Gs, Ss, λs, en_ind
             end
 
         else 
@@ -317,7 +317,7 @@ function run_enrml(
 
             if n_cuts == max_cuts
                 @info "Terminating: $n_cuts consecutive cuts made."
-                return ηs, θs, Fs, Gs, Ss, λs, en_ind
+                return θs, us, Fs, Gs, Ss, λs, en_ind
             end
 
         end
@@ -325,6 +325,6 @@ function run_enrml(
     end
 
     @info "Terminating: maximum number of iterations exceeded."
-    return ηs, θs, Fs, Gs, Ss, λs, en_ind
+    return θs, us, Fs, Gs, Ss, λs, en_ind
 
 end

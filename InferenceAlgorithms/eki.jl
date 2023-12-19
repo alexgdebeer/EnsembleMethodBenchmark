@@ -1,27 +1,27 @@
 CONV_TOL = 1e-8
 
 function compute_gain_eki(
-    ηs::AbstractMatrix,
+    θs::AbstractMatrix,
     Gs::AbstractMatrix,
     α::Real,
     C_e::AbstractMatrix
 )
 
-    C_ηG, C_GG = compute_covs(ηs, Gs)
-    return C_ηG * inv(C_GG + α * C_e)
+    C_θG, C_GG = compute_covs(θs, Gs)
+    return C_θG * inv(C_GG + α * C_e)
 
 end
 
 """Computes the EKI gain without applying any localisation."""
 function compute_gain_eki(
-    localiser::IdentityLocaliser,
-    ηs::AbstractMatrix,
+    ::IdentityLocaliser,
+    θs::AbstractMatrix,
     Gs::AbstractMatrix,
     α::Real,
     C_e::AbstractMatrix
 )
 
-    return compute_gain_eki(ηs, Gs, α, C_e)
+    return compute_gain_eki(θs, Gs, α, C_e)
 
 end
 
@@ -29,22 +29,22 @@ end
 Zhang and Oliver (2010)."""
 function compute_gain_eki(
     localiser::BootstrapLocaliser,
-    ηs::AbstractMatrix,
+    θs::AbstractMatrix,
     Gs::AbstractMatrix,
     α::Real,
     C_e::AbstractMatrix
 )
 
-    Nη, Ne = size(ηs)
+    Nθ, Ne = size(θs)
     NG, Ne = size(Gs)
-    K = compute_gain_eki(ηs, Gs, α, C_e)
-    Ks_boot = zeros(Nη, NG, localiser.n_boot)
+    K = compute_gain_eki(θs, Gs, α, C_e)
+    Ks_boot = zeros(Nθ, NG, localiser.n_boot)
 
     for k ∈ 1:localiser.n_boot 
         inds_res = rand(1:Ne, Ne)
-        ηs_res = ηs[:, inds_res]
+        θs_res = θs[:, inds_res]
         Gs_res = Gs[:, inds_res]
-        K_res = compute_gain_eki(ηs_res, Gs_res, α, C_e)
+        K_res = compute_gain_eki(θs_res, Gs_res, α, C_e)
         Ks_boot[:, :, k] = K_res
     end
 
@@ -60,14 +60,14 @@ end
 outlined by Luo and Bhakta (2022)."""
 function compute_gain_eki(
     localiser::ShuffleLocaliser,
-    ηs::AbstractMatrix,
+    θs::AbstractMatrix,
     Gs::AbstractMatrix,
     α::Real,
     C_e::AbstractMatrix
 )
 
-    K = compute_gain_eki(ηs, Gs, α, C_e)
-    return localiser(localiser, ηs, Gs, K)
+    K = compute_gain_eki(θs, Gs, α, C_e)
+    return localiser(localiser, θs, Gs, K)
 
 end
 
@@ -75,14 +75,14 @@ end
 Flowerdew (2015)."""
 function compute_gain_eki(
     localiser::FisherLocaliser,
-    ηs::AbstractMatrix,
+    θs::AbstractMatrix,
     Gs::AbstractMatrix,
     α::Real,
     C_e::AbstractMatrix
 )
 
-    K = compute_gain_eki(ηs, Gs, α, C_e)
-    return localise(localiser, ηs, Gs, K)
+    K = compute_gain_eki(θs, Gs, α, C_e)
+    return localise(localiser, θs, Gs, K)
 
 end
 
@@ -90,45 +90,45 @@ end
 Lee (2021)."""
 function compute_gain_eki(
     localiser::PowerLocaliser,
-    ηs::AbstractMatrix,
+    θs::AbstractMatrix,
     Gs::AbstractMatrix,
     α::Real, 
     C_e::AbstractMatrix
 )
 
-    V_η = Diagonal(std(ηs, dims=2)[:])
+    V_θ = Diagonal(std(θs, dims=2)[:])
     V_G = Diagonal(std(Gs, dims=2)[:])
 
-    R_ηG, R_GG = compute_cors(ηs, Gs)
+    R_θG, R_GG = compute_cors(θs, Gs)
 
-    R_ηG_sec = R_ηG .* abs.(R_ηG) .^ localiser.α
-    R_GG_sec = R_GG .* abs.(R_GG) .^ localiser.α
+    R_θG_sec = R_θG .* (abs.(R_θG) .^ localiser.α)
+    R_GG_sec = R_GG .* (abs.(R_GG) .^ localiser.α)
 
-    C_ηG_sec = V_η * R_ηG_sec * V_G
+    C_θG_sec = V_θ * R_θG_sec * V_G
     C_GG_sec = V_G * R_GG_sec * V_G
 
-    return C_ηG_sec * inv(C_GG_sec + α * C_e)
+    return C_θG_sec * inv(C_GG_sec + α * C_e)
 
 end
 
 function run_ensemble(
-    ηs::AbstractMatrix, 
+    θs::AbstractMatrix, 
     F::Function, 
     G::Function, 
     pr::MaternField
 )
 
-    θs = hcat([transform(pr, η_i) for η_i ∈ eachcol(ηs)]...)
-    Fs = hcat([F(θ_i) for θ_i ∈ eachcol(θs)]...)
+    us = hcat([transform(pr, θ_i) for θ_i ∈ eachcol(θs)]...)
+    Fs = hcat([F(u_i) for u_i ∈ eachcol(us)]...)
     Gs = hcat([G(F_i) for F_i ∈ eachcol(Fs)]...)
 
-    return θs, Fs, Gs
+    return us, Fs, Gs
 
 end
 
 """Uses the standard EKI update to update the current ensemble."""
 function eki_update(
-    ηs::AbstractMatrix, 
+    θs::AbstractMatrix, 
     Gs::AbstractMatrix, 
     α::Real, 
     y::AbstractVector, 
@@ -138,31 +138,31 @@ function eki_update(
 )
 
     ys = rand(MvNormal(y, α * C_e), Ne)
-    K = compute_gain_eki(localiser, ηs, Gs, α, C_e)
-    return ηs + K * (ys - Gs .- μ_e)
+    K = compute_gain_eki(localiser, θs, Gs, α, C_e)
+    return θs + K * (ys - Gs .- μ_e)
 
 end
 
 """Updates the current ensemble without using any inflation."""
 function eki_update(
-    ηs::AbstractMatrix,
+    θs::AbstractMatrix,
     Gs::AbstractMatrix,
     α::Real,
     y::AbstractVector,
     μ_e::AbstractVector,
     C_e::AbstractMatrix,
     localiser::Localiser,
-    inflator::IdentityInflator
+    ::IdentityInflator
 )
 
-    return eki_update(ηs, Gs, α, y, μ_e, C_e, localiser)
+    return eki_update(θs, Gs, α, y, μ_e, C_e, localiser)
 
 end
 
 """Updates the current ensemble using the adaptive localisation 
 method outlined by Evensen (2009)."""
 function eki_update(
-    ηs::AbstractMatrix,
+    θs::AbstractMatrix,
     Gs::AbstractMatrix,
     α::Real,
     y::AbstractVector,
@@ -172,21 +172,21 @@ function eki_update(
     inflator::AdaptiveInflator
 )
 
-    Nη, Ne = size(ηs)
+    Nθ, Ne = size(θs)
     dummy_params = generate_dummy_params(inflator, Ne)
     
-    ηs_aug = eki_update(
-        [ηs; dummy_params], Gs,
+    θs_aug = eki_update(
+        [θs; dummy_params], Gs,
         α, y, μ_e, C_e, localiser
     )
 
-    ηs_new = ηs_aug[1:Nη, :]
-    dummy_params = ηs_aug[Nη+1:end, :]
+    θs_new = θs_aug[1:Nθ, :]
+    dummy_params = θs_aug[Nθ+1:end, :]
     ρ = 1 / mean(std(dummy_params, dims=2))
     @info "Inflation factor: $(ρ)."
 
-    μ_η = mean(ηs_new, dims=2)
-    return ρ * (ηs_new .- μ_η) .+ μ_η
+    μ_θ = mean(θs_new, dims=2)
+    return ρ * (θs_new .- μ_θ) .+ μ_θ
 
 end
 
@@ -231,11 +231,11 @@ function run_eki_dmc(
     C_e_invsqrt = √(inv(C_e))
     NG = length(y)
 
-    ηs_i = rand(pr, Ne)
-    θs_i, Fs_i, Gs_i = run_ensemble(ηs_i, F, G, pr)
+    θs_i = rand(pr, Ne)
+    us_i, Fs_i, Gs_i = run_ensemble(θs_i, F, G, pr)
 
-    ηs = [ηs_i]
     θs = [θs_i]
+    us = [us_i]
     Fs = [Fs_i]
     Gs = [Gs_i]
 
@@ -251,11 +251,11 @@ function run_eki_dmc(
             converged = true
         end
 
-        ηs_i = eki_update(ηs_i, Gs_i, α_i, y, μ_e, C_e, localiser, inflator)
-        θs_i, Fs_i, Gs_i = run_ensemble(ηs_i, F, G, pr)
+        θs_i = eki_update(θs_i, Gs_i, α_i, y, μ_e, C_e, localiser, inflator)
+        us_i, Fs_i, Gs_i = run_ensemble(θs_i, F, G, pr)
 
-        push!(ηs, ηs_i)
         push!(θs, θs_i)
+        push!(us, us_i)
         push!(Fs, Fs_i)
         push!(Gs, Gs_i)
 
@@ -264,6 +264,6 @@ function run_eki_dmc(
 
     end
 
-    return ηs, θs, Fs, Gs
+    return θs, us, Fs, Gs
 
 end

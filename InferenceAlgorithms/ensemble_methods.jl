@@ -47,33 +47,33 @@ function compute_Δs(xs::AbstractMatrix)
 end
 
 function compute_covs(
-    ηs::AbstractMatrix, 
+    θs::AbstractMatrix, 
     Gs::AbstractMatrix
 )
 
-    Δη = compute_Δs(ηs)
+    Δθ = compute_Δs(θs)
     ΔG = compute_Δs(Gs)
 
-    C_ηG = Δη * ΔG'
+    C_θG = Δθ * ΔG'
     C_GG = ΔG * ΔG'
 
-    return C_ηG, C_GG
+    return C_θG, C_GG
 
 end
 
 function compute_cors(
-    ηs::AbstractMatrix,
+    θs::AbstractMatrix,
     Gs::AbstractMatrix
 )
 
-    V_η = Diagonal(std(ηs, dims=2)[:])
+    V_θ = Diagonal(std(θs, dims=2)[:])
     V_G = Diagonal(std(Gs, dims=2)[:])
 
-    C_ηG, C_GG = compute_covs(ηs, Gs)
-    R_ηG = inv(V_η) * C_ηG * inv(V_G)
+    C_θG, C_GG = compute_covs(θs, Gs)
+    R_θG = inv(V_θ) * C_θG * inv(V_G)
     R_GG = inv(V_G) * C_GG * inv(V_G)
 
-    return R_ηG, R_GG
+    return R_θG, R_GG
 
 end
 
@@ -106,7 +106,7 @@ end
 (2020)."""
 function localise(
     localiser::ShuffleLocaliser,
-    ηs::AbstractMatrix,
+    θs::AbstractMatrix,
     Gs::AbstractMatrix,
     K::AbstractMatrix
 )
@@ -115,24 +115,24 @@ function localise(
         return localiser.P .* K
     end
 
-    Nη, Ne = size(ηs)
+    Nθ, Ne = size(θs)
     NG, Ne = size(Gs)
 
-    R_ηG = compute_cors(ηs, Gs)[1]
+    R_θG = compute_cors(θs, Gs)[1]
 
-    P = zeros(Nη, NG)
-    R_ηGs = zeros(Nη, NG, localiser.n_shuffle)
+    P = zeros(Nθ, NG)
+    R_θGs = zeros(Nθ, NG, localiser.n_shuffle)
 
     for i ∈ 1:localiser.n_shuffle
         inds = get_shuffled_inds(Ne)
-        ηs_shuffled = ηs[:, inds]
-        R_ηGs[:, :, i] = compute_cors(ηs_shuffled, Gs)[1]
+        θs_shuffled = θs[:, inds]
+        R_θGs[:, :, i] = compute_cors(θs_shuffled, Gs)[1]
     end
 
-    σs_e = median(abs.(R_ηGs), dims=3) ./ 0.6745
+    σs_e = median(abs.(R_θGs), dims=3) ./ 0.6745
 
-    for i ∈ 1:Nη, j ∈ 1:NG
-        z = (1 - abs(R_ηG[i, j])) / (1 - σs_e[i, j])
+    for i ∈ 1:Nθ, j ∈ 1:NG
+        z = (1 - abs(R_θG[i, j])) / (1 - σs_e[i, j])
         P[i, j] = gaspari_cohn(z)
     end
 
@@ -145,19 +145,19 @@ end
 (2014)."""
 function localise(
     localiser::FisherLocaliser,
-    ηs::AbstractMatrix,
+    θs::AbstractMatrix,
     Gs::AbstractMatrix,
     K::AbstractMatrix
 )
 
-    Nη, Ne = size(ηs)
+    Nθ, Ne = size(θs)
     NG, Ne = size(Gs)
 
-    R_ηG = compute_cors(ηs, Gs)[1]
-    P = zeros(size(R_ηG))
+    R_θG = compute_cors(θs, Gs)[1]
+    P = zeros(size(R_θG))
 
     for i ∈ 1:Nη, j ∈ 1:NG 
-        ρ_ij = R_ηG[i, j]
+        ρ_ij = R_θG[i, j]
         s = log((1+ρ_ij) / (1-ρ_ij)) / 2
         σ_s = (tanh(s + √(Ne-3)^-1) - tanh(s - √(Ne-3)^-1)) / 2
         P[i, j] = ρ_ij^2 / (ρ_ij^2 + σ_s^2)
