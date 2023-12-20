@@ -112,7 +112,7 @@ end
 """Computes the EnRML gain using a variant of the localisation method 
 outlined by Luo and Bhakta (2020)."""
 function compute_gain_enrml(
-    localiser::BootstrapLocaliser,
+    localiser::ShuffleLocaliser,
     θs::AbstractMatrix,
     Gs::AbstractMatrix,
     Δθ::AbstractMatrix,
@@ -124,7 +124,7 @@ function compute_gain_enrml(
 )
 
     K = compute_gain_enrml(Δθ, UG, ΛG, VG, C_e_invsqrt, λ)
-    return localiser(localiser, θs, Gs, K)
+    return localise(localiser, θs, Gs, K)
 
 end
 
@@ -270,7 +270,7 @@ function run_enrml(
     n_cuts = 0
     while i ≤ max_its
 
-        ηs_i = enrml_update(
+        θs_i = enrml_update(
             θs[en_ind], Gs[en_ind], ys, μ_e, C_e_invsqrt, 
             θs_pr, Uθ_pr, Λθ_pr, λ, localiser, inflator
         )

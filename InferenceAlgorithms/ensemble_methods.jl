@@ -171,7 +171,7 @@ function localise(
     R_θG = compute_cors(θs, Gs)[1]
     P = zeros(size(R_θG))
 
-    for i ∈ 1:Nη, j ∈ 1:NG 
+    for i ∈ 1:Nθ, j ∈ 1:NG 
         ρ_ij = R_θG[i, j]
         s = log((1+ρ_ij) / (1-ρ_ij)) / 2
         σ_s = (tanh(s + √(Ne-3)^-1) - tanh(s - √(Ne-3)^-1)) / 2
