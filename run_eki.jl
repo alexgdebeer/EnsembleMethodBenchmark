@@ -2,23 +2,62 @@ include("setup.jl")
 include("InferenceAlgorithms/InferenceAlgorithms.jl")
 
 Ne = 100
-fname = "data/eki/eki_power.h5"
-
 n_trials = 10
-results = Dict()
 
-for i ∈ 1:n_trials 
-    
-    ηs, θs, Fs, Gs = run_eki_dmc(
-        F, G, pr, d_obs, μ_e, Γ_e, Ne; 
-        localiser=PowerLocaliser()
-    )
+data_folder = "data/eki"
 
-    results["ηs_$i"] = ηs[end]
-    results["θs_$i"] = θs[end]
-    results["Fs_$i"] = Fs[end]
-    results["Gs_$i"] = Gs[end]
+fnames = [
+    "$(data_folder)/eki_$Ne.h5", 
+    "$(data_folder)/eki_boot_$Ne.h5", 
+    "$(data_folder)/eki_shuffle_$Ne.h5", 
+    "$(data_folder)/eki_sec_$Ne.h5",
+    "$(data_folder)/eki_fisher_$Ne.h5",
+    "$(data_folder)/eki_inflation_$Ne.h5"
+    "$(data_folder)/eki_fisher_inflation_$Ne.h5"
+]
+
+groups = [1:pr.Nu, pr.Nu+1, pr.Nu+2]
+
+settings = [
+    (IdentityLocaliser(), IdentityInflator()),
+    (BootstrapLocaliser(), IdentityInflator()),
+    (ShuffleLocaliser(groups=groups), IdentityInflator()),
+    (PowerLocaliser(), IdentityInflator()),
+    (FisherLocaliser(), IdentityInflator()),
+    (IdentityLocaliser(), AdaptiveInflator()),
+    (FisherLocaliser(), AdaptiveInflator())
+]
+
+for (fname, setting) ∈ zip(fnames, settings)
+
+    results = Dict()
+
+    for i ∈ 1:n_trials 
+        
+        θs, us, Fs, Gs = run_eki_dmc(
+            F, G, pr, d_obs, μ_e, C_e, Ne; 
+            localiser=setting[1],
+            inflator=setting[2]
+        )
+
+        μ_post = transform(pr, mean(θs[end], dims=2))
+        μ_post = reshape(μ_post, grid_c.nx, grid_c.nx)
+        
+        σ_post = std(us[end], dims=2)
+        σ_post = reshape(σ_post, grid_c.nx, grid_c.nx)
+
+        results["θs_$i"] = θs[end]
+        results["us_$i"] = us[end]
+        results["Gs_$i"] = Gs[end]
+
+        results["μ_post_$i"] = μ_post
+        results["σ_post_$i"] = σ_post
+        
+        results["n_its_$i"] = length(θs)
+        results["n_sims_$i"] = Ne * length(θs)
+
+    end
+
+    save_results(results, fname)
 
 end
-
-save_results(results, fname)

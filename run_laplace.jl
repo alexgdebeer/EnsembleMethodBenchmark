@@ -1,30 +1,39 @@
-using HDF5
-
 include("setup.jl")
 include("InferenceAlgorithms/InferenceAlgorithms.jl")
 
-N_SAMPLES = 1000
-RESULTS_FNAME = "data/laplace/laplace.h5"
+Ne = 100
+n_trials = 10
 
-η0 = vec(rand(pr, 1))
-map, Γ_post, L_post = compute_laplace(grid_c, model_r, pr, d_obs, η0) # TODO: fix η -- it is returned as a sparse vector
+fname = "data/laplace/laplace_$Ne.h5"
 
-ηs = map.η .+ L_post * rand(Normal(), pr.Nη, N_SAMPLES)
-θs = hcat([transform(pr, ηi) for ηi ∈ eachcol(ηs)]...)
-Fs = hcat([F(θi) for θi ∈ eachcol(θs)]...)
-Gs = hcat([G(Fi) for Fi ∈ eachcol(Fs)]...)
+results = Dict()
 
-μ_post = reshape(map.θ, grid_c.nx, grid_c.nx)
-σ_post = reshape(std(θs, dims=2), grid_c.nx, grid_c.nx)
+for i ∈ 1:n_trials 
+    
+    θ0 = vec(rand(pr, 1))
 
-θis = θs[3200, :]
-ls = [pr.l_bounds[1] + cdf(Normal(), l) * pr.Δl for l ∈ ηs[end, :]]
+    map, Γ_post, L_post, n_solves = compute_laplace(
+        grid_c, model_r, pr, d_obs, θ0
+    ) # TODO: fix θ -- it is returned as a sparse vector
 
-h5write(RESULTS_FNAME, "ηs", Matrix(ηs))
-h5write(RESULTS_FNAME, "θs", θs)
-h5write(RESULTS_FNAME, "Fs", model_r.B_wells * Fs)
-h5write(RESULTS_FNAME, "Gs", Gs)
-h5write(RESULTS_FNAME, "μ", μ_post)
-h5write(RESULTS_FNAME, "σ", σ_post)
-h5write(RESULTS_FNAME, "θi", θis)
-h5write(RESULTS_FNAME, "l", ls)
+    θs = map.θ .+ L_post * rand(Normal(), pr.Nθ, Ne)
+    us = hcat([transform(pr, θi) for θi ∈ eachcol(θs)]...)
+    Fs = hcat([F(u_i) for u_i ∈ eachcol(us)]...)
+    Gs = hcat([G(F_i) for F_i ∈ eachcol(Fs)]...)
+
+    μ_post = reshape(Vector(map.u), grid_c.nx, grid_c.nx)
+    σ_post = reshape(std(us, dims=2), grid_c.nx, grid_c.nx)
+
+    results["θs_$i"] = Matrix(θs)
+    results["us_$i"] = us
+    results["Gs_$i"] = Gs
+    
+    results["μ_post_$i"] = μ_post
+    results["σ_post_$i"] = σ_post
+    
+    results["n_its_$i"] = 1
+    results["n_sims_$i"] = n_solves + Ne
+
+end
+
+save_results(results, fname)
