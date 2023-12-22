@@ -102,10 +102,16 @@ function compute_gain_enrml(
     end
 
     var_Kis = mean((Ks_boot .- K).^2, dims=3)[:, :, 1]
-    R² = var_Kis ./ (K.^2 .+ localiser.tol)
-    P = 1 ./ (1 .+ R² * (1 + 1 / localiser.σ^2))
+    R² = var_Kis ./ (K.^2)
 
-    return P .* K 
+    if localiser.type == :regularised
+        Ψ = 1 ./ (1 .+ R² * (1 + 1 / localiser.σ^2))
+    elseif localiser.type == :unregularised
+        Ψ = (1 .- (R² ./ (localiser.n_boot - 1))) ./ (R² .+ 1)
+        Ψ = max.(Ψ, 0.0)
+    end
+
+    return Ψ .* K 
 
 end
 

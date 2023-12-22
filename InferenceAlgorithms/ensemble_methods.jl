@@ -11,8 +11,11 @@ mutable struct ShuffleLocaliser <: Localiser
     P::Union{AbstractMatrix, Nothing}
     groups::Union{AbstractVector, Nothing}
     
-    function ShuffleLocaliser(; n_shuffle=50, groups=nothing)
-        return new(n_shuffle, nothing, groups)
+    function ShuffleLocaliser(; 
+        n_shuffle=100, 
+        groups=nothing
+    )
+        return new(n_shuffle, nothing, groups)   
     end
 
 end
@@ -22,9 +25,20 @@ struct BootstrapLocaliser <: Localiser
     n_boot::Int 
     σ::Real 
     tol::Real
+    type::Symbol
 
-    function BootstrapLocaliser(; n_boot=50, σ=0.6, tol=1e-8) 
-        return new(n_boot, σ, tol)
+    function BootstrapLocaliser(; 
+        n_boot=100, 
+        σ=0.6, 
+        tol=1e-8, 
+        type=:unregularised
+    )
+
+        if type ∉ [:regularised, :unregularised]
+            error("Invalid type passed in.")
+        end
+
+        return new(n_boot, σ, tol, type)
     end
 
 end
