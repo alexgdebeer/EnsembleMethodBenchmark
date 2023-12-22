@@ -17,6 +17,8 @@ struct GNResult
     ∂Ap∂u::AbstractMatrix
     ∂Aμ∂u::AbstractMatrix
 
+    n_solves::Int
+
 end
 
 sqnorm(x) = sum(x.^2)
@@ -289,7 +291,7 @@ function compute_Hx(
     g::Grid,
     m::ReducedOrderModel,
     pr::MaternField
-)::AbstractVector
+)
 
     return compute_Hmx(x, θ, u, Au_r, ∂Ap∂u, ∂Aμ∂u, g, m, pr) + x
 
@@ -306,15 +308,17 @@ function solve_cg(
     g::Grid,
     m::ReducedOrderModel,
     pr::MaternField
-)::AbstractVector
+)
 
     println("CG It. | norm(r)")
     δθ = spzeros(pr.Nθ)
     d = -copy(∇Lθ)
     r = -copy(∇Lθ)
 
-    i = 1
+    i = 0
     while true
+
+        i += 1
 
         Hd = compute_Hx(d, θ, u, Au_r, ∂Ap∂u, ∂Aμ∂u, g, m, pr)
 
@@ -328,15 +332,14 @@ function solve_cg(
 
         if norm(r) < tol
             println("CG converged after $i iterations.")
-            return δθ
+            return δθ, i
         elseif i > CG_MAX_ITS
             @warn "CG failed to converge within $CG_MAX_ITS iterations."
-            return δθ
+            return δθ, i
         end
         
         β = (r' * r) / (r_prev' * r_prev)
         d = r + β * d
-        i += 1
 
     end
 
@@ -351,7 +354,7 @@ function linesearch(
     g::Grid, 
     m::ReducedOrderModel,
     pr::MaternField
-)::Tuple{AbstractVector, AbstractVector}
+)
 
     println("LS It. | J(η, u)")
     J_c = J(θ_c, p_r_c, y, g, m)
@@ -360,8 +363,10 @@ function linesearch(
     θ_k = nothing
     p_r_k = nothing
 
-    i_ls = 1
-    while i_ls < LS_MAX_ITS
+    i = 0
+    while i < LS_MAX_ITS
+
+        i += 1
 
         θ_k = θ_c + α_k * δθ
         u_k = transform(pr, θ_k)
@@ -373,20 +378,20 @@ function linesearch(
         p_r_k = solve_forward(Au, Au_r, g, m)
         J_k = J(θ_k, p_r_k, y, g, m)
 
-        @printf "%6i | %.3e\n" i_ls J_k 
+        @printf "%6i | %.3e\n" i J_k 
 
         if (J_k ≤ J_c + LS_C * α_k * ∇Lθ_c' * δθ)
-            println("Linesearch converged after $i_ls iterations.")
-            return θ_k, p_r_k
+            println("Linesearch converged after $i iterations.")
+            return θ_k, p_r_k, i
         end
 
         α_k *= 0.5
-        i_ls += 1
+        # i += 1
 
     end
 
     @warn "Linesearch failed to converge within $LS_MAX_ITS iterations."
-    return θ_k, p_r_k
+    return θ_k, p_r_k, i
 
 end
 
@@ -396,14 +401,17 @@ function compute_map(
     pr::MaternField,
     y::AbstractVector,
     θ0::AbstractVector
-)::GNResult
+)
 
     θ = copy(θ0) 
     p_r = nothing
     norm∇Lθ0 = nothing
     
-    i = 1
+    i = 0
+    n_solves = 0
     while true
+
+        i += 1
 
         @info "Beginning GN It. $i"
         
@@ -415,34 +423,36 @@ function compute_map(
 
         if i == 1
             p_r = solve_forward(Au, Au_r, g, m)
+            n_solves += 1
         end
         λ = solve_adjoint(p_r, Au_r, y, g, m)
+        n_solves += 1
 
-        # TODO: how to speed these up?
         ∂Ap∂u = compute_∂Ap∂u(u, p_r, g, m)
         ∂Aμ∂u = compute_∂Aμ∂u(u, g, m)
 
         ∇Lθ = compute_∇Lθ(∂Ap∂u, ∂Aμ∂u, θ, u, λ, pr)
-        if norm(∇Lθ) < GN_MIN_NORM
-            @info "Converged."
-            return GNResult(true, θ, u, p_r, Au_r, ∂Ap∂u, ∂Aμ∂u)
-        end
-        
         if i == 1
             norm∇Lθ0 = norm(∇Lθ)
         end
         tol_cg = 0.1 * min(0.5, √(norm(∇Lθ) / norm∇Lθ0)) * norm(∇Lθ)
 
+        if norm(∇Lθ) < 1e-5 * norm∇Lθ0
+            @info "Converged."
+            return GNResult(true, θ, u, p_r, Au_r, ∂Ap∂u, ∂Aμ∂u, n_solves)
+        end
+
         @printf "norm(∇Lθ): %.3e\n" norm(∇Lθ)
         @printf "CG tolerance: %.3e\n" tol_cg
 
-        δθ = solve_cg(θ, u, Au_r, ∂Ap∂u, ∂Aμ∂u, ∇Lθ, tol_cg, g, m, pr)
-        θ, p_r = linesearch(θ, p_r, ∇Lθ, δθ, y, g, m, pr)
+        δθ, n_it_cg = solve_cg(θ, u, Au_r, ∂Ap∂u, ∂Aμ∂u, ∇Lθ, tol_cg, g, m, pr)
+        θ, p_r, n_it_ls = linesearch(θ, p_r, ∇Lθ, δθ, y, g, m, pr)
         
-        i += 1
+        n_solves += (2n_it_cg + n_it_ls)
+
         if i > GN_MAX_ITS
             @warn "Failed to converge within $GN_MAX_ITS iterations."
-            return GNResult(false, θ, u, p_r, Au_r, ∂Ap∂u, ∂Aμ∂u)
+            return GNResult(false, θ, u, p_r, Au_r, ∂Ap∂u, ∂Aμ∂u, n_solves)
         end
 
     end
@@ -456,7 +466,7 @@ function compute_laplace(
     y::AbstractVector,
     θ0::AbstractVector;
     n_eigvals::Int=30
-)::Tuple{GNResult, AbstractMatrix, AbstractMatrix}
+)
 
     map = compute_map(g, m, pr, y, θ0)
     !map.converged && @warn "MAP optimisation failed to converge."
@@ -466,8 +476,6 @@ function compute_laplace(
     vals, vecs, info = eigsolve(f, pr.Nθ, n_eigvals, :LM, issymmetric=true)
     info.converged != length(vals) && @warn "eigsolve did not converge."
 
-    println(info.numops)
-    println(info.numiter)
     println(minimum(vals))
     
     λ_r = vals[vals .> 1e-2]
@@ -479,7 +487,9 @@ function compute_laplace(
     Γ_post = I - V_r * D_r * V_r'
     L_post = V_r * P_r * V_r' + I
 
-    return map, Γ_post, L_post
+    n_solves = map.n_solves + info.numops
+    @info "Total solves: $(n_solves)"
+    return map, Γ_post, L_post, n_solves
 
 end
 
@@ -801,13 +811,13 @@ function optimise_rto(
         θ, p_r, Jθ = linesearch_rto(θ, p_r, ∇Lθ, δθ, y, g, m, pr, Ψ, Λ, Φ, η; verbose=verbose)
         
         if Jθ < 1e-5 # TODO: clean up..
-            return GNResult(true, θ, u, p_r, Au_r, ∂Ap∂u, ∂Aμ∂u)
+            return GNResult(true, θ, u, p_r, Au_r, ∂Ap∂u, ∂Aμ∂u, -1) # TODO: add number of solves
         end
 
         i += 1
         if i > GN_MAX_ITS
             @warn "Failed to converge within $GN_MAX_ITS iterations."
-            return GNResult(false, θ, u, p_r, Au_r, ∂Ap∂u, ∂Aμ∂u)
+            return GNResult(false, θ, u, p_r, Au_r, ∂Ap∂u, ∂Aμ∂u, -1) # TODO: add number of solves
         end
 
     end
