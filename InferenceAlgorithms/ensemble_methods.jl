@@ -95,16 +95,6 @@ function get_shuffled_inds(N::Int)
 
 end
 
-function gaspari_cohn(z::Real)
-    if 0 ≤ z ≤ 1 
-        return -(1/4)z^5 + (1/2)z^4 + (5/8)z^3 - (5/3)z^2 + 1
-    elseif 1 < z ≤ 2 
-        return (1/12)z^5 - (1/2)z^4 + (5/8)z^3 + (5/3)z^2 - 5z + 4 - (2/3)z^-1
-    else
-        return 0.0
-    end
-end
-
 """Carries out the localisation procedure outlined by Luo and Bhakta 
 (2020)."""
 function localise(
