@@ -27,7 +27,7 @@ function get_full_state(
     p_r::AbstractVector,
     g::Grid,
     m::ReducedOrderModel
-)::AbstractVector
+)
     
     p_r = reshape(p_r, m.np_r, g.nt)
     p = vec(m.V_ri * p_r .+ m.μ_pi)
@@ -41,7 +41,7 @@ function J(
     y::AbstractVector,
     g::Grid,
     m::ReducedOrderModel
-)::Real
+)
 
     p = get_full_state(p_r, g, m)
     res = m.B * p + m.μ_e - y
@@ -54,7 +54,7 @@ function compute_∂Ap∂u(
     p_r::AbstractVector,
     g::Grid,
     m::ReducedOrderModel
-)::AbstractMatrix
+)
 
     p_r = reshape(p_r, m.np_r, g.nt)
 
@@ -71,7 +71,7 @@ function compute_∂Aμ∂u(
     u::AbstractVector,
     g::Grid,
     m::ReducedOrderModel
-)::AbstractMatrix 
+) 
 
     ∂Aμ∂u = (g.Δt / m.μ) * vcat([
         m.V_ri' * g.∇h' * spdiagm(g.∇h * m.μ_pi) * 
@@ -87,7 +87,7 @@ function solve_forward(
     Au_r::AbstractMatrix,
     g::Grid,
     m::ReducedOrderModel
-)::AbstractVector
+)
 
     p_r = zeros(m.np_r, g.nt)
 
@@ -109,7 +109,7 @@ function solve_adjoint(
     y::AbstractVector,
     g::Grid,
     m::ReducedOrderModel
-)::AbstractVector 
+)
 
     p = get_full_state(p_r, g, m)
     λ = zeros(m.np_r, g.nt)
@@ -134,7 +134,7 @@ function compute_∂Ax∂θtx(
     u::AbstractVector, 
     x::AbstractVector,
     pr::MaternField
-)::AbstractVector
+)
 
     ω_σ, ω_l = θ[end-1:end]
 
@@ -169,7 +169,7 @@ function compute_∂Ax∂θx(
     u::AbstractVector, 
     x::AbstractVector,
     pr::MaternField
-)::AbstractVector
+)
 
     ω_σ, ω_l = θ[end-1:end]
 
@@ -204,7 +204,7 @@ function compute_∇Lθ(
     u::AbstractVector,
     λ::AbstractVector,
     pr::MaternField
-)::AbstractVector
+)
 
     return θ + 
         compute_∂Ax∂θtx(∂Ap∂u, θ, u, λ, pr) + 
@@ -217,7 +217,7 @@ function solve_forward_inc(
     b::AbstractVector,
     g::Grid,
     m::ReducedOrderModel
-)::AbstractVector
+)
 
     b = reshape(b, m.np_r, g.nt)
     p = zeros(m.np_r, g.nt)
@@ -238,7 +238,7 @@ function solve_adjoint_inc(
     b::AbstractVector,
     g::Grid,
     m::ReducedOrderModel
-)::AbstractVector
+)
     
     Au_rt = Matrix(Au_r')
     b = reshape(b, m.np_r, g.nt)
@@ -265,7 +265,7 @@ function compute_Hmx(
     g::Grid,
     m::ReducedOrderModel,
     pr::MaternField
-)::AbstractVector
+)
 
     ∂Ap∂θx = compute_∂Ax∂θx(∂Ap∂u, θ, u, x, pr)
     ∂Aμ∂θx = compute_∂Ax∂θx(∂Aμ∂u, θ, u, x, pr)
@@ -591,7 +591,7 @@ G(p, m, y) = m.L_e * (m.B * p + m.μ_e - y)
 
 """Least-squares RTO functional."""
 function J_rto(
-    θ::AbstractVector, 
+    θ_r::AbstractVector, 
     p_r::AbstractVector,
     y::AbstractVector,
     g::Grid,
@@ -600,18 +600,19 @@ function J_rto(
     Λ::AbstractMatrix,
     Φ::AbstractMatrix,
     η::AbstractVector
-)::Real
+)
 
     p = get_full_state(p_r, g, m)
 
-    res = (Λ^2 + I)^-0.5 * (Λ * Ψ' * G(p, m, y) + Φ' * (θ - η))
+    res = (Λ^2 + I)^-0.5 * (θ_r + Λ * Ψ' * G(p, m, y) - Φ' * η)
     return 0.5 * sqnorm(res)
 
 end
 
-function compute_∇Lθ_rto(
+function compute_∇Lθ_r(
     ∂Ap∂u::AbstractMatrix,
     ∂Aμ∂u::AbstractMatrix,
+    θ_r::AbstractVector,
     θ::AbstractVector,
     u::AbstractVector,
     p_r::AbstractVector,
@@ -628,16 +629,16 @@ function compute_∇Lθ_rto(
 
     p = get_full_state(p_r, g, m)
 
-    Gputλ = compute_∂Ax∂θtx(∂Ap∂u, θ, u, λ, pr) + 
-            compute_∂Ax∂θtx(∂Aμ∂u, θ, u, λ, pr)
+    Gputλ = Φ' * compute_∂Ax∂θtx(∂Ap∂u, θ, u, λ, pr) + 
+            Φ' * compute_∂Ax∂θtx(∂Aμ∂u, θ, u, λ, pr)
 
-    ∇Lθ = Φ * (Λ^2 + I)^-1 * (Λ * Ψ' * G(p, m, y) + Φ' * (θ - η)) + Gputλ
-    return ∇Lθ
+    ∇Lθ_r = (Λ^2 + I)^-1 * (θ_r + Λ * Ψ' * G(p, m, y) - Φ' * η) + Gputλ
+    return ∇Lθ_r
 
 end
 
 function compute_Hx_rto(
-    x::AbstractVector, 
+    x::AbstractVector,
     θ::AbstractVector,
     u::AbstractVector,
     Au_r::AbstractMatrix, 
@@ -646,12 +647,25 @@ function compute_Hx_rto(
     g::Grid,
     m::ReducedOrderModel,
     pr::MaternField,
+    Ψ::AbstractMatrix,
     Λ::AbstractMatrix,
     Φ::AbstractMatrix
-)::AbstractVector
+)
 
-    Hx = compute_Hmx(x, θ, u, Au_r, ∂Ap∂u, ∂Aμ∂u, g, m, pr)
-    Hx += Φ * (Λ^2 + I)^-1 * Φ' * x
+    ∂Ap∂θx = compute_∂Ax∂θx(∂Ap∂u, θ, u, Φ * x, pr)
+    ∂Aμ∂θx = compute_∂Ax∂θx(∂Aμ∂u, θ, u, Φ * x, pr)
+
+    p_inc = solve_forward_inc(Au_r, ∂Ap∂θx + ∂Aμ∂θx, g, m)
+    b_inc = m.BV_r' * m.L_e' * Ψ * Λ * (Λ+I)^-1 * (Λ * Ψ' * L_e * m.BV_r * p_inc - x)
+    λ_inc = solve_adjoint_inc(Au_r, b_inc, g, m)
+
+    ∂Ap∂θtλ_inc = Φ' * compute_∂Ax∂θtx(∂Ap∂u, θ, u, λ_inc, pr)
+    ∂Aμ∂θtλ_inc = Φ' * compute_∂Ax∂θtx(∂Aμ∂u, θ, u, λ_inc, pr)
+
+    Hx = -(Λ+I)^-1 * Λ * Ψ' * L_e * m.BV_r * p_inc + 
+        (Λ+I)^-1 * x + 
+        (∂Ap∂θtλ_inc + ∂Aμ∂θtλ_inc)
+
     return Hx
 
 end
@@ -662,28 +676,29 @@ function solve_cg_rto(
     Au_r::AbstractMatrix,
     ∂Ap∂u::AbstractMatrix,
     ∂Aμ∂u::AbstractMatrix,
-    ∇Lθ::AbstractVector,
+    ∇Lθ_r::AbstractVector,
     tol::Real,
     g::Grid,
     m::ReducedOrderModel,
     pr::MaternField,
+    Ψ::AbstractMatrix,
     Λ::AbstractMatrix,
     Φ::AbstractMatrix;
     verbose::Bool=false
 )::AbstractVector
 
     verbose && println("CG It. | norm(r)")
-    δθ = spzeros(pr.Nθ)
-    d = -copy(∇Lθ)
-    r = -copy(∇Lθ)
+    δθ_r = zeros(size(Φ, 2))
+    d = -copy(∇Lθ_r)
+    r = -copy(∇Lθ_r)
 
     i = 1
     while true
 
-        Hd = compute_Hx_rto(d, θ, u, Au_r, ∂Ap∂u, ∂Aμ∂u, g, m, pr, Λ, Φ)
+        Hd = compute_Hx_rto(d, θ, u, Au_r, ∂Ap∂u, ∂Aμ∂u, g, m, pr, Ψ, Λ, Φ)
 
         α = (r' * r) / (d' * Hd)
-        δθ += α * d
+        δθ_r += α * d
 
         r_prev = copy(r)
         r = r_prev - α * Hd
@@ -692,10 +707,10 @@ function solve_cg_rto(
 
         if norm(r) < tol
             verbose && println("CG converged after $i iterations.")
-            return δθ
+            return δθ_r
         elseif i > CG_MAX_ITS
             verbose && @warn "CG failed to converge within $CG_MAX_ITS iterations."
-            return δθ
+            return δθ_r
         end
         
         β = (r' * r) / (r_prev' * r_prev)
@@ -707,10 +722,10 @@ function solve_cg_rto(
 end
 
 function linesearch_rto(
-    θ_c::AbstractVector, 
+    θ_r_c::AbstractVector, 
     p_r_c::AbstractVector, 
-    ∇Lθ_c::AbstractVector, 
-    δθ::AbstractVector,
+    ∇Lθ_r_c::AbstractVector, 
+    δθ_r::AbstractVector,
     y::AbstractVector,
     g::Grid, 
     m::ReducedOrderModel,
@@ -718,22 +733,24 @@ function linesearch_rto(
     Ψ::AbstractMatrix, 
     Λ::AbstractMatrix, 
     Φ::AbstractMatrix, 
+    θ_c::AbstractVector,
     η::AbstractVector;
     verbose::Bool=false
 )
 
     verbose && println("LS It. | J(η, u)")
-    J_c = J(θ_c, p_r_c, y, g, m)
+    J_c = J(θ_r_c, p_r_c, y, g, m)
     
     α_k = 1.0
-    θ_k = nothing
+    θ_r_k = nothing
     p_r_k = nothing
     J_k = nothing
 
     i_ls = 1
     while i_ls < LS_MAX_ITS
 
-        θ_k = θ_c + α_k * δθ
+        θ_r_k = θ_r_c + α_k * δθ_r
+        θ_k = Φ * θ_r_k + θ_c
         u_k = transform(pr, θ_k)
 
         Au = m.c * m.ϕ * sparse(I, g.nx^2, g.nx^2) + 
@@ -741,13 +758,13 @@ function linesearch_rto(
         Au_r = m.V_ri' * Au * m.V_ri 
 
         p_r_k = solve_forward(Au, Au_r, g, m)
-        J_k = J_rto(θ_k, p_r_k, y, g, m, Ψ, Λ, Φ, η)
+        J_k = J_rto(θ_r_k, p_r_k, y, g, m, Ψ, Λ, Φ, η)
 
         verbose && @printf "%6i | %.3e\n" i_ls J_k 
 
-        if (J_k ≤ J_c + LS_C * α_k * ∇Lθ_c' * δθ)
+        if (J_k ≤ J_c + LS_C * α_k * ∇Lθ_r_c' * δθ_r)
             verbose && println("Linesearch converged after $i_ls iterations.")
-            return θ_k, p_r_k, J_k
+            return θ_r_k, p_r_k, J_k
         end
 
         α_k *= 0.5
@@ -756,7 +773,7 @@ function linesearch_rto(
     end
 
     @warn "Linesearch failed to converge within $LS_MAX_ITS iterations."
-    return θ_k, p_r_k, J_k
+    return θ_r_k, p_r_k, J_k
 
 end
 
@@ -773,15 +790,19 @@ function optimise_rto(
     verbose::Bool=false
 )
 
-    θ = copy(θ0) 
+    θ_r = Φ' * θ0
     p_r = nothing
-    norm∇Lθ0 = nothing
+    norm∇Lθ_r0 = nothing
+    Jθ = Inf
+
+    θ_c = (I - Φ * Φ') * η
 
     i = 1
     while true
 
         verbose && @info "Beginning GN It. $i"
         
+        θ = Φ * θ_r + θ_c
         u = transform(pr, θ)
 
         Au = m.c * m.ϕ * sparse(I, g.nx^2, g.nx^2) + 
@@ -792,33 +813,33 @@ function optimise_rto(
             p_r = solve_forward(Au, Au_r, g, m)
         end
         p = get_full_state(p_r, g, m)
-        b_inc = m.BV_r' * m.L_e' * Ψ * Λ' * (Λ^2 + I)^-1 * (Λ * Ψ' * G(p, m, y) + Φ' * (θ - η))
+        b_inc = m.BV_r' * m.L_e' * Ψ * Λ * (Λ^2 + I)^-1 * (θ_r + Λ * Ψ' * G(p, m, y) - Φ' * η)
         λ = solve_adjoint_inc(Au_r, -b_inc, g, m)
 
         ∂Ap∂u = compute_∂Ap∂u(u, p_r, g, m)
         ∂Aμ∂u = compute_∂Aμ∂u(u, g, m)
 
-        ∇Lθ = compute_∇Lθ_rto(∂Ap∂u, ∂Aμ∂u, θ, u, p_r, λ, y, g, m, pr, Ψ, Λ, Φ, η)
-        if i == 1
-            norm∇Lθ0 = norm(∇Lθ)
-        end
-        tol_cg = min(0.5, √(norm(∇Lθ) / norm∇Lθ0)) * norm(∇Lθ)
-
-        verbose && @printf "norm(∇Lθ): %.3e\n" norm(∇Lθ)
-        verbose && @printf "CG tolerance: %.3e\n" tol_cg
-
-        δθ = solve_cg_rto(θ, u, Au_r, ∂Ap∂u, ∂Aμ∂u, ∇Lθ, tol_cg, g, m, pr, Λ, Φ; verbose=verbose)
-        θ, p_r, Jθ = linesearch_rto(θ, p_r, ∇Lθ, δθ, y, g, m, pr, Ψ, Λ, Φ, η; verbose=verbose)
-        
-        if Jθ < 1e-5 # TODO: clean up..
+        if Jθ < 1e-5 # TODO: clean up... I don't think I have the right derivatives etc in here.
             return GNResult(true, θ, u, p_r, Au_r, ∂Ap∂u, ∂Aμ∂u, -1) # TODO: add number of solves
         end
 
-        i += 1
-        if i > GN_MAX_ITS
-            @warn "Failed to converge within $GN_MAX_ITS iterations."
-            return GNResult(false, θ, u, p_r, Au_r, ∂Ap∂u, ∂Aμ∂u, -1) # TODO: add number of solves
+        ∇Lθ_r = compute_∇Lθ_r(∂Ap∂u, ∂Aμ∂u, θ_r, θ, u, p_r, λ, y, g, m, pr, Ψ, Λ, Φ, η)
+        if i == 1
+            norm∇Lθ_r0 = norm(∇Lθ_r)
         end
+        tol_cg = 1e-2 * min(0.5, √(norm(∇Lθ_r) / norm∇Lθ_r0)) * norm(∇Lθ_r)
+
+        verbose && @printf "norm(∇Lθ): %.3e\n" norm(∇Lθ_r)
+        verbose && @printf "CG tolerance: %.3e\n" tol_cg
+
+        δθ_r = solve_cg_rto(θ, u, Au_r, ∂Ap∂u, ∂Aμ∂u, ∇Lθ_r, tol_cg, g, m, pr, Ψ, Λ, Φ; verbose=verbose)
+        θ_r, p_r, Jθ = linesearch_rto(θ_r, p_r, ∇Lθ_r, δθ_r, y, g, m, pr, Ψ, Λ, Φ, θ_c, η; verbose=verbose)
+
+        i += 1
+        # if i >  GN_MAX_ITS
+        #     @warn "Failed to converge within $GN_MAX_ITS iterations."
+        #     return GNResult(false, θ_r, u, p_r, Au_r, ∂Ap∂u, ∂Aμ∂u, -1) # TODO: add number of solves
+        # end
 
     end
 
@@ -837,9 +858,9 @@ function compute_weight_rto(
 
     p = get_full_state(sol.p_r, g, m)
 
-    JX = compute_JX(Φ, sol.θ, sol.u, sol.Au_r, sol.∂Ap∂u, sol.∂Aμ∂u, g, m, pr)
-    ldetQH = logabsdet((Λ^2 + I)^-0.5)[1] + logabsdet(I + Λ * Ψ' * JX)[1]
-    Gθ = m.L_e * (m.B * p + m.μ_e - y)
+    JΦ = compute_JX(Φ, sol.θ, sol.u, sol.Au_r, sol.∂Ap∂u, sol.∂Aμ∂u, g, m, pr)
+    ldetQH = logabsdet((Λ^2 + I)^-0.5)[1] + logabsdet(I + Λ * Ψ' * JΦ)[1]
+    Gθ = G(p, m, y)
     
     logw = - ldetQH
            - 0.5sqnorm(Gθ) 
@@ -894,10 +915,11 @@ function run_rto(
     for i ∈ 1:n_samples
 
         η_i = rand(UNIT_NORM, pr.Nθ)
-        θ0_i = vec(rand(pr))
 
-        sample = optimise_rto(g, m, pr, y, θ0_i, Ψ, Λ, Φ, η_i; verbose=verbose)
+        sample = optimise_rto(g, m, pr, y, map.θ, Ψ, Λ, Φ, η_i; verbose=verbose)
         lnw = compute_weight_rto(sample, y, g, m, pr, Ψ, Λ, Φ)
+        
+        println(lnw)
 
         push!(samples, sample)
         push!(lnws, lnw)
@@ -916,7 +938,7 @@ function run_rto_mcmc(
 )
 
     n = length(lnws)
-    chain = ones(Int, n_samples)
+    chain = ones(Int, length(lnws))
     acc = 0
 
     for i ∈ 2:n 

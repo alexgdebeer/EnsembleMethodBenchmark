@@ -5,32 +5,20 @@ struct IdentityLocaliser <: Localiser end
 struct IdentityInflator <: Inflator end
 struct FisherLocaliser <: Localiser end
 
-mutable struct ShuffleLocaliser <: Localiser
-
+struct ShuffleLocaliser <: Localiser
     n_shuffle::Int 
-    P::Union{AbstractMatrix, Nothing}
-    groups::Union{AbstractVector, Nothing}
-    
-    function ShuffleLocaliser(; 
-        n_shuffle=100, 
-        groups=nothing
-    )
-        return new(n_shuffle, nothing, groups)   
-    end
-
+    ShuffleLocaliser(; n_shuffle=100) = new(n_shuffle)
 end
 
 struct BootstrapLocaliser <: Localiser
 
     n_boot::Int 
     σ::Real 
-    tol::Real
     type::Symbol
 
     function BootstrapLocaliser(; 
         n_boot=100, 
         σ=0.6, 
-        tol=1e-8, 
         type=:unregularised
     )
 
@@ -38,7 +26,7 @@ struct BootstrapLocaliser <: Localiser
             error("Invalid type passed in.")
         end
 
-        return new(n_boot, σ, tol, type)
+        return new(n_boot, σ, type)
     end
 
 end
@@ -126,10 +114,6 @@ function localise(
     K::AbstractMatrix
 )
 
-    if localiser.P !== nothing 
-        return localiser.P .* K
-    end
-
     Nθ, Ne = size(θs)
     NG, Ne = size(Gs)
 
@@ -144,28 +128,13 @@ function localise(
         R_θGs[:, :, i] = compute_cors(θs_shuffled, Gs)[1]
     end
 
-    # TODO: clean this rubbish up
-    if localiser.groups === nothing
-        
-        σs_e = median(abs.(R_θGs), dims=3) ./ 0.6745
-        for i ∈ 1:Nθ, j ∈ 1:NG
-            z = (1 - abs(R_θG[i, j])) / (1 - σs_e[i, j])
-            P[i, j] = gaspari_cohn(z)
+    for i ∈ 1:Nθ, j ∈ 1:NG
+        σ_ij = std(R_θGs[i, j, :])
+        if σ_ij ≤ abs(R_θG[i, j])
+            P[i, j] = 1
         end
-
-    else
-
-        for group ∈ localiser.groups
-            σs_e = median(abs.(R_θGs[group, :, :])) / 0.6745
-            for i ∈ group, j ∈ 1:NG 
-                z = (1 - abs(R_θG[i, j])) / (1 - σs_e)
-                P[i, j] = gaspari_cohn(z)
-            end
-        end
-
     end
 
-    localiser.P = P
     return P .* K
 
 end
