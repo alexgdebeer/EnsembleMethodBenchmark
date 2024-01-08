@@ -14,28 +14,14 @@ You should then be able to run any of the scripts in the top level of the reposi
 
 ## TODO:
 
-EKI:
- - Currently looking good.
-
-EnRML:
- - Experiment with convergence tolerances.
-
 EKS:
- - Add localisation? (SEC, Lee 2021)
- - Read paper on ALDI, and consider using the generalised square root.
  - Split into EKS (uncorrected) and ALDI (corrected).
- 
-LMAP: 
- - Record number of PDE solves.
 
 MCMC: 
- - Run a longer set of chains.
- - Finish checking convergence diagnostics.
+ - Check ESS?
 
 RTO:
- - Finish reading papers and implement the algorithm.
+ - Finish debugging the algorithm.
 
 General:
- - Set up a framework for comparing the results of MCMC and the other methods.
  - Save everything to files.
- - Save the number of iterations everything is doing.
