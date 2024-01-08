@@ -7,23 +7,25 @@ n_trials = 10
 data_folder = "data/enrml"
 
 fnames = [
-    "$(data_folder)/enrml_$Ne.h5", 
-    "$(data_folder)/enrml_boot_$Ne.h5", 
+    # "$(data_folder)/enrml_$Ne.h5", 
+    # "$(data_folder)/enrml_boot_$Ne.h5", 
+    # "$(data_folder)/enrml_boot_reg_$Ne.h5", 
     "$(data_folder)/enrml_shuffle_$Ne.h5", 
-    "$(data_folder)/enrml_fisher_$Ne.h5",
-    "$(data_folder)/enrml_inflation_$Ne.h5",
-    "$(data_folder)/enrml_fisher_inflation_$Ne.h5"
+    # "$(data_folder)/enrml_fisher_$Ne.h5",
+    # "$(data_folder)/enrml_inflation_$Ne.h5",
+    # "$(data_folder)/enrml_fisher_inflation_$Ne.h5"
 ]
 
 groups = [1:pr.Nu, pr.Nu+1, pr.Nu+2]
 
 settings = [
-    (IdentityLocaliser(), IdentityInflator()),
-    (BootstrapLocaliser(), IdentityInflator()),
-    (ShuffleLocaliser(groups=groups), IdentityInflator()),
-    (FisherLocaliser(), IdentityInflator()),
-    (IdentityLocaliser(), AdaptiveInflator()),
-    (FisherLocaliser(), AdaptiveInflator())
+    # (IdentityLocaliser(), IdentityInflator()),
+    # (BootstrapLocaliser(type=:unregularised), IdentityInflator()),
+    # (BootstrapLocaliser(type=:regularised), IdentityInflator()),
+    (ShuffleLocaliser(), IdentityInflator()),
+    # (FisherLocaliser(), IdentityInflator()),
+    # (IdentityLocaliser(), AdaptiveInflator()),
+    # (FisherLocaliser(), AdaptiveInflator())
 ]
 
 for (fname, setting) ∈ zip(fnames, settings)

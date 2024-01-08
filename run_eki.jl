@@ -7,25 +7,29 @@ n_trials = 10
 data_folder = "data/eki"
 
 fnames = [
-    "$(data_folder)/eki_$Ne.h5", 
-    "$(data_folder)/eki_boot_$Ne.h5", 
+    # "$(data_folder)/eki_$Ne.h5", 
+    # "$(data_folder)/eki_boot_$Ne.h5", 
+    # "$(data_folder)/eki_boot_reg_$Ne.h5", 
     "$(data_folder)/eki_shuffle_$Ne.h5", 
-    "$(data_folder)/eki_sec_$Ne.h5",
-    "$(data_folder)/eki_fisher_$Ne.h5",
-    "$(data_folder)/eki_inflation_$Ne.h5"
-    "$(data_folder)/eki_fisher_inflation_$Ne.h5"
+    # "$(data_folder)/eki_sec_$Ne.h5",
+    # "$(data_folder)/eki_fisher_$Ne.h5",
+    # "$(data_folder)/eki_inflation_$Ne.h5",
+    # "$(data_folder)/eki_fisher_inflation_$Ne.h5",
+    # "$(data_folder)/eki_boot_inflation_$Ne.h5",
 ]
 
-groups = [1:pr.Nu, pr.Nu+1, pr.Nu+2]
+# groups = [1:pr.Nu, pr.Nu+1, pr.Nu+2]
 
 settings = [
-    (IdentityLocaliser(), IdentityInflator()),
-    (BootstrapLocaliser(), IdentityInflator()),
-    (ShuffleLocaliser(groups=groups), IdentityInflator()),
-    (PowerLocaliser(), IdentityInflator()),
-    (FisherLocaliser(), IdentityInflator()),
-    (IdentityLocaliser(), AdaptiveInflator()),
-    (FisherLocaliser(), AdaptiveInflator())
+    # (IdentityLocaliser(), IdentityInflator()),
+    # (BootstrapLocaliser(type=:unregularised), IdentityInflator()),
+    # (BootstrapLocaliser(type=:regularised), IdentityInflator()),
+    (ShuffleLocaliser(), IdentityInflator()),
+    # (PowerLocaliser(), IdentityInflator()),
+    # (FisherLocaliser(), IdentityInflator()),
+    # (IdentityLocaliser(), AdaptiveInflator()),
+    # (FisherLocaliser(), AdaptiveInflator()),
+    # (BootstrapLocaliser(type=:unregularised), AdaptiveInflator())
 ]
 
 for (fname, setting) ∈ zip(fnames, settings)

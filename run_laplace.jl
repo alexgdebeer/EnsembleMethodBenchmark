@@ -1,7 +1,7 @@
 include("setup.jl")
 include("InferenceAlgorithms/InferenceAlgorithms.jl")
 
-Ne = 100
+Ne = 1000
 n_trials = 10
 
 fname = "data/laplace/laplace_$Ne.h5"

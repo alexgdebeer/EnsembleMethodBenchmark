@@ -1,4 +1,5 @@
 using Distributions
+using HDF5
 using LinearAlgebra
 using Random: seed!
 
@@ -123,7 +124,7 @@ L_e = cholesky(C_e_inv).U
 
 model_r = ReducedOrderModel(
     grid_c, ϕ, μ, c, p0, wells_c, well_change_times,
-    x_obs, y_obs, t_obs, μ_pi, V_ri, μ_ε, C_e
+    x_obs, y_obs, t_obs, μ_pi, V_ri, μ_e, C_e
 )
 
 # ----------------
@@ -149,3 +150,21 @@ G(p::AbstractVector) = model_c.B * p
 # end
 
 # animate(u_t, grid_f, (50, 50), "plots/animations/test")
+
+# Stuff to export for plotting (TODO: clean up...)
+# well_ps = hcat(fill(p0, 9), reshape(model_f.B_wells * p_t, 9, :))
+# well_ts = [0.0, grid_f.ts...]
+
+# well_ps_obs = reshape(d_obs, 9, :)
+# well_ts_obs = t_obs
+# u_t = reshape(u_t, grid_f.nx, grid_f.nx)
+
+# fname = "data/setup.h5"
+
+# h5write(fname, "well_ps", well_ps)
+# h5write(fname, "well_ts", well_ts)
+# h5write(fname, "well_ps_obs", well_ps_obs)
+# h5write(fname, "well_ts_obs", well_ts_obs)
+# h5write(fname, "u_t", u_t)
+# h5write(fname, "xs", collect(grid_f.xs))
+# h5write(fname, "well_centres", well_centres)

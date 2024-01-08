@@ -1,25 +1,19 @@
 include("setup.jl")
 
-RESULTS_FNAME = "data/prior/prior.h5"
-N_SAMPLES = 1000
+fname = "data/prior/prior.h5"
+n_samples = 1000
 
-ηs = rand(pr, N_SAMPLES)
-θs = hcat([transform(pr, ηi) for ηi ∈ eachcol(ηs)]...)
-Fs = hcat([F(θi) for θi ∈ eachcol(θs)]...)
-Gs = hcat([G(Fi) for Fi ∈ eachcol(Fs)]...)
+θs = rand(pr, n_samples)
+us = hcat([transform(pr, θ_i) for θ_i ∈ eachcol(θs)]...)
+Fs = hcat([F(u_i) for u_i ∈ eachcol(us)]...)
+Gs = hcat([G(F_i) for F_i ∈ eachcol(Fs)]...)
 
-μ_η = mean(ηs, dims=2)
-μ_pri = reshape(transform(pr, μ_η), grid_c.nx, grid_c.nx)
-σ_pri = reshape(std(θs, dims=2), grid_c.nx, grid_c.nx)
+μ_θ = mean(θs, dims=2)
+μ_pri = reshape(transform(pr, μ_θ), grid_c.nx, grid_c.nx)
+σ_pri = reshape(std(us, dims=2), grid_c.nx, grid_c.nx)
 
-θis = θs[3200, :]
-ls = [pr.l_bounds[1] + cdf(Normal(), l) * pr.Δl for l ∈ ηs[end, :]]
-
-h5write(RESULTS_FNAME, "ηs", ηs)
-h5write(RESULTS_FNAME, "θs", θs)
-h5write(RESULTS_FNAME, "Fs", model_r.B_wells * Fs)
-h5write(RESULTS_FNAME, "Gs", Gs)
-h5write(RESULTS_FNAME, "μ", μ_pri)
-h5write(RESULTS_FNAME, "σ", σ_pri)
-h5write(RESULTS_FNAME, "θi", θis)
-h5write(RESULTS_FNAME, "l", ls)
+h5write(fname, "mean", μ_pri)
+h5write(fname, "stds", σ_pri)
+h5write(fname, "θs", θs)
+h5write(fname, "us", us)
+h5write(fname, "Gs", Gs)
