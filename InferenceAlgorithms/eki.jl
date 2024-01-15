@@ -117,21 +117,6 @@ function compute_gain_eki(
 
 end
 
-function run_ensemble(
-    θs::AbstractMatrix, 
-    F::Function, 
-    G::Function, 
-    pr::MaternField
-)
-
-    us = hcat([transform(pr, θ_i) for θ_i ∈ eachcol(θs)]...)
-    Fs = hcat([F(u_i) for u_i ∈ eachcol(us)]...)
-    Gs = hcat([G(F_i) for F_i ∈ eachcol(Fs)]...)
-
-    return us, Fs, Gs
-
-end
-
 """Uses the standard EKI update to update the current ensemble."""
 function eki_update(
     θs::AbstractMatrix, 

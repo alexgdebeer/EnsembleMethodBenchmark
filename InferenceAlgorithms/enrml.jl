@@ -158,6 +158,8 @@ function enrml_update(
     δθ_pr = Δθ * VG * inv((λ + 1)I + Diagonal(ΛG).^2) * VG' * Δθ' *
             Uθ_pr * Diagonal(1 ./ Λθ_pr.^2) * Uθ_pr' * (θs - θs_pr)
 
+    display(δθ_pr)
+
     # Calculate corrections based on fit to observations
     δθ_obs = K * (Gs .+ μ_e .- ys)
 
@@ -206,21 +208,29 @@ function enrml_update(
     Nθ, Ne = size(θs)
     dummy_params = generate_dummy_params(inflator, Ne)
 
-    θs_pr_aug = [θs_pr; dummy_params]
-    Uθ_pr_aug, Λθ_pr_aug, = tsvd(θs_pr_aug)
+    Δθ = compute_Δs(θs)
+    ΔG = compute_Δs(Gs)
 
-    θs_aug = enrml_update(
-        [θs; dummy_params], Gs, ys, μ_e, C_e_invsqrt, 
-        θs_pr_aug, Uθ_pr_aug, Λθ_pr_aug, λ, localiser
-    )
+    θs_aug = [θs; dummy_params]
+    Δθ_aug = compute_Δs(θs_aug)
 
-    θs_new = θs_aug[1:Nθ, :]
-    dummy_params = θs_aug[Nθ+1:end, :]
+    UG, ΛG, VG = tsvd(C_e_invsqrt * ΔG)
+    K = compute_gain_enrml(localiser, θs_aug, Gs, Δθ_aug, UG, ΛG, VG, C_e_invsqrt, λ)
+
+    # Calculate corrections based on prior deviations
+    δθ_pr = Δθ * VG * inv((λ + 1)I + Diagonal(ΛG).^2) * VG' * Δθ' *
+            Uθ_pr * Diagonal(1 ./ Λθ_pr.^2) * Uθ_pr' * (θs - θs_pr)
+
+    # Calculate corrections based on fit to observations
+    δθ_obs = K * (Gs .+ μ_e .- ys)
+
+    dummy_params = θs_aug[Nθ+1:end, :] - δθ_obs[Nθ+1:end, :]
     ρ = 1 / mean(std(dummy_params, dims=2))
     @info "Inflation factor: $(ρ)."
 
-    μ_θ = mean(θs_new, dims=2)
-    return ρ * (θs_new .- μ_θ) .+ μ_θ
+    θs = θs - δθ_pr - δθ_obs[1:Nθ, :]
+    μ_θ = mean(θs, dims=2)
+    return ρ * (θs .- μ_θ) .+ μ_θ
 
 end
 

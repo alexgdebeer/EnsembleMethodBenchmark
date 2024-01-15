@@ -169,6 +169,21 @@ function generate_dummy_params(
 
 end
 
+function run_ensemble(
+    θs::AbstractMatrix, 
+    F::Function, 
+    G::Function, 
+    pr::AbstractMaternField
+)
+
+    us = hcat([transform(pr, θ_i) for θ_i ∈ eachcol(θs)]...)
+    Fs = hcat([F(u_i) for u_i ∈ eachcol(us)]...)
+    Gs = hcat([G(F_i) for F_i ∈ eachcol(Fs)]...)
+
+    return us, Fs, Gs
+
+end
+
 function save_results(results::Dict, fname::AbstractString)
 
     for (k, v) in pairs(results)
