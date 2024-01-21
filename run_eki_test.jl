@@ -1,11 +1,11 @@
-include("setup.jl")
+include("setup_pod.jl")
 include("InferenceAlgorithms/InferenceAlgorithms.jl")
 
 Ne = 100
    
 θs, us, Fs, Gs = run_eki_dmc(
     F, G, pr, d_obs, μ_e, C_e, Ne; 
-    localiser=BootstrapLocaliser(type=:regularised),
+    localiser=IdentityLocaliser(),
     inflator=IdentityInflator()
 )
 
