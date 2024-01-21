@@ -12,6 +12,7 @@ include("ensemble_methods.jl")
 include("eki.jl")
 include("enrml.jl")
 include("eks.jl")
+include("seki.jl")
 
 include("optimisation.jl")
 include("pcn.jl")
