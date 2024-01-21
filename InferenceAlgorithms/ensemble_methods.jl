@@ -41,6 +41,20 @@ struct AdaptiveInflator <: Inflator
     AdaptiveInflator(; n_dummy_params=50) = new(n_dummy_params)
 end
 
+function tsvd(A::AbstractMatrix; e::Real=0.99)
+
+    U, Λ, V = svd(A)
+    minimum(Λ) < 0 && error(minimum(Λ))
+    λ_cum = cumsum(Λ)
+
+    for i ∈ 1:length(Λ)
+        if λ_cum[i] / λ_cum[end] ≥ e 
+            return U[:, 1:i], Λ[1:i], V[:, 1:i]
+        end
+    end
+
+end
+
 function compute_Δs(xs::AbstractMatrix)
 
     N = size(xs, 2)
