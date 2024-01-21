@@ -20,7 +20,7 @@ function run_eks(
     Gs = []
 
     θs_i = rand(pr, Ne)
-    us_i, Fs_i, Gs_i = @time run_ensemble(θs_i, F, G, pr)
+    us_i, Fs_i, Gs_i = run_ensemble(θs_i, F, G, pr)
 
     push!(θs, θs_i)
     push!(us, us_i)
@@ -34,11 +34,11 @@ function run_eks(
         μ_G = mean(Gs_i, dims=2)
         μ_θ = mean(θs_i, dims=2)
        
-        C_θθ = cov(θs[end], dims=2) # TODO: localisation / sampling error correction?
+        C_θθ = cov(θs[end], dims=2, corrected=false)
         D = (1.0 / Ne) * (Gs_i .- μ_G)' * (C_e \ (Gs_i .+ μ_e .- y))
-        ζ = rand(MvNormal(C_θθ + 1e-8 * I), Ne)
+        ζ = rand(MvNormal(C_θθ + 0.001 * Diagonal(diag(C_θθ))), Ne)
         
-        Δt = Δt₀ / (norm(D) + 1e-6)
+        Δt = Δt₀ / (norm(D) + 1e-8)
         t += Δt
 
         μ_misfit = mean(abs.(Gs[end] .+ μ_e .- y))
@@ -49,8 +49,8 @@ function run_eks(
             Δt * (θs_i .- μ_θ) * D +
             Δt * ((NG + 1) / Ne) * (θs_i .- μ_θ)
 
-        θs_i = @time (A_n \ B_n) + √(2 * Δt) * ζ
-        us_i, Fs_i, Gs_i = @time run_ensemble(θs_i, F, G, pr)
+        θs_i = (A_n \ B_n) + √(2 * Δt) * ζ
+        us_i, Fs_i, Gs_i = run_ensemble(θs_i, F, G, pr)
 
         push!(θs, θs_i)
         push!(us, us_i)
