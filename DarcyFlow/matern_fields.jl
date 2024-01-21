@@ -143,7 +143,7 @@ function Base.rand(
     return rand(Normal(), mf.Nθ, n)
 end
 
-function _transform(
+function transform(
     mf::MaternField,
     θ::AbstractVecOrMat
 )
