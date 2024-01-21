@@ -97,9 +97,7 @@ function build_fem_matrices(g::Grid)
 
 end
 
-abstract type AbstractMaternField end
-
-struct MaternField <: AbstractMaternField
+struct MaternField
 
     μ::AbstractVector
     σ_bounds::Tuple
@@ -138,62 +136,15 @@ struct MaternField <: AbstractMaternField
 
 end
 
-struct ReducedMaternField <: AbstractMaternField
-
-    μ::AbstractVector
-    σ_bounds::Tuple
-    l_bounds::Tuple
-
-    Δσ::Real 
-    Δl::Real
-
-    M::AbstractMatrix 
-    K::AbstractMatrix 
-    N::AbstractMatrix
-    L::AbstractMatrix
-
-    L_θ::AbstractMatrix
-    Λ_θr::AbstractMatrix
-    V_θr::AbstractMatrix
-
-    Nθ::Int
-    Nu::Int 
-    Nω::Int
-
-    function ReducedMaternField(
-        g::Grid,
-        μ::Real,
-        σ_bounds::Tuple,
-        l_bounds::Tuple,
-        L_θ::AbstractMatrix,
-        Λ_θr::AbstractMatrix,
-        V_θr::AbstractMatrix
-    )
-
-        Δσ = σ_bounds[2] - σ_bounds[1]
-        Δl = l_bounds[2] - l_bounds[1]
-        
-        μ = fill(μ, g.nx^2)
-        return new(
-            μ, σ_bounds, l_bounds, Δσ, Δl,
-            build_fem_matrices(g)...,  
-            L_θ, Λ_θr, V_θr,
-            size(V_θr, 2), g.nx^2, 2
-        )
-
-    end
-
-end
-
 function Base.rand(
-    mf::AbstractMaternField, 
+    mf::MaternField, 
     n::Int=1
 )::AbstractMatrix   
     return rand(Normal(), mf.Nθ, n)
 end
 
 function _transform(
-    mf::AbstractMaternField,
+    mf::MaternField,
     θ::AbstractVecOrMat
 )
 
@@ -208,24 +159,5 @@ function _transform(
     b = √(α) * l * mf.L * ξ + A * mf.μ
 
     return solve(LinearProblem(A, b)).u
-
-end
-
-function transform(
-    mf::MaternField, 
-    θ::AbstractVecOrMat
-)::AbstractVector
-
-    return _transform(mf, θ)
-
-end
-
-function transform(
-    mf::ReducedMaternField, 
-    θ::AbstractVecOrMat
-)::AbstractVector
-
-    θ = mf.L_θ' * mf.V_θr * mf.Λ_θr.^0.5 * θ
-    return _transform(mf, θ)
 
 end
