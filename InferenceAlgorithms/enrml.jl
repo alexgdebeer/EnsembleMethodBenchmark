@@ -1,17 +1,3 @@
-function tsvd(A::AbstractMatrix; e::Real=0.99)
-
-    U, Λ, V = svd(A)
-    minimum(Λ) < 0 && error(minimum(Λ))
-    λ_cum = cumsum(Λ)
-
-    for i ∈ 1:length(Λ)
-        if λ_cum[i] / λ_cum[end] ≥ e 
-            return U[:, 1:i], Λ[1:i], V[:, 1:i]
-        end
-    end
-
-end
-
 function compute_S(Gs, ys, μ_e, C_e_invsqrt)
     φs = sum((C_e_invsqrt * (Gs .+ μ_e .- ys)).^2, dims=1)
     return mean(φs)
