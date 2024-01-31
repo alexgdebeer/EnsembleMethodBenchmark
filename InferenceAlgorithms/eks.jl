@@ -47,7 +47,7 @@ function run_eks(
         A_n = I + Δt * C_θθ
         B_n = θs_i - 
             Δt * (θs_i .- μ_θ) * D +
-            Δt * ((NG + 1) / Ne) * (θs_i .- μ_θ)
+            Δt * ((pr.Nθ + 1) / Ne) * (θs_i .- μ_θ)
 
         θs_i = (A_n \ B_n) + √(2 * Δt) * ζ
         us_i, Fs_i, Gs_i = run_ensemble(θs_i, F, G, pr)
