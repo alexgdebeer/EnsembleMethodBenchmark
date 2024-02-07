@@ -14,15 +14,15 @@ for i ∈ 1:n_trials
     
 θs, us, Fs, Gs = run_eks(F, G, pr, d_obs, μ_e, C_e, Ne; t_stop=5)
 
-    μ_post = transform(pr, mean(θs[end], dims=2))
+    μ_post = transform(pr, mean(θs, dims=2))
     μ_post = reshape(μ_post, grid_c.nx, grid_c.nx)
 
-    σ_post = std(us[end], dims=2)
+    σ_post = std(us, dims=2)
     σ_post = reshape(σ_post, grid_c.nx, grid_c.nx)
 
-    results["θs_$i"] = θs[end]
-    results["us_$i"] = us[end]
-    results["Fs_$i"] = model_r.B_wells * Fs[end]
+    results["θs_$i"] = θs
+    results["us_$i"] = us
+    results["Fs_$i"] = model_r.B_wells * Fs
 
     results["μ_post_$i"] = μ_post
     results["σ_post_$i"] = σ_post
