@@ -24,7 +24,7 @@ function run_chain(
     loglik(G) = -sum((L_e*(G+μ_e-d_obs)).^2)
     logpost(θ, G) = logpri(θ) + loglik(G)
 
-    ξs = Matrix{Float64}(undef, pr.Nθ, Nb)
+    ξs = Matrix{Float64}(undef, pr.Nu, Nb)
     ωs = Matrix{Float64}(undef, pr.Nω, Nb)
     us = Matrix{Float64}(undef, pr.Nu, Nb)
     Fs = Matrix{Float64}(undef, NF, Nb)
