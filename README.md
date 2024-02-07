@@ -11,17 +11,3 @@ Pkg.activate(".")
 Pkg.instantiate()
 ```
 You should then be able to run any of the scripts in the top level of the repository.
-
-## TODO:
-
-EKS:
- - Split into EKS (uncorrected) and ALDI (corrected).
-
-MCMC: 
- - Check ESS?
-
-RTO:
- - Finish debugging the algorithm.
-
-General:
- - Save everything to files.
