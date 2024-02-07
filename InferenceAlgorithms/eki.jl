@@ -35,13 +35,13 @@ function compute_gain_eki(
     C_e::AbstractMatrix
 )
 
-    Nθ, Ne = size(θs)
-    NG, Ne = size(Gs)
+    Nθ, J = size(θs)
+    NG, J = size(Gs)
     K = compute_gain_eki(θs, Gs, α, C_e)
     Ks_boot = zeros(Nθ, NG, localiser.n_boot)
 
     for k ∈ 1:localiser.n_boot 
-        inds_res = rand(1:Ne, Ne)
+        inds_res = rand(1:J, J)
         θs_res = θs[:, inds_res]
         Gs_res = Gs[:, inds_res]
         K_res = compute_gain_eki(θs_res, Gs_res, α, C_e)
@@ -128,7 +128,7 @@ function eki_update(
     localiser::Localiser
 )
 
-    ys = rand(MvNormal(y, α * C_e), Ne)
+    ys = rand(MvNormal(y, α * C_e), size(θs, 2))
     K = compute_gain_eki(localiser, θs, Gs, α, C_e)
     return θs + K * (ys - Gs .- μ_e)
 
@@ -163,8 +163,8 @@ function eki_update(
     inflator::AdaptiveInflator
 )
 
-    Nθ, Ne = size(θs)
-    dummy_params = generate_dummy_params(inflator, Ne)
+    Nθ, J = size(θs)
+    dummy_params = generate_dummy_params(inflator, J)
     
     θs_aug = eki_update(
         [θs; dummy_params], Gs,
@@ -212,7 +212,7 @@ function run_eki_dmc(
     y::AbstractVector,
     μ_e::AbstractVector,
     C_e::AbstractMatrix,
-    Ne::Int;
+    J::Int;
     localiser::Localiser=IdentityLocaliser(),
     inflator::Inflator=IdentityInflator()
 )
@@ -222,7 +222,7 @@ function run_eki_dmc(
     C_e_invsqrt = √(inv(C_e))
     NG = length(y)
 
-    θs_i = rand(pr, Ne)
+    θs_i = rand(pr, J)
     us_i, Fs_i, Gs_i = run_ensemble(θs_i, F, G, pr)
 
     θs = [θs_i]

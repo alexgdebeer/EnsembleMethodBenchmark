@@ -3,7 +3,6 @@ abstract type Inflator end
 
 struct IdentityLocaliser <: Localiser end
 struct IdentityInflator <: Inflator end
-struct FisherLocaliser <: Localiser end
 
 struct ShuffleLocaliser <: Localiser
     n_shuffle::Int 
@@ -29,11 +28,6 @@ struct BootstrapLocaliser <: Localiser
         return new(n_boot, σ, type)
     end
 
-end
-
-struct PowerLocaliser <: Localiser
-    α::Real 
-    PowerLocaliser(; α=0.4) = new(α)
 end
 
 struct AdaptiveInflator <: Inflator
@@ -137,32 +131,6 @@ function localise(
         if σ_ij ≤ abs(R_θG[i, j])
             P[i, j] = 1
         end
-    end
-
-    return P .* K
-
-end
-
-"""Carries out the localisation procedure outlined by Flowerdew 
-(2014)."""
-function localise(
-    localiser::FisherLocaliser,
-    θs::AbstractMatrix,
-    Gs::AbstractMatrix,
-    K::AbstractMatrix
-)
-
-    Nθ, Ne = size(θs)
-    NG, Ne = size(Gs)
-
-    R_θG = compute_cors(θs, Gs)[1]
-    P = zeros(size(R_θG))
-
-    for i ∈ 1:Nθ, j ∈ 1:NG 
-        ρ_ij = R_θG[i, j]
-        s = log((1+ρ_ij) / (1-ρ_ij)) / 2
-        σ_s = (tanh(s + √(Ne-3)^-1) - tanh(s - √(Ne-3)^-1)) / 2
-        P[i, j] = ρ_ij^2 / (ρ_ij^2 + σ_s^2)
     end
 
     return P .* K

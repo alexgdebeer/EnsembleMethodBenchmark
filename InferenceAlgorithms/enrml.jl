@@ -34,25 +34,6 @@ function compute_gain_enrml(
 
 end
 
-"""Computes the EnRML gain using the localisation method outlined by
-Flowerdew (2015)."""
-function compute_gain_enrml(
-    localiser::FisherLocaliser,
-    θs::AbstractMatrix,
-    Gs::AbstractMatrix,
-    Δθ::AbstractMatrix,
-    UG::AbstractMatrix,
-    ΛG::AbstractVector,
-    VG::AbstractMatrix,
-    C_e_invsqrt::AbstractMatrix,
-    λ::Real
-)
-
-    K = compute_gain_enrml(Δθ, UG, ΛG, VG, C_e_invsqrt, λ)
-    return localise(localiser, θs, Gs, K)
-
-end
-
 """Computes the EnRML gain using the localisation method outlined by 
 Zhang and Oliver (2010)."""
 function compute_gain_enrml(
@@ -67,14 +48,14 @@ function compute_gain_enrml(
     λ::Real
 )
 
-    Nθ, Ne = size(θs)
-    NG, Ne = size(Gs)
+    Nθ, J = size(θs)
+    NG, J = size(Gs)
     K = compute_gain_enrml(Δθ, UG, ΛG, VG, C_e_invsqrt, λ)
     Ks_boot = zeros(Nθ, NG, localiser.n_boot)
 
     for k ∈ 1:localiser.n_boot
 
-        inds_res = rand(1:Ne, Ne)
+        inds_res = rand(1:J, J)
 
         Δθ_res = compute_Δs(θs[:, inds_res])
         ΔG_res = compute_Δs(Gs[:, inds_res])
@@ -144,8 +125,6 @@ function enrml_update(
     δθ_pr = Δθ * VG * inv((λ + 1)I + Diagonal(ΛG).^2) * VG' * Δθ' *
             Uθ_pr * Diagonal(1 ./ Λθ_pr.^2) * Uθ_pr' * (θs - θs_pr)
 
-    display(δθ_pr)
-
     # Calculate corrections based on fit to observations
     δθ_obs = K * (Gs .+ μ_e .- ys)
 
@@ -191,8 +170,8 @@ function enrml_update(
     inflator::AdaptiveInflator
 )
 
-    Nθ, Ne = size(θs)
-    dummy_params = generate_dummy_params(inflator, Ne)
+    Nθ, J = size(θs)
+    dummy_params = generate_dummy_params(inflator, J)
 
     Δθ = compute_Δs(θs)
     ΔG = compute_Δs(Gs)
@@ -227,7 +206,7 @@ function run_enrml(
     y::AbstractVector,
     μ_e::AbstractVector,
     C_e::AbstractMatrix,
-    Ne::Int;
+    J::Int;
     γ::Real=10,
     λ_min::Real=0.01,
     max_cuts::Int=5,
@@ -250,9 +229,9 @@ function run_enrml(
     Ss = []
     λs = []
 
-    ys = rand(MvNormal(y, C_e), Ne)
+    ys = rand(MvNormal(y, C_e), J)
 
-    θs_pr = rand(pr, Ne)
+    θs_pr = rand(pr, J)
     us_pr, Fs_pr, Gs_pr = run_ensemble(θs_pr, F, G, pr)
     S_pr = compute_S(Gs_pr, ys, μ_e, C_e_invsqrt)
     λ = 10^floor(log10(S_pr / 2NG))
