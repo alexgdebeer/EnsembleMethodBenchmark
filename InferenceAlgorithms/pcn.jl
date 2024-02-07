@@ -12,7 +12,6 @@ function run_chain(
     Nb::Int,
     β::Real,
     δ::Real,
-    B_wells::AbstractMatrix, 
     n_chain::Int;
     thin::Int=10,
     verbose::Bool=true
@@ -23,7 +22,7 @@ function run_chain(
 
     logpri(θ) = -sum(θ.^2)
     loglik(G) = -sum((L_e*(G+μ_e-d_obs)).^2)
-    logpost(η, G) = logpri(η) + loglik(G)
+    logpost(θ, G) = logpri(θ) + loglik(G)
 
     ξs = Matrix{Float64}(undef, pr.Nθ, Nb)
     ωs = Matrix{Float64}(undef, pr.Nω, Nb)
@@ -39,9 +38,8 @@ function run_chain(
     ωs[:, 1] = θ0[pr.Nu+1:end]
     us[:, 1] = u0
 
-    F_f = F(u0)
-    Fs[:, 1] = B_wells * F_f
-    Gs[:, 1] = G(F_f)
+    Fs[:, 1] = F(u0)
+    Gs[:, 1] = G(Fs[:, 1])
     τs[1] = logpost(θ0, Gs[:, 1])
 
     t0 = time()
@@ -57,9 +55,8 @@ function run_chain(
         θ_p = vcat(ξ_p, ωs[:, ind_c])
         u_p = transform(pr, θ_p)
 
-        F_f = F(u_p)
-        F_p = B_wells * F_f
-        G_p = G(F_f)
+        F_p = F(u_p)
+        G_p = G(F_p)
 
         h = exp(loglik(G_p) - loglik(Gs[:, ind_c]))
 
@@ -82,9 +79,8 @@ function run_chain(
         θ_p = vcat(ξs[:, ind_p], ω_p)
         u_p = transform(pr, θ_p)
 
-        F_f = F(u_p)
-        F_p = B_wells * F_f
-        G_p = G(F_f)
+        F_p = F(u_p)
+        G_p = G(F_p)
 
         h = exp((loglik(G_p) + logpri(ω_p)) - 
                 (loglik(Gs[:, ind_p]) + logpri(ωs[:, ind_c])))
@@ -108,8 +104,6 @@ function run_chain(
 
             h5write("data/pcn/chain_$n_chain.h5", "θs_$n_chunk", θs[:, 1:thin:end])
             h5write("data/pcn/chain_$n_chain.h5", "us_$n_chunk", us[:, 1:thin:end])
-            h5write("data/pcn/chain_$n_chain.h5", "Fs_$n_chunk", Fs[:, 1:thin:end])
-            h5write("data/pcn/chain_$n_chain.h5", "Gs_$n_chunk", Gs[:, 1:thin:end])
             h5write("data/pcn/chain_$n_chain.h5", "τs_$n_chunk", τs[:, 1:thin:end])
 
             n_chunk += 1
@@ -148,7 +142,6 @@ function run_pcn(
     Nc::Int,
     β::Real,
     δ::Real,
-    B_wells::AbstractMatrix;
     verbose::Bool=true
 )
 
@@ -162,8 +155,7 @@ function run_pcn(
         run_chain(
             F, G, pr, d_obs, μ_e, L_e, θ0, 
             NF, NG, Ni, Nb, β, δ,
-            B_wells, chain_num,
-            verbose=verbose
+            chain_num, verbose=verbose
         )
 
     end
