@@ -195,8 +195,8 @@ function build_B(
         push!(js, cell_inds...)
         push!(vs,
             (x1-x) * (y1-y) / Z, 
-            (x-x0) * (y1-y) / Z, 
             (x1-x) * (y-y0) / Z, 
+            (x-x0) * (y1-y) / Z, 
             (x-x0) * (y-y0) / Z
         )
 

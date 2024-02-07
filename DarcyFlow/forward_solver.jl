@@ -146,7 +146,7 @@ function read_pod_data(
 
     f = h5open("data/$fname.h5")
 
-    μ_pi = f["μ_ui"][:] # TODO: edit name in file
+    μ_pi = f["μ_pi"][:]
     V_ri = f["V_ri"][:, :]
     μ_ε = f["μ_ε"][:]
     Γ_ε = f["Γ_ε"][:, :]

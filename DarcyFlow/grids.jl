@@ -8,7 +8,6 @@ function build_∇h(nx::Real, Δx::Real)::SparseMatrixCSC
     ∇hi_j = vcat([[i-1, i] for i ∈ 2:nx]...)
     ∇hi_v = repeat([-1, 1], outer=(nx-1))
 
-    # TODO: check
     push!(∇hi_i, 1, 1, nx+1, nx+1)
     push!(∇hi_j, 1, 2, nx-1, nx)
     push!(∇hi_v, -1, 1, -1, 1)
