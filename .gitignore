@@ -3,3 +3,5 @@ Manifest.toml
 
 data/
 plots/
+
+test_*
