@@ -5,6 +5,7 @@ include("setup.jl")
 fname_mcmc = "data/pcn/pcn.h5"
 
 laplace_folder = "data/laplace"
+eks_folder = "data/eks"
 enrml_folder = "data/enrml"
 eki_folder = "data/eki"
 
@@ -13,24 +14,23 @@ fnames = [
     "$(laplace_folder)/laplace_100.h5",
     "$(laplace_folder)/laplace_1000.h5",
 
+    "$(eks_folder)/eks_100.h5",
+    "$(eks_folder)/eks_1000.h5",
+
     "$(enrml_folder)/enrml_100.h5", 
     "$(enrml_folder)/enrml_1000.h5", 
     "$(enrml_folder)/enrml_boot_100.h5", 
     "$(enrml_folder)/enrml_boot_reg_100.h5", 
     "$(enrml_folder)/enrml_shuffle_100.h5", 
-    # "$(enrml_folder)/enrml_fisher_100.h5",
     "$(enrml_folder)/enrml_inflation_100.h5",
-    # "$(enrml_folder)/enrml_fisher_inflation_100.h5",
+    "$(enrml_folder)/enrml_boot_inflation_100.h5",
 
     "$(eki_folder)/eki_100.h5",
     "$(eki_folder)/eki_1000.h5",
     "$(eki_folder)/eki_boot_100.h5",
     "$(eki_folder)/eki_boot_reg_100.h5",
     "$(eki_folder)/eki_shuffle_100.h5",
-    # "$(eki_folder)/eki_sec_100.h5",
-    # "$(eki_folder)/eki_fisher_100.h5",
     "$(eki_folder)/eki_inflation_100.h5",
-    # "$(eki_folder)/eki_fisher_inflation_100.h5",
     "$(eki_folder)/eki_boot_inflation_100.h5"
 
 ]
@@ -50,8 +50,6 @@ function get_results_trial(fname, i_trial)
     f = h5open(fname, "r")
     μ = read(f["μ_post_$(i_trial)"])
     σ = read(f["σ_post_$(i_trial)"])
-    θs = read(f["θs_$(i_trial)"])
-    μ = reshape(transform(pr, mean(θs, dims=2)), 80, 80)
     sim = read(f["n_sims_$(i_trial)"])
     close(f)
 
@@ -93,6 +91,9 @@ function compute_metrics(
 
     ϵs_μ = [compute_ϵ_μ(μ_mcmc, μ_pri, μ) for μ ∈ μs]
     ϵs_σ = [compute_ϵ_σ(σ_mcmc, σ) for σ ∈ σs]
+
+    # println(ϵs_μ)
+    # println(ϵs_σ)
 
     return mean(ϵs_μ), mean(ϵs_σ), mean(sims)
 
