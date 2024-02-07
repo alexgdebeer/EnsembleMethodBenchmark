@@ -187,7 +187,7 @@ function run_ensemble(
     θs::AbstractMatrix, 
     F::Function, 
     G::Function, 
-    pr::AbstractMaternField
+    pr::MaternField
 )
 
     us = hcat([transform(pr, θ_i) for θ_i ∈ eachcol(θs)]...)
