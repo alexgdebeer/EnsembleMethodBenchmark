@@ -8,6 +8,8 @@ include("plotting.jl")
 
 seed!(16)
 
+FILE_TRUTH = "data/truth.h5"
+
 # ----------------
 # Reservoir properties 
 # ----------------
@@ -22,7 +24,7 @@ p0 = 20 * 1.0e6                     # Initial pressure (Pa)
 # ----------------
 
 xmax = 1000.0
-tmax = 120.0
+tmax = 160.0
 
 Δx_c = 12.5
 Δx_f = 7.5
@@ -51,18 +53,18 @@ q_c = 50.0 / Δx_c^2                 # Extraction rate, (m^3 / day) / m^3
 q_f = 50.0 / Δx_f^2                 # Extraction rate, (m^3 / day) / m^3
 
 well_radius = 50.0
-well_change_times = [0, 40, 80]
+well_change_times = [0, 40, 80, 120]
 
 well_rates_c = [
-    (-q_c, 0, 0), (0, -q_c, 0), (-q_c, 0, 0),
-    (0, -q_c, 0), (-q_c, 0, 0), (0, -q_c, 0),
-    (-q_c, 0, 0), (0, -q_c, 0), (-q_c, 0, 0)
+    (-q_c, 0, 0, -0.5q_c), (0, -q_c, 0, -0.5q_c), (-q_c, 0, 0, -0.5q_c),
+    (0, -q_c, 0, -0.5q_c), (-q_c, 0, 0, -0.5q_c), (0, -q_c, 0, -0.5q_c),
+    (-q_c, 0, 0, -0.5q_c), (0, -q_c, 0, -0.5q_c), (-q_c, 0, 0, -0.5q_c)
 ]
 
 well_rates_f = [
-    (-q_f, 0, 0), (0, -q_f, 0), (-q_f, 0, 0),
-    (0, -q_f, 0), (-q_f, 0, 0), (0, -q_f, 0),
-    (-q_f, 0, 0), (0, -q_f, 0), (-q_f, 0, 0)
+    (-q_f, 0, 0, -0.5q_f), (0, -q_f, 0, -0.5q_f), (-q_f, 0, 0, -0.5q_f),
+    (0, -q_f, 0, -0.5q_f), (-q_f, 0, 0, -0.5q_f), (0, -q_f, 0, -0.5q_f),
+    (-q_f, 0, 0, -0.5q_f), (0, -q_f, 0, -0.5q_f), (-q_f, 0, 0, -0.5q_f)
 ]
 
 wells_c = [
@@ -78,8 +80,66 @@ wells_f = [
 model_f = Model(grid_f, ϕ, μ, c, p0, wells_f, well_change_times, x_obs, y_obs, t_obs)
 model_c = Model(grid_c, ϕ, μ, c, p0, wells_c, well_change_times, x_obs, y_obs, t_obs)
 
+function generate_truth(
+    g::Grid,
+    m::Model,
+    μ::Real,
+    σ_bounds::Tuple,
+    l_bounds::Tuple
+)
+
+    true_field = MaternField(g, μ, σ_bounds, l_bounds)
+    θ_t = vec(rand(true_field))
+    u_t = transform(true_field, θ_t)
+    F_t = solve(g, m, u_t)
+    G_t = m.B * F_t
+
+    h5write(FILE_TRUTH, "θ_t", θ_t)
+    h5write(FILE_TRUTH, "u_t", u_t)
+    h5write(FILE_TRUTH, "F_t", F_t)
+    h5write(FILE_TRUTH, "G_t", G_t)
+
+    return θ_t, u_t, F_t, G_t
+
+end
+
+function generate_obs(
+    G_t::AbstractVector, 
+    C_ϵ::AbstractMatrix
+)
+
+    d_obs = G_t + rand(MvNormal(C_ϵ)) 
+    h5write(FILE_TRUTH, "d_obs", d_obs)
+
+    return d_obs
+
+end
+
+function read_truth()
+
+    f = h5open(FILE_TRUTH)
+    θ_t = f["θ_t"][:]
+    u_t = f["u_t"][:]
+    F_t = f["F_t"][:]
+    G_t = f["G_t"][:]
+    close(f)
+
+    return θ_t, u_t, F_t, G_t
+
+end
+
+function read_obs()
+
+    f = h5open(FILE_TRUTH)
+    d_obs = f["d_obs"][:]
+    close(f)
+
+    return d_obs
+
+end
+
 # ----------------
-# Prior 
+# Prior and error distribution
 # ----------------
 
 lnk_μ = -31
@@ -88,34 +148,28 @@ l_bounds = (200, 1000)
 
 pr = MaternField(grid_c, lnk_μ, σ_bounds, l_bounds)
 
-# ----------------
-# Truth
-# ----------------
-
-true_field = MaternField(grid_f, lnk_μ, σ_bounds, l_bounds)
-
-θ_t = rand(true_field)
-u_t = transform(true_field, θ_t)
-p_t = solve(grid_f, model_f, u_t)
-
-# ----------------
-# Data
-# ----------------
-
 σ_ϵ = p0 * 0.01
 C_ϵ = diagm(fill(σ_ϵ^2, model_f.ny))
+
 C_ϵ_inv = spdiagm(fill(σ_ϵ^-2, model_f.ny))
 
-d_obs = model_f.B * p_t
-d_obs += rand(MvNormal(C_ϵ))
+# ----------------
+# Truth and observations
+# ----------------
+
+# θ_t, u_t, F_t, G_t = generate_truth(grid_f, model_f, lnk_μ, σ_bounds, l_bounds)
+θ_t, u_t, F_t, G_t = read_truth()
+
+# d_obs = generate_obs(G_t, C_ϵ)
+d_obs = read_obs()
 
 # ----------------
 # POD
 # ----------------
 
 # Generate POD basis 
-# μ_pi, V_ri, μ_ε, Γ_ε = generate_pod_data(grid_c, model_c, pr, 100, 0.999, "pod/grid_$(grid_c.nx)")
-μ_pi, V_ri, μ_ε, C_ε = read_pod_data("pod/grid_$(grid_c.nx)") # TODO: tidy up
+# μ_pi, V_ri, μ_ε, C_ε = generate_pod_data(grid_c, model_c, pr, 100, 0.999, "pod/grid_$(grid_c.nx)")
+μ_pi, V_ri, μ_ε, C_ε = read_pod_data("pod/grid_$(grid_c.nx)")
 
 μ_e = μ_ε .+ 0.0
 C_e = Hermitian(C_ϵ + C_ε)
@@ -151,15 +205,15 @@ G(p::AbstractVector) = model_c.B * p
 
 # animate(u_t, grid_f, (50, 50), "plots/animations/test")
 
-# Stuff to export for plotting (TODO: clean up...)
-# well_ps = hcat(fill(p0, 9), reshape(model_f.B_wells * p_t, 9, :))
+# # # Stuff to export for plotting (TODO: clean up...)
+# well_ps = hcat(fill(p0, 9), reshape(model_f.B_wells * F_t, 9, :))
 # well_ts = [0.0, grid_f.ts...]
 
 # well_ps_obs = reshape(d_obs, 9, :)
 # well_ts_obs = t_obs
 # u_t = reshape(u_t, grid_f.nx, grid_f.nx)
 
-# fname = "data/setup.h5"
+# fname = "data/setup_alt.h5"
 
 # h5write(fname, "well_ps", well_ps)
 # h5write(fname, "well_ts", well_ts)
