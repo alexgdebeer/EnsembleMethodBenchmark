@@ -48,13 +48,13 @@ for (fname, setting) ∈ zip(fnames, settings)
 
         results["θs_$i"] = θs[en_ind]
         results["us_$i"] = us[en_ind]
-        results["Gs_$i"] = Gs[en_ind]
+        results["Fs_$i"] = model_r.B_wells * Fs[en_ind]
 
         results["μ_post_$i"] = μ_post
         results["σ_post_$i"] = σ_post
 
         results["n_its_$i"] = length(θs)
-        results["n_sims_$i"] = Ne * length(θs)
+        results["n_sims_$i"] = Ne * (length(θs) - 1)
 
     end
 

@@ -50,7 +50,7 @@ for (fname, setting) ∈ zip(fnames, settings)
         results["σ_post_$i"] = σ_post
         
         results["n_its_$i"] = length(θs)
-        results["n_sims_$i"] = Ne * length(θs)
+        results["n_sims_$i"] = Ne * (length(θs) - 1)
 
     end
 
