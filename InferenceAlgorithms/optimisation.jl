@@ -180,7 +180,7 @@ function compute_∂Ax∂θx(
 
     H = pr.M + l^2 * pr.K + l / 1.42 * pr.N 
 
-    # White noise component (TODO: precompute LU factorisation of H?)
+    # White noise component
     ∂u∂ξx = solve(LinearProblem(H, √(α) * l * pr.L * x[1:end-2])).u
     ∂Ax∂ξx = ∂Ax∂u * ∂u∂ξx
 
@@ -386,7 +386,6 @@ function linesearch(
         end
 
         α_k *= 0.5
-        # i += 1
 
     end
 
@@ -465,7 +464,7 @@ function compute_laplace(
     pr::MaternField,
     y::AbstractVector,
     θ0::AbstractVector;
-    n_eigvals::Int=30
+    n_eigvals::Int=28
 )
 
     map = compute_map(g, m, pr, y, θ0)
@@ -475,8 +474,6 @@ function compute_laplace(
 
     vals, vecs, info = eigsolve(f, pr.Nθ, n_eigvals, :LM, issymmetric=true)
     info.converged != length(vals) && @warn "eigsolve did not converge."
-
-    println(minimum(vals))
     
     λ_r = vals[vals .> 1e-2]
     V_r = hcat(vecs[vals .> 1e-2]...)
@@ -487,8 +484,11 @@ function compute_laplace(
     Γ_post = I - V_r * D_r * V_r'
     L_post = V_r * P_r * V_r' + I
 
-    n_solves = map.n_solves + info.numops
+    n_solves = map.n_solves + 2 * info.numops
+
+    @info "Minimum eigenvalue: $(minimum(vals))"
     @info "Total solves: $(n_solves)"
+    
     return map, Γ_post, L_post, n_solves
 
 end
