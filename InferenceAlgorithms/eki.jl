@@ -77,46 +77,6 @@ function compute_gain_eki(
 
 end
 
-"""Computes the EKI gain using the localisation method outlined by 
-Flowerdew (2015)."""
-function compute_gain_eki(
-    localiser::FisherLocaliser,
-    θs::AbstractMatrix,
-    Gs::AbstractMatrix,
-    α::Real,
-    C_e::AbstractMatrix
-)
-
-    K = compute_gain_eki(θs, Gs, α, C_e)
-    return localise(localiser, θs, Gs, K)
-
-end
-
-"""Computes the EKI gain using the localisation method outlined by 
-Lee (2021)."""
-function compute_gain_eki(
-    localiser::PowerLocaliser,
-    θs::AbstractMatrix,
-    Gs::AbstractMatrix,
-    α::Real, 
-    C_e::AbstractMatrix
-)
-
-    V_θ = Diagonal(std(θs, dims=2)[:])
-    V_G = Diagonal(std(Gs, dims=2)[:])
-
-    R_θG, R_GG = compute_cors(θs, Gs)
-
-    R_θG_sec = R_θG .* (abs.(R_θG) .^ localiser.α)
-    R_GG_sec = R_GG .* (abs.(R_GG) .^ localiser.α)
-
-    C_θG_sec = V_θ * R_θG_sec * V_G
-    C_GG_sec = V_G * R_GG_sec * V_G
-
-    return C_θG_sec * inv(C_GG_sec + α * C_e)
-
-end
-
 """Uses the standard EKI update to update the current ensemble."""
 function eki_update(
     θs::AbstractMatrix, 
