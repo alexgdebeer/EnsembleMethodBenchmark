@@ -20,8 +20,8 @@ function run_chain(
     u0 = transform(pr, θ0)
     norm = Normal()
 
-    logpri(θ) = -sum(θ.^2)
-    loglik(G) = -sum((L_e*(G+μ_e-d_obs)).^2)
+    logpri(θ) = -0.5sum(θ.^2)
+    loglik(G) = -0.5sum((L_e*(G+μ_e-d_obs)).^2)
     logpost(θ, G) = logpri(θ) + loglik(G)
 
     ξs = Matrix{Float64}(undef, pr.Nu, Nb)
