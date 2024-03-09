@@ -11,7 +11,7 @@ The benchmark posterior is generated using the preconditioned Crank-Nicolson MCM
 These results can then be compared to the approximations of the posterior generated using a number of approximate methods, including ensemble randomised maximum likelihood [[2](#2)], ensemble Kalman inversion [[3](#3), [4](#4)], and the ensemble Kalman sampler [[5](#5), [6](#6)].
 
 It may not be straightforward to adapt the implementations of the algorithms in this repository to work with different forward problems. 
-If you are interested in applying ensemble methods in a different context, you might like to check out [EnsembleKalmanProcesses.jl](https://github.com/clima/ensemblekalmanprocesses.jl), which provides robust, model-independent implementations of many of the ensemble methods in this repository.
+If you are interested in applying ensemble methods in a different context, you might like to check out [EnsembleKalmanProcesses.jl](https://github.com/clima/ensemblekalmanprocesses.jl), which provides robust, model-independent implementations of a range of ensemble methods.
 
 ## Getting Started
 
