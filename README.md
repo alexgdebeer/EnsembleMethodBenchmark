@@ -16,7 +16,7 @@ If you are interested in applying ensemble methods in a different context, you m
 ## Getting Started
 
 First, install Julia >= 1.9.0.
-Clone the repository, and create an environment with the project dependencies by running the following in the Julia REPL:
+Clone the repository, then create an environment with the project dependencies by running the following in the Julia REPL:
 ```
 using Pkg
 Pkg.activate(".")
