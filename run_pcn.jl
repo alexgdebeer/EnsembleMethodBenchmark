@@ -4,8 +4,8 @@ include("InferenceAlgorithms/InferenceAlgorithms.jl")
 NF = grid_c.nx^2 * grid_c.nt
 Ni = 2_000_000
 
-β = 0.025
-δ = 0.20
+β = 0.05
+δ = 0.35
 
 Nb = 100
 Nc = 5

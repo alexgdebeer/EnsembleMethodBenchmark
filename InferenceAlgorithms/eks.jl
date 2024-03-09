@@ -43,7 +43,7 @@ function run_eks(
 
         i += 1
         if t ≥ t_stop 
-            return θs_i, us_i, Fs_i, Gs_i
+            return θs_i, us_i, Fs_i, Gs_i, i
         end
 
     end

@@ -4,10 +4,10 @@ using Statistics
 include("setup.jl")
 
 N_CHAINS = 5
-N_BATCHES = 20_000
+N_BATCHES = 15_000
 N_SAMPLES_PER_BATCH = 1
 N_SAMPLES = N_BATCHES * N_SAMPLES_PER_BATCH
-WARMUP_LENGTH = 500
+WARMUP_LENGTH = 500 # Warmup length in batches
 
 DATA_FOLDER = "data/pcn"
 RESULTS_FNAME = "data/pcn/pcn.h5"
@@ -35,19 +35,15 @@ function compute_psrf(
 
 end
 
-NF = n_wells * grid_c.nt
-
 θs = zeros(pr.Nθ, N_SAMPLES, N_CHAINS)
 us = zeros(pr.Nu, N_SAMPLES, N_CHAINS)
-Fs = zeros(NF, N_SAMPLES, N_CHAINS)
 τs = zeros(100N_BATCHES, N_CHAINS)
 
 for i ∈ 1:N_CHAINS
 
     f = h5open("$(DATA_FOLDER)/chain_$i.h5", "r")
-    θs[:, :, i] = reduce(hcat, [f["ηs_$b"][:, 1] for b ∈ 1:N_BATCHES])
-    us[:, :, i] = reduce(hcat, [f["θs_$b"][:, 1] for b ∈ 1:N_BATCHES])
-    Fs[:, :, i] = reduce(hcat, [f["Fs_$b"][:, 1] for b ∈ 1:N_BATCHES])
+    θs[:, :, i] = reduce(hcat, [f["θs_$b"][:, 1] for b ∈ 1:N_BATCHES])
+    us[:, :, i] = reduce(hcat, [f["us_$b"][:, 1] for b ∈ 1:N_BATCHES])
     τs[:, i] = reduce(vcat, [f["τs_$b"][:, 1] for b ∈ 1:N_BATCHES])
     close(f)
     @info "Finished reading data from chain $i."
@@ -66,10 +62,19 @@ trace_1 = τs[1:10:end, :]
 trace_2 = θs[2109, :, :]
 trace_3 = θs[end, :, :]
 
-h5write(RESULTS_FNAME, "trace_1", trace_1)
-h5write(RESULTS_FNAME, "trace_2", trace_2)
-h5write(RESULTS_FNAME, "trace_3", trace_3)
-h5write(RESULTS_FNAME, "mean", μ_post)
-h5write(RESULTS_FNAME, "stds", σ_post)
-h5write(RESULTS_FNAME, "samples_1", us[:, 5_000, :])
-h5write(RESULTS_FNAME, "samples_2", us[:, 10_000, :])
+ωls = vec(θs[end, WARMUP_LENGTH+1:end, :])
+ls = [l_bounds[1] + (l_bounds[2]-l_bounds[1]) * cdf(Normal(), ωl) for ωl ∈ ωls]
+
+sample_inds = rand(WARMUP_LENGTH+1:N_SAMPLES, 1000)
+us_samp = us[:, sample_inds, 1]
+Fs = model_r.B_wells * hcat([F(u_i) for u_i ∈ eachcol(us_samp)]...)
+
+# h5write(RESULTS_FNAME, "trace_1", trace_1)
+# h5write(RESULTS_FNAME, "trace_2", trace_2)
+# h5write(RESULTS_FNAME, "trace_3", trace_3)
+# h5write(RESULTS_FNAME, "mean", μ_post)
+# h5write(RESULTS_FNAME, "stds", σ_post)
+# h5write(RESULTS_FNAME, "samples_1", us[:, 5_000, :])
+# h5write(RESULTS_FNAME, "samples_2", us[:, 10_000, :])
+# h5write(RESULTS_FNAME, "ls", ls)
+# h5write(RESULTS_FNAME, "Fs_samp", Fs)

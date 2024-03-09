@@ -7,25 +7,21 @@ n_trials = 10
 data_folder = "data/enrml"
 
 fnames = [
-    # "$(data_folder)/enrml_$Ne.h5", 
+    "$(data_folder)/enrml_$Ne.h5", 
     # "$(data_folder)/enrml_boot_$Ne.h5", 
     # "$(data_folder)/enrml_boot_reg_$Ne.h5", 
     # "$(data_folder)/enrml_shuffle_$Ne.h5", 
-    # "$(data_folder)/enrml_fisher_$Ne.h5",
-    "$(data_folder)/enrml_inflation_$Ne.h5",
-    "$(data_folder)/enrml_boot_inflation_$Ne.h5"
+    # "$(data_folder)/enrml_inflation_$Ne.h5",
+    # "$(data_folder)/enrml_boot_inflation_$Ne.h5"
 ]
 
-groups = [1:pr.Nu, pr.Nu+1, pr.Nu+2]
-
 settings = [
-    # (IdentityLocaliser(), IdentityInflator()),
+    (IdentityLocaliser(), IdentityInflator()),
     # (BootstrapLocaliser(type=:unregularised), IdentityInflator()),
     # (BootstrapLocaliser(type=:regularised), IdentityInflator()),
     # (ShuffleLocaliser(), IdentityInflator()),
-    # (FisherLocaliser(), IdentityInflator()),
-    (IdentityLocaliser(), AdaptiveInflator()),
-    (BootstrapLocaliser(type=:unregularised), AdaptiveInflator())
+    # (IdentityLocaliser(), AdaptiveInflator()),
+    # (BootstrapLocaliser(type=:unregularised), AdaptiveInflator())
 ]
 
 for (fname, setting) ∈ zip(fnames, settings)
@@ -49,6 +45,7 @@ for (fname, setting) ∈ zip(fnames, settings)
         results["θs_$i"] = θs[en_ind]
         results["us_$i"] = us[en_ind]
         results["Fs_$i"] = model_r.B_wells * Fs[en_ind]
+        results["ls_$i"] = [gauss_to_unif(ω_σ, σ_bounds...) for ω_σ ∈ θs[end-1, :]]
 
         results["μ_post_$i"] = μ_post
         results["σ_post_$i"] = σ_post

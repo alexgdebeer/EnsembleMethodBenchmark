@@ -1,7 +1,7 @@
 include("setup.jl")
 include("InferenceAlgorithms/InferenceAlgorithms.jl")
 
-Ne = 100
+Ne = 1000
 n_trials = 10
 
 data_folder = "data/eki"
@@ -45,6 +45,7 @@ for (fname, setting) ∈ zip(fnames, settings)
         results["θs_$i"] = θs[end]
         results["us_$i"] = us[end]
         results["Fs_$i"] = model_r.B_wells * Fs[end]
+        results["ls"] = [gauss_to_unif(ω_σ, σ_bounds...) for ω_σ ∈ θs[end-1, :]]
 
         results["μ_post_$i"] = μ_post
         results["σ_post_$i"] = σ_post

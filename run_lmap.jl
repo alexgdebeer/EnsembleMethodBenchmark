@@ -10,7 +10,7 @@ for i ∈ 1:n_trials
         
     θ0 = vec(rand(pr, 1))
 
-    map, Γ_post, L_post, n_solves = compute_laplace(
+    map, Γ_post, L_post, n_solves = compute_lmap(
         grid_c, model_r, pr, d_obs, θ0
     )
 
@@ -33,13 +33,13 @@ for i ∈ 1:n_trials
         results[r]["σ_post_$i"] = σ_post
     
         results[r]["n_its_$i"] = 1
-        results[r]["n_sims_$i"] = n_solves + r
+        results[r]["n_sims_$i"] = n_solves
 
     end
 
 end
 
 for r ∈ keys(results)
-    fname = "data/laplace/laplace_$(r).h5"
+    fname = "data/lmap/lmap_$(r).h5"
     save_results(results[r], fname)
 end
