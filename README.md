@@ -29,29 +29,29 @@ You should then be able to run any of the scripts in the top level of the reposi
 [<a id="1">1</a>]
 Cotter, SL, Roberts, GO, Stuart, AM, and White, D (2013).
 MCMC methods for functions: Modifying old algorithms to make them faster.
-Statistical Science **28**, 424-446.
+*Statistical Science* **28**, 424-446.
 
 [<a id="2">2</a>]
 Chen, Y and Oliver, DS (2013). 
 Levenberg–Marquardt forms of the iterative ensemble smoother for efficient history matching and uncertainty quantification.
-Computational Geosciences **17**, 689–703.
+*Computational Geosciences* **17**, 689–703.
 
 [<a id="3">3</a>]
 Iglesias, MA, Law, KJ, and Stuart, AM (2013).
 Ensemble Kalman methods for inverse problems.
-Inverse Problems **29**, 045001.
+*Inverse Problems* **29**, 045001.
 
 [<a id="4">4</a>]
 Iglesias, M and Yang, Y (2021). 
 Adaptive regularisation for ensemble Kalman inversion.
-Inverse Problems **37**, 025008.
+*Inverse Problems* **37**, 025008.
 
 [<a id="5">5</a>]
 Garbuno-Inigo, A, Hoffmann, F, Li, W, and Stuart, AM (2020).
 Interacting Langevin diffusions: Gradient structure and ensemble Kalman sampler. 
-SIAM Journal on Applied Dynamical Systems **19**, 412-441.
+*SIAM Journal on Applied Dynamical Systems* **19**, 412-441.
 
 [<a id="6">6</a>]
 Garbuno-Inigo, A, Nüsken, N, and Reich, S (2020). 
 Affine invariant interacting Langevin dynamics for Bayesian inference. 
-SIAM Journal on Applied Dynamical Systems **19**, 1633-1658.
+*SIAM Journal on Applied Dynamical Systems* **19**, 1633-1658.
