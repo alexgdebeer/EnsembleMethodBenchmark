@@ -1,4 +1,4 @@
-# EnsembleMethodBenchmark
+# Ensemble Methods: a Benchmark Study
 
 ![Problem Setup](problem_setup.png)
 
